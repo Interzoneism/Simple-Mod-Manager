@@ -1,0 +1,69 @@
+<Window x:Class="VintageStoryModManager.Views.Dialogs.MessageDialogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Message"
+        SizeToContent="WidthAndHeight"
+        MinWidth="360"
+        MinHeight="160"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="SingleBorderWindow"
+        ShowInTaskbar="False"
+        Topmost="False"
+        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Image x:Name="IconImage"
+               Width="48"
+               Height="48"
+               Margin="0,0,16,0"
+               VerticalAlignment="Top"
+               Visibility="Collapsed" />
+
+        <ScrollViewer Grid.Column="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      MaxHeight="320">
+            <TextBlock x:Name="MessageTextBlock"
+                       TextWrapping="Wrap"
+                       MaxWidth="480"
+                       VerticalAlignment="Center" />
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1"
+                    Grid.ColumnSpan="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,24,0,0"
+                    FlowDirection="RightToLeft">
+            <Button x:Name="ButtonThree"
+                    MinWidth="88"
+                    Margin="0,0,0,0"
+                    Visibility="Collapsed"
+                    Click="OnButtonClick" />
+            <Button x:Name="ButtonTwo"
+                    MinWidth="88"
+                    Margin="12,0,0,0"
+                    Visibility="Collapsed"
+                    Click="OnButtonClick" />
+            <Button x:Name="ButtonOne"
+                    MinWidth="88"
+                    Margin="12,0,0,0"
+                    Visibility="Collapsed"
+                    Click="OnButtonClick" />
+            <Button x:Name="ButtonExtra"
+                    MinWidth="88"
+                    Margin="12,0,0,0"
+                    Visibility="Collapsed"
+                    Click="OnButtonClick" />
+        </StackPanel>
+    </Grid>
+</Window>
