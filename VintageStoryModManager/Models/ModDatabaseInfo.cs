@@ -10,6 +10,8 @@ public sealed class ModDatabaseInfo
 {
     public IReadOnlyList<string> Tags { get; init; } = Array.Empty<string>();
 
+    public string? CachedTagsVersion { get; init; }
+
     public string? AssetId { get; init; }
 
     public string? ModPageUrl { get; init; }
@@ -41,4 +43,6 @@ public sealed class ModDatabaseInfo
     public ModReleaseInfo? LatestCompatibleRelease { get; init; }
 
     public IReadOnlyList<ModReleaseInfo> Releases { get; init; } = Array.Empty<ModReleaseInfo>();
+
+    public bool IsOfflineOnly { get; init; }
 }

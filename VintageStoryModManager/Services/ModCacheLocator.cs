@@ -42,6 +42,14 @@ internal static class ModCacheLocator
         return Path.Combine(cachedModsDirectory, directoryName);
     }
 
+    public static string? GetModDatabaseCacheDirectory()
+    {
+        string? managerDirectory = GetManagerDataDirectory();
+        return managerDirectory is null
+            ? null
+            : Path.Combine(managerDirectory, "Mod Database Cache");
+    }
+
     public static string? GetModCachePath(string modId, string? version, string? fileName)
     {
         if (string.IsNullOrWhiteSpace(version))

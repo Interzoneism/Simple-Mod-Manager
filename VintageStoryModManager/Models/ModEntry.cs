@@ -32,8 +32,6 @@ public sealed class ModEntry
 
     public byte[]? IconBytes { get; init; }
 
-    public string? IconDescription { get; init; }
-
     public string? Error { get; init; }
 
     public bool HasErrors => !string.IsNullOrWhiteSpace(Error);

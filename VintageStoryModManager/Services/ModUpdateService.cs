@@ -143,20 +143,31 @@ public sealed class ModUpdateService
     {
         string targetPath = descriptor.TargetPath;
 
+        bool targetExists = treatAsDirectory ? Directory.Exists(targetPath) : File.Exists(targetPath);
+        bool isFreshInstall = string.IsNullOrWhiteSpace(descriptor.InstalledVersion) || !targetExists;
+        string completionMessage = isFreshInstall ? "Mod installed." : "Update installed.";
+
         if (treatAsDirectory)
         {
             ReportProgress(progress, ModUpdateStage.Preparing, "Preparing extracted files...");
-            ModUpdateResult result = InstallToDirectory(descriptor, targetPath, downloadPath, progress, cancellationToken);
+            ModUpdateResult result = InstallToDirectory(
+                descriptor,
+                targetPath,
+                downloadPath,
+                completionMessage,
+                progress,
+                cancellationToken);
             return Task.FromResult(result);
         }
 
-        ReportProgress(progress, ModUpdateStage.Replacing, "Replacing mod archive...");
+        string replaceMessage = isFreshInstall ? "Installing mod archive..." : "Replacing mod archive...";
+        ReportProgress(progress, ModUpdateStage.Replacing, replaceMessage);
         InstallToFile(descriptor, downloadPath);
-        ReportProgress(progress, ModUpdateStage.Completed, "Update installed.");
+        ReportProgress(progress, ModUpdateStage.Completed, completionMessage);
         return Task.FromResult(new ModUpdateResult(true, null));
     }
 
-    private static ModUpdateResult InstallToDirectory(ModUpdateDescriptor descriptor, string targetDirectory, string downloadPath, IProgress<ModUpdateProgress>? progress, CancellationToken cancellationToken)
+    private static ModUpdateResult InstallToDirectory(ModUpdateDescriptor descriptor, string targetDirectory, string downloadPath, string completionMessage, IProgress<ModUpdateProgress>? progress, CancellationToken cancellationToken)
     {
         string backupPath = CreateUniquePath(targetDirectory, ".immbackup");
         string extractDirectory = CreateTemporaryDirectory();
@@ -182,7 +193,7 @@ public sealed class ModUpdateService
 
             string payloadRoot = DeterminePayloadRoot(extractDirectory);
             CopyDirectory(payloadRoot, targetDirectory, cancellationToken);
-            ReportProgress(progress, ModUpdateStage.Completed, "Update installed.");
+            ReportProgress(progress, ModUpdateStage.Completed, completionMessage);
 
             TryDelete(backupPath);
             return new ModUpdateResult(true, null);

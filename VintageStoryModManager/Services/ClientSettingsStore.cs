@@ -19,6 +19,7 @@ public sealed class ClientSettingsStore
     private readonly string _backupPath;
     private readonly JsonObject _root;
     private readonly JsonObject _stringListSettings;
+    private readonly JsonObject _stringSettings;
     private readonly JsonSerializerOptions _serializerOptions = new() { WriteIndented = true };
     private readonly List<string> _disabledMods;
     private readonly HashSet<string> _disabledLookup;
@@ -42,6 +43,7 @@ public sealed class ClientSettingsStore
 
         _root = LoadOrCreateRoot();
         _stringListSettings = GetOrCreateObject(_root, "stringListSettings");
+        _stringSettings = GetOrCreateObject(_root, "stringSettings");
         _disabledMods = ExtractStringList(_stringListSettings, "disabledMods");
         _disabledLookup = new HashSet<string>(_disabledMods, StringComparer.OrdinalIgnoreCase);
         _modPaths = ExtractStringList(_stringListSettings, "modPaths");
@@ -87,6 +89,10 @@ public sealed class ClientSettingsStore
             }
         }
     }
+
+    public string? PlayerUid => TryGetStringSettingValue("playeruid");
+
+    public string? PlayerName => TryGetStringSettingValue("playername");
 
     /// <summary>
     /// Directories that are used as bases for resolving relative mod paths.
@@ -412,25 +418,45 @@ public sealed class ClientSettingsStore
             Directory.GetCurrentDirectory()
         };
 
-        string? envPath = Environment.GetEnvironmentVariable("VINTAGE_STORY");
-        if (!string.IsNullOrWhiteSpace(envPath) && Directory.Exists(envPath))
-        {
-            bases.Add(Path.GetFullPath(envPath));
-        }
-
-        string? vsFolder = Environment.GetEnvironmentVariable("VSFOLDER");
-        if (!string.IsNullOrWhiteSpace(vsFolder) && Directory.Exists(vsFolder))
-        {
-            bases.Add(Path.GetFullPath(vsFolder));
-        }
-
-        string? binaryHint = Environment.GetEnvironmentVariable("VINTAGE_STORY_BIN");
-        if (!string.IsNullOrWhiteSpace(binaryHint) && Directory.Exists(binaryHint))
-        {
-            bases.Add(Path.GetFullPath(binaryHint));
-        }
-
         return bases.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private string? TryGetStringSettingValue(string settingName)
+    {
+        if (string.IsNullOrWhiteSpace(settingName))
+        {
+            return null;
+        }
+
+        lock (_syncRoot)
+        {
+            foreach (var pair in _stringSettings)
+            {
+                if (!string.Equals(pair.Key, settingName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (pair.Value is null)
+                {
+                    return null;
+                }
+
+                string? rawValue;
+                try
+                {
+                    rawValue = pair.Value.GetValue<string?>();
+                }
+                catch (InvalidOperationException)
+                {
+                    return null;
+                }
+
+                return string.IsNullOrWhiteSpace(rawValue) ? null : rawValue.Trim();
+            }
+
+            return null;
+        }
     }
 
     private void Persist()

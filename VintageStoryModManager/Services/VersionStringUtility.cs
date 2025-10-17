@@ -101,6 +101,48 @@ internal static class VersionStringUtility
         return !string.Equals(normalizedCandidate, normalizedCurrent, StringComparison.OrdinalIgnoreCase);
     }
 
+    public static bool MatchesVersionOrPrefix(string? candidateVersion, string? targetVersion)
+    {
+        if (string.IsNullOrWhiteSpace(candidateVersion) || string.IsNullOrWhiteSpace(targetVersion))
+        {
+            return false;
+        }
+
+        string? normalizedCandidate = Normalize(candidateVersion);
+        string? normalizedTarget = Normalize(targetVersion);
+
+        if (normalizedCandidate is null || normalizedTarget is null)
+        {
+            return false;
+        }
+
+        if (string.Equals(normalizedCandidate, normalizedTarget, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!TryParseVersionParts(normalizedCandidate, out var candidateParts)
+            || !TryParseVersionParts(normalizedTarget, out var targetParts))
+        {
+            return false;
+        }
+
+        if (candidateParts.Length == 0 || candidateParts.Length > targetParts.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < candidateParts.Length; i++)
+        {
+            if (candidateParts[i] != targetParts[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public static bool SatisfiesMinimumVersion(string? requestedVersion, string? providedVersion)
     {
         if (string.IsNullOrWhiteSpace(requestedVersion)

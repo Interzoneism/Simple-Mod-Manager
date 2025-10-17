@@ -1,0 +1,162 @@
+<Window x:Class="VintageStoryModManager.Views.Dialogs.CloudModlistDetailsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cloud Modlist Details"
+        SizeToContent="WidthAndHeight"
+        MinWidth="720"
+        MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="SingleBorderWindow"
+        ShowInTaskbar="False"
+        Loaded="Window_OnLoaded"
+        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </Window.Resources>
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="20" />
+            <ColumnDefinition Width="320" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Text="Name:" Grid.Row="0" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" />
+        <TextBox x:Name="NameTextBox"
+                 Grid.Row="0"
+                 Grid.Column="1"
+                 Margin="0,0,0,12"
+                 MinWidth="220"
+                 TextChanged="NameTextBox_OnTextChanged" />
+
+        <TextBlock Text="Version:" Grid.Row="1" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" />
+        <TextBox x:Name="VersionTextBox"
+                 Grid.Row="1"
+                 Grid.Column="1"
+                 Margin="0,0,0,12" />
+
+        <TextBlock Text="Description:" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,0,6" />
+        <TextBox x:Name="DescriptionTextBox"
+                 Grid.Row="3"
+                 Grid.Column="0"
+                 Grid.ColumnSpan="2"
+                 MinHeight="120"
+                 TextWrapping="Wrap"
+                 AcceptsReturn="True"
+                 MaxLength="190"
+                 VerticalScrollBarVisibility="Auto" />
+
+        <Grid Grid.Row="0" Grid.Column="3" Grid.RowSpan="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0"
+                       Text="Include Configurations"
+                       FontWeight="SemiBold"
+                       Margin="0,0,0,4" />
+            <CheckBox x:Name="SelectAllCheckBox"
+                      Grid.Row="1"
+                      Margin="0,0,0,8"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Center"
+                      IsThreeState="True"
+                      Click="SelectAllCheckBox_OnClick"
+                      ToolTip="Select all or deselect all configuration options"
+                      Visibility="{Binding HasConfigOptions, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <CheckBox.LayoutTransform>
+                    <ScaleTransform ScaleX="1.2" ScaleY="1.2" />
+                </CheckBox.LayoutTransform>
+                <CheckBox.Content>
+                    <TextBlock Text="Select all">
+                        <TextBlock.LayoutTransform>
+                            <ScaleTransform ScaleX="0.8333" ScaleY="0.8333" />
+                        </TextBlock.LayoutTransform>
+                    </TextBlock>
+                </CheckBox.Content>
+            </CheckBox>
+
+            <Border Grid.Row="2"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource IMM.BorderBrush}"
+                    Padding="6">
+                <ListBox ItemsSource="{Binding ConfigOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                         Visibility="{Binding HasConfigOptions, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}"
+                         Height="220"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="MinHeight" Value="26" />
+                            <Setter Property="Padding" Value="6,0" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      ToolTip="{Binding ConfigPath}"
+                                      Margin="0"
+                                      VerticalAlignment="Center">
+                                <CheckBox.LayoutTransform>
+                                    <ScaleTransform ScaleX="1.2" ScaleY="1.2" />
+                                </CheckBox.LayoutTransform>
+                                <CheckBox.Content>
+                                    <TextBlock Text="{Binding DisplayName}">
+                                        <TextBlock.LayoutTransform>
+                                            <ScaleTransform ScaleX="0.8333" ScaleY="0.8333" />
+                                        </TextBlock.LayoutTransform>
+                                    </TextBlock>
+                                </CheckBox.Content>
+                            </CheckBox>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <TextBlock Grid.Row="3"
+                       Text="No mods with saved configuration paths were found."
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource IMM.SubtleForegroundBrush}"
+                       Margin="0,8,0,0">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasConfigOptions, RelativeSource={RelativeSource AncestorType=Window}}" Value="False">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Grid>
+
+        <StackPanel Grid.Row="4"
+                    Grid.Column="0"
+                    Grid.ColumnSpan="4"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,18,0,0">
+            <Button x:Name="ConfirmButton"
+                    Content="Save"
+                    MinWidth="88"
+                    Margin="0,0,12,0"
+                    IsDefault="True"
+                    Click="ConfirmButton_OnClick" />
+            <Button Content="Cancel"
+                    MinWidth="88"
+                    IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -13,6 +13,7 @@ public partial class MessageDialogWindow : Window
     private MessageBoxButton _buttons;
     private bool _resultSet;
     private Action? _extraButtonCallback;
+    private MessageDialogButtonContentOverrides? _buttonContentOverrides;
 
     public MessageDialogWindow()
     {
@@ -26,11 +27,13 @@ public partial class MessageDialogWindow : Window
         string caption,
         MessageBoxButton buttons,
         MessageBoxImage icon,
-        MessageDialogExtraButton? extraButton = null)
+        MessageDialogExtraButton? extraButton = null,
+        MessageDialogButtonContentOverrides? buttonContentOverrides = null)
     {
         _buttons = buttons;
         Title = caption;
         MessageTextBlock.Text = message;
+        _buttonContentOverrides = buttonContentOverrides;
 
         ConfigureButtons(buttons);
         ConfigureExtraButton(extraButton);
@@ -56,23 +59,23 @@ public partial class MessageDialogWindow : Window
         switch (buttons)
         {
             case MessageBoxButton.OK:
-                ConfigureButton(ButtonOne, "OK", MessageBoxResult.OK, isDefault: true, isCancel: true);
+                ConfigureButton(ButtonOne, MessageBoxResult.OK, "OK", isDefault: true, isCancel: true);
                 break;
             case MessageBoxButton.OKCancel:
-                ConfigureButton(ButtonOne, "Cancel", MessageBoxResult.Cancel, isCancel: true);
-                ConfigureButton(ButtonTwo, "OK", MessageBoxResult.OK, isDefault: true);
+                ConfigureButton(ButtonOne, MessageBoxResult.Cancel, "Cancel", isCancel: true);
+                ConfigureButton(ButtonTwo, MessageBoxResult.OK, "OK", isDefault: true);
                 break;
             case MessageBoxButton.YesNo:
-                ConfigureButton(ButtonOne, "Yes", MessageBoxResult.Yes, isDefault: true);
-                ConfigureButton(ButtonTwo, "No", MessageBoxResult.No);
+                ConfigureButton(ButtonOne, MessageBoxResult.Yes, "Yes", isDefault: true);
+                ConfigureButton(ButtonTwo, MessageBoxResult.No, "No");
                 break;
             case MessageBoxButton.YesNoCancel:
-                ConfigureButton(ButtonOne, "Cancel", MessageBoxResult.Cancel, isCancel: true);
-                ConfigureButton(ButtonTwo, "Yes", MessageBoxResult.Yes, isDefault: true);
-                ConfigureButton(ButtonThree, "No", MessageBoxResult.No);
+                ConfigureButton(ButtonOne, MessageBoxResult.Cancel, "Cancel", isCancel: true);
+                ConfigureButton(ButtonTwo, MessageBoxResult.Yes, "Yes", isDefault: true);
+                ConfigureButton(ButtonThree, MessageBoxResult.No, "No");
                 break;
             default:
-                ConfigureButton(ButtonOne, "OK", MessageBoxResult.OK, isDefault: true, isCancel: true);
+                ConfigureButton(ButtonOne, MessageBoxResult.OK, "OK", isDefault: true, isCancel: true);
                 break;
         }
     }
@@ -95,13 +98,19 @@ public partial class MessageDialogWindow : Window
         _extraButtonCallback = extraButton.OnClick;
     }
 
-    private static void ConfigureButton(System.Windows.Controls.Button button, string content, MessageBoxResult result, bool isDefault = false, bool isCancel = false)
+    private void ConfigureButton(System.Windows.Controls.Button button, MessageBoxResult result, string defaultContent, bool isDefault = false, bool isCancel = false)
     {
-        button.Content = content;
+        button.Content = GetButtonContent(result, defaultContent);
         button.Tag = result;
         button.Visibility = Visibility.Visible;
         button.IsDefault = isDefault;
         button.IsCancel = isCancel;
+    }
+
+    private object GetButtonContent(MessageBoxResult result, string defaultContent)
+    {
+        string? overrideContent = _buttonContentOverrides?.GetContent(result);
+        return string.IsNullOrEmpty(overrideContent) ? defaultContent : overrideContent;
     }
 
     private void ConfigureIcon(MessageBoxImage icon)

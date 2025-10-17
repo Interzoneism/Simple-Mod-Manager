@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace VintageStoryModManager.Services;
@@ -15,49 +16,58 @@ public static class DataDirectoryLocator
     /// </summary>
     public static string Resolve()
     {
-        string? fromEnvironment = GetEnvironmentOverride();
-        if (!string.IsNullOrWhiteSpace(fromEnvironment))
+        foreach (string candidate in EnumerateCandidates())
         {
-            return EnsureTrailingDirectory(fromEnvironment!);
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                return candidate;
+            }
         }
 
-        string? appDataPath = GetApplicationDataPath();
-        if (!string.IsNullOrWhiteSpace(appDataPath))
-        {
-            return Path.Combine(appDataPath!, DataFolderName);
-        }
-
-        string? portablePath = GetPortableCandidate();
-        if (!string.IsNullOrWhiteSpace(portablePath))
-        {
-            return portablePath!;
-        }
-
-        return EnsureTrailingDirectory(Directory.GetCurrentDirectory());
+        return string.Empty;
     }
 
-    private static string? GetEnvironmentOverride()
+    private static IEnumerable<string> EnumerateCandidates()
     {
-        string? direct = Environment.GetEnvironmentVariable("VINTAGE_STORY_DATA");
-        if (!string.IsNullOrWhiteSpace(direct))
+        string? fromAppData = TryCombine(GetFolder(Environment.SpecialFolder.ApplicationData), DataFolderName);
+        if (!string.IsNullOrWhiteSpace(fromAppData))
         {
-            return direct;
+            yield return fromAppData!;
         }
 
-        string? server = Environment.GetEnvironmentVariable("VINTAGE_STORY_SERVER_DATA");
-        if (!string.IsNullOrWhiteSpace(server))
+        string? fromLocalAppData = TryCombine(GetFolder(Environment.SpecialFolder.LocalApplicationData), DataFolderName);
+        if (!string.IsNullOrWhiteSpace(fromLocalAppData))
         {
-            return server;
+            yield return fromLocalAppData!;
         }
 
-        return null;
+        string? portable = GetPortableCandidate();
+        if (!string.IsNullOrWhiteSpace(portable))
+        {
+            yield return portable!;
+        }
+
+        foreach (string root in EnumerateAdditionalWindowsRoots())
+        {
+            string? candidate = TryCombine(root, DataFolderName);
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                yield return candidate!;
+            }
+        }
+
+        string? currentDirectory = TryNormalize(Directory.GetCurrentDirectory());
+        if (!string.IsNullOrWhiteSpace(currentDirectory))
+        {
+            yield return currentDirectory!;
+        }
     }
 
-    private static string? GetApplicationDataPath()
+    private static string? GetFolder(Environment.SpecialFolder folder)
     {
         try
         {
-            string? path = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify);
+            string? path = Environment.GetFolderPath(folder, Environment.SpecialFolderOption.DoNotVerify);
             if (!string.IsNullOrWhiteSpace(path))
             {
                 return path;
@@ -65,19 +75,7 @@ public static class DataDirectoryLocator
         }
         catch (PlatformNotSupportedException)
         {
-            // Ignore and fall back to other options.
-        }
-
-        string? appData = Environment.GetEnvironmentVariable("APPDATA");
-        if (!string.IsNullOrWhiteSpace(appData))
-        {
-            return appData;
-        }
-
-        string? home = Environment.GetEnvironmentVariable("HOME");
-        if (!string.IsNullOrWhiteSpace(home))
-        {
-            return Path.Combine(home, ".config");
+            return null;
         }
 
         return null;
@@ -86,28 +84,68 @@ public static class DataDirectoryLocator
     private static string? GetPortableCandidate()
     {
         string baseDirectory = AppContext.BaseDirectory;
-        string candidate = Path.Combine(baseDirectory, DataFolderName);
-        if (Directory.Exists(candidate))
-        {
-            return candidate;
-        }
 
-        string localData = Path.Combine(baseDirectory, "data");
-        if (Directory.Exists(localData))
+        foreach (string folder in new[] { DataFolderName, "data" })
         {
-            return localData;
+            string? candidate = TryCombine(baseDirectory, folder);
+            if (!string.IsNullOrWhiteSpace(candidate) && Directory.Exists(candidate))
+            {
+                return candidate;
+            }
         }
 
         return null;
     }
 
-    private static string EnsureTrailingDirectory(string path)
+    private static IEnumerable<string> EnumerateAdditionalWindowsRoots()
+    {
+        foreach (string root in new[]
+                 {
+                     @"C:\\Games",
+                     @"D:\\Games",
+                     @"C:\\Program Files",
+                     @"C:\\Program Files (x86)"
+                 })
+        {
+            string? normalized = TryNormalize(root);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                yield return normalized!;
+            }
+        }
+    }
+
+    private static string? TryCombine(string? basePath, string relative)
+    {
+        if (string.IsNullOrWhiteSpace(basePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Path.GetFullPath(Path.Combine(basePath, relative));
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static string? TryNormalize(string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
-            return Directory.GetCurrentDirectory();
+            return null;
         }
 
-        return Path.GetFullPath(path);
+        try
+        {
+            return Path.GetFullPath(path);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 }

@@ -5,10 +5,14 @@ using System.IO;
 using System.Globalization;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Resources;
 using VintageStoryModManager.Models;
 
 namespace VintageStoryModManager.Services;
@@ -18,6 +22,7 @@ namespace VintageStoryModManager.Services;
 /// </summary>
 public sealed class ModDiscoveryService
 {
+    private const int DiscoveryBatchSize = 16;
     private static readonly JsonDocumentOptions DocumentOptions = new()
     {
         AllowTrailingCommas = true,
@@ -38,9 +43,11 @@ public sealed class ModDiscoveryService
 
     private readonly ClientSettingsStore _settingsStore;
     private byte[]? _defaultIconBytes;
-    private string? _defaultIconDescription;
     private bool _defaultIconResolved;
     private readonly object _defaultIconLock = new();
+    private readonly object _directoryCacheLock = new();
+    private readonly Dictionary<string, CachedDirectoryEntry> _directoryManifestCache =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public ModDiscoveryService(ClientSettingsStore settingsStore)
     {
@@ -49,49 +56,13 @@ public sealed class ModDiscoveryService
 
     public IReadOnlyList<ModEntry> LoadMods()
     {
-        var seenSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var orderedEntries = new List<(int Order, FileSystemInfo Entry)>();
-        int order = 0;
-
-        foreach (string searchPath in BuildSearchPaths())
-        {
-            if (!Directory.Exists(searchPath))
-            {
-                continue;
-            }
-
-            if (IsDefaultGameModsDirectory(searchPath))
-            {
-                continue;
-            }
-
-            IEnumerable<FileSystemInfo> entries;
-            try
-            {
-                entries = new DirectoryInfo(searchPath).EnumerateFileSystemInfos();
-            }
-            catch (Exception)
-            {
-                continue;
-            }
-
-            foreach (FileSystemInfo entry in entries)
-            {
-                if (!seenSources.Add(entry.FullName))
-                {
-                    continue;
-                }
-
-                orderedEntries.Add((order++, entry));
-            }
-        }
+        List<(int Order, FileSystemInfo Entry)> orderedEntries = CollectModSources();
 
         if (orderedEntries.Count == 0)
         {
             return Array.Empty<ModEntry>();
         }
 
-        const int BatchSize = 16;
         int maxDegree = Math.Clamp(Environment.ProcessorCount, 1, 8);
         var collected = new ConcurrentBag<(int Order, ModEntry Entry)>();
         var options = new ParallelOptions
@@ -99,7 +70,7 @@ public sealed class ModDiscoveryService
             MaxDegreeOfParallelism = maxDegree
         };
 
-        Parallel.ForEach(orderedEntries.Chunk(BatchSize), options, batch =>
+        Parallel.ForEach(orderedEntries.Chunk(DiscoveryBatchSize), options, batch =>
         {
             foreach (var (batchOrder, fileSystemInfo) in batch)
             {
@@ -118,20 +89,92 @@ public sealed class ModDiscoveryService
 
         ApplyLoadStatuses(results);
         return results;
+    }
 
-        ModEntry? ProcessEntry(FileSystemInfo entry)
+    public async IAsyncEnumerable<IReadOnlyList<ModEntry>> LoadModsIncrementallyAsync(
+        int batchSize,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (batchSize <= 0)
         {
-            switch (entry)
+            batchSize = DiscoveryBatchSize;
+        }
+
+        List<(int Order, FileSystemInfo Entry)> orderedEntries = CollectModSources();
+        if (orderedEntries.Count == 0)
+        {
+            yield break;
+        }
+
+        using var results = new BlockingCollection<(int Order, ModEntry? Entry)>();
+        int maxDegree = Math.Clamp(Environment.ProcessorCount, 1, 8);
+        var options = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = maxDegree,
+            CancellationToken = cancellationToken
+        };
+
+        Task producer = Task.Run(() =>
+        {
+            try
             {
-                case DirectoryInfo directory:
-                    return TryLoadFromDirectory(directory);
-                case FileInfo file when string.Equals(file.Extension, ".zip", StringComparison.OrdinalIgnoreCase):
-                    return TryLoadFromZip(file);
-                case FileInfo file when string.Equals(file.Extension, ".cs", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(file.Extension, ".dll", StringComparison.OrdinalIgnoreCase):
-                    return CreateUnsupportedCodeModEntry(file);
-                default:
-                    return null;
+                Parallel.ForEach(orderedEntries.Chunk(DiscoveryBatchSize), options, batch =>
+                {
+                    foreach (var (order, source) in batch)
+                    {
+                        options.CancellationToken.ThrowIfCancellationRequested();
+                        ModEntry? entry = ProcessEntry(source);
+                        results.Add((order, entry), options.CancellationToken);
+                    }
+                });
+            }
+            finally
+            {
+                results.CompleteAdding();
+            }
+        }, cancellationToken);
+
+        var pending = new SortedDictionary<int, ModEntry?>();
+        int nextOrder = 0;
+        var batchBuffer = new List<ModEntry>(batchSize);
+
+        try
+        {
+            foreach (var (order, entry) in results.GetConsumingEnumerable(cancellationToken))
+            {
+                pending[order] = entry;
+
+                while (pending.TryGetValue(nextOrder, out ModEntry? next))
+                {
+                    pending.Remove(nextOrder);
+                    if (next != null)
+                    {
+                        batchBuffer.Add(next);
+                        if (batchBuffer.Count >= batchSize)
+                        {
+                            yield return batchBuffer.ToArray();
+                            batchBuffer.Clear();
+                        }
+                    }
+
+                    nextOrder++;
+                }
+            }
+
+            if (batchBuffer.Count > 0)
+            {
+                yield return batchBuffer.ToArray();
+            }
+        }
+        finally
+        {
+            try
+            {
+                await producer.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
             }
         }
     }
@@ -181,6 +224,64 @@ public sealed class ModDiscoveryService
         }
 
         return null;
+    }
+
+    private List<(int Order, FileSystemInfo Entry)> CollectModSources()
+    {
+        var seenSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var orderedEntries = new List<(int Order, FileSystemInfo Entry)>();
+        int order = 0;
+
+        foreach (string searchPath in BuildSearchPaths())
+        {
+            if (!Directory.Exists(searchPath))
+            {
+                continue;
+            }
+
+            if (IsDefaultGameModsDirectory(searchPath))
+            {
+                continue;
+            }
+
+            IEnumerable<FileSystemInfo> entries;
+            try
+            {
+                entries = new DirectoryInfo(searchPath).EnumerateFileSystemInfos();
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            foreach (FileSystemInfo entry in entries)
+            {
+                if (!seenSources.Add(entry.FullName))
+                {
+                    continue;
+                }
+
+                orderedEntries.Add((order++, entry));
+            }
+        }
+
+        return orderedEntries;
+    }
+
+    private ModEntry? ProcessEntry(FileSystemInfo entry)
+    {
+        switch (entry)
+        {
+            case DirectoryInfo directory:
+                return TryLoadFromDirectory(directory);
+            case FileInfo file when string.Equals(file.Extension, ".zip", StringComparison.OrdinalIgnoreCase):
+                return TryLoadFromZip(file);
+            case FileInfo file when string.Equals(file.Extension, ".cs", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(file.Extension, ".dll", StringComparison.OrdinalIgnoreCase):
+                return CreateUnsupportedCodeModEntry(file);
+            default:
+                return null;
+        }
     }
 
     public void ApplyLoadStatuses(IList<ModEntry> mods)
@@ -540,48 +641,119 @@ public sealed class ModDiscoveryService
         string modInfoPath = Path.Combine(directory.FullName, "modinfo.json");
         if (!File.Exists(modInfoPath))
         {
+            InvalidateDirectoryCache(directory.FullName);
             return null;
+        }
+
+        DateTime manifestLastWriteUtc;
+        long manifestLength;
+
+        try
+        {
+            var manifestFile = new FileInfo(modInfoPath);
+            manifestLastWriteUtc = manifestFile.LastWriteTimeUtc;
+            manifestLength = manifestFile.Length;
+        }
+        catch (Exception)
+        {
+            manifestLastWriteUtc = DateTime.MinValue;
+            manifestLength = -1L;
+        }
+
+        if (TryGetCachedDirectoryEntry(directory.FullName, manifestLastWriteUtc, manifestLength, out var cached))
+        {
+            byte[]? iconBytes = cached.IconBytes ?? LoadDefaultIcon();
+            return CreateEntry(cached.Info, directory.FullName, ModSourceKind.Folder, iconBytes);
         }
 
         try
         {
-            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(modInfoPath), DocumentOptions);
+            string manifestJson = File.ReadAllText(modInfoPath);
+            using JsonDocument document = JsonDocument.Parse(manifestJson, DocumentOptions);
             var info = ParseModInfo(document.RootElement, directory.Name);
-            byte[]? iconBytes = LoadIconFromDirectory(directory, info.IconPath, out string? iconDescription);
-            if (iconBytes == null)
-            {
-                iconBytes = LoadDefaultIcon(out iconDescription);
-            }
 
-            return CreateEntry(info, directory.FullName, ModSourceKind.Folder, iconBytes, iconDescription);
+            DirectoryIconCache icon = LoadDirectoryIcon(directory, info.IconPath);
+            byte[]? iconBytes = icon.Bytes;
+            iconBytes ??= LoadDefaultIcon();
+
+            CacheDirectoryEntry(directory.FullName, info, manifestLastWriteUtc, manifestLength, icon);
+
+            return CreateEntry(info, directory.FullName, ModSourceKind.Folder, iconBytes);
         }
         catch (Exception ex)
         {
+            InvalidateDirectoryCache(directory.FullName);
             return CreateErrorEntry(directory.Name, directory.FullName, ModSourceKind.Folder, ex.Message);
         }
     }
 
     private ModEntry? TryLoadFromZip(FileInfo archiveFile)
     {
+        DateTime lastWriteTimeUtc = DateTime.MinValue;
+        long length = 0L;
+
+        try
+        {
+            lastWriteTimeUtc = archiveFile.LastWriteTimeUtc;
+            length = archiveFile.Length;
+        }
+        catch (Exception)
+        {
+            // Ignore failures when probing file metadata; the cache lookup will simply miss.
+        }
+
+        if (ModManifestCacheService.TryGetManifest(archiveFile.FullName, lastWriteTimeUtc, length, out string manifestJson, out byte[]? cachedIconBytes))
+        {
+            try
+            {
+                using JsonDocument cachedDocument = JsonDocument.Parse(manifestJson, DocumentOptions);
+                var cachedInfo = ParseModInfo(cachedDocument.RootElement, Path.GetFileNameWithoutExtension(archiveFile.Name));
+
+                byte[]? iconBytes = cachedIconBytes;
+                iconBytes ??= LoadDefaultIcon();
+
+                return CreateEntry(cachedInfo, archiveFile.FullName, ModSourceKind.ZipArchive, iconBytes);
+            }
+            catch (Exception)
+            {
+                ModManifestCacheService.Invalidate(archiveFile.FullName);
+            }
+        }
+
         try
         {
             using ZipArchive archive = ZipFile.OpenRead(archiveFile.FullName);
-            ZipArchiveEntry? infoEntry = FindEntry(archive, "modinfo.json");
+            ZipArchiveLookup lookup = BuildArchiveLookup(archive);
+            ZipArchiveEntry? infoEntry = FindEntry(lookup, "modinfo.json");
             if (infoEntry == null)
             {
                 return CreateErrorEntry(Path.GetFileNameWithoutExtension(archiveFile.Name), archiveFile.FullName, ModSourceKind.ZipArchive, "Missing modinfo.json");
             }
 
-            using var infoStream = infoEntry.Open();
-            using JsonDocument document = JsonDocument.Parse(infoStream, DocumentOptions);
+            string manifestContent;
+            using (Stream infoStream = infoEntry.Open())
+            using (var reader = new StreamReader(infoStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+            {
+                manifestContent = reader.ReadToEnd();
+            }
+
+            using JsonDocument document = JsonDocument.Parse(manifestContent, DocumentOptions);
             var info = ParseModInfo(document.RootElement, Path.GetFileNameWithoutExtension(archiveFile.Name));
 
-            byte[]? iconBytes = LoadIconFromArchive(archive, info.IconPath, out string? iconDescription);
-            if (iconBytes == null)
-            {
-                iconBytes = LoadDefaultIcon(out iconDescription);
-            }
-            return CreateEntry(info, archiveFile.FullName, ModSourceKind.ZipArchive, iconBytes, iconDescription);
+            byte[]? archiveIconBytes = LoadIconFromArchive(lookup, info.IconPath);
+            byte[]? iconBytes = archiveIconBytes;
+            iconBytes ??= LoadDefaultIcon();
+
+            ModManifestCacheService.StoreManifest(
+                archiveFile.FullName,
+                lastWriteTimeUtc,
+                length,
+                info.ModId,
+                info.Version,
+                manifestContent,
+                archiveIconBytes);
+
+            return CreateEntry(info, archiveFile.FullName, ModSourceKind.ZipArchive, iconBytes);
         }
         catch (Exception ex)
         {
@@ -589,17 +761,49 @@ public sealed class ModDiscoveryService
         }
     }
 
-    private static ZipArchiveEntry? FindEntry(ZipArchive archive, string entryName)
+    private static ZipArchiveLookup BuildArchiveLookup(ZipArchive archive)
     {
-        foreach (var entry in archive.Entries)
+        var byPath = new Dictionary<string, ZipArchiveEntry?>(StringComparer.OrdinalIgnoreCase);
+        var byFileName = new Dictionary<string, ZipArchiveEntry?>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (ZipArchiveEntry entry in archive.Entries)
         {
-            if (string.Equals(entry.FullName, entryName, StringComparison.OrdinalIgnoreCase))
+            string normalizedPath = NormalizeZipEntryPath(entry.FullName);
+            if (!byPath.ContainsKey(normalizedPath))
             {
-                return entry;
+                byPath[normalizedPath] = entry;
+            }
+
+            string fileName = NormalizeZipEntryPath(Path.GetFileName(entry.FullName));
+            if (!string.IsNullOrEmpty(fileName) && !byFileName.ContainsKey(fileName))
+            {
+                byFileName[fileName] = entry;
             }
         }
 
-        return archive.Entries.FirstOrDefault(e => string.Equals(Path.GetFileName(e.FullName), entryName, StringComparison.OrdinalIgnoreCase));
+        return new ZipArchiveLookup(byPath, byFileName);
+    }
+
+    private static ZipArchiveEntry? FindEntry(ZipArchiveLookup lookup, string entryName)
+    {
+        if (string.IsNullOrWhiteSpace(entryName))
+        {
+            return null;
+        }
+
+        string normalizedTarget = NormalizeZipEntryPath(entryName);
+        if (lookup.TryGetEntry(normalizedTarget, out ZipArchiveEntry? exact))
+        {
+            return exact;
+        }
+
+        string normalizedFileName = NormalizeZipEntryPath(Path.GetFileName(entryName));
+        if (lookup.TryGetEntryByFileName(normalizedFileName, out ZipArchiveEntry? byName))
+        {
+            return byName;
+        }
+
+        return null;
     }
 
     private ModEntry CreateUnsupportedCodeModEntry(FileInfo file)
@@ -619,7 +823,6 @@ public sealed class ModDiscoveryService
             SourcePath = file.FullName,
             SourceKind = string.Equals(file.Extension, ".cs", StringComparison.OrdinalIgnoreCase) ? ModSourceKind.SourceCode : ModSourceKind.Assembly,
             IconBytes = null,
-            IconDescription = null,
             Error = "Metadata unavailable for code-only mods.",
             LoadError = null,
             Side = null,
@@ -628,7 +831,7 @@ public sealed class ModDiscoveryService
         };
     }
 
-    private ModEntry CreateEntry(RawModInfo info, string sourcePath, ModSourceKind kind, byte[]? iconBytes, string? iconDescription)
+    private ModEntry CreateEntry(RawModInfo info, string sourcePath, ModSourceKind kind, byte[]? iconBytes)
     {
         return new ModEntry
         {
@@ -644,7 +847,6 @@ public sealed class ModDiscoveryService
             SourcePath = sourcePath,
             SourceKind = kind,
             IconBytes = iconBytes,
-            IconDescription = iconDescription,
             Error = null,
             LoadError = null,
             Side = info.Side,
@@ -670,7 +872,6 @@ public sealed class ModDiscoveryService
             SourcePath = sourcePath,
             SourceKind = kind,
             IconBytes = null,
-            IconDescription = null,
             Error = message,
             LoadError = null,
             Side = null,
@@ -762,7 +963,7 @@ public sealed class ModDiscoveryService
         return preferred ?? fallback;
     }
 
-    private static byte[]? LoadIconFromDirectory(DirectoryInfo directory, string? iconPath, out string? description)
+    private DirectoryIconCache LoadDirectoryIcon(DirectoryInfo directory, string? iconPath)
     {
         string? candidate = ResolveSafePath(directory.FullName, iconPath);
         if (candidate == null)
@@ -774,77 +975,322 @@ public sealed class ModDiscoveryService
             }
         }
 
-        if (candidate != null && File.Exists(candidate))
+        if (candidate != null)
         {
-            description = candidate;
-            return File.ReadAllBytes(candidate);
+            try
+            {
+                var fileInfo = new FileInfo(candidate);
+                if (fileInfo.Exists)
+                {
+                    byte[] bytes = File.ReadAllBytes(candidate);
+                    return new DirectoryIconCache
+                    {
+                        Bytes = bytes,
+                        Metadata = new DirectoryIconMetadata
+                        {
+                            IconPath = candidate,
+                            LastWriteTimeUtc = fileInfo.LastWriteTimeUtc,
+                            Length = fileInfo.Length,
+                            WasMissing = false
+                        }
+                    };
+                }
+
+                return new DirectoryIconCache
+                {
+                    Bytes = null,
+                    Metadata = new DirectoryIconMetadata
+                    {
+                        IconPath = candidate,
+                        WasMissing = true
+                    }
+                };
+            }
+            catch (Exception)
+            {
+                return new DirectoryIconCache
+                {
+                    Bytes = null,
+                    Metadata = new DirectoryIconMetadata
+                    {
+                        IconPath = candidate,
+                        WasMissing = true
+                    }
+                };
+            }
         }
 
-        description = null;
-        return null;
+        return new DirectoryIconCache
+        {
+            Bytes = null,
+            Metadata = null
+        };
     }
 
-    private static byte[]? LoadIconFromArchive(ZipArchive archive, string? iconPath, out string? description)
+    private bool TryGetCachedDirectoryEntry(
+        string directoryPath,
+        DateTime manifestLastWriteUtc,
+        long manifestLength,
+        out CachedDirectoryEntry entry)
+    {
+        lock (_directoryCacheLock)
+        {
+            if (_directoryManifestCache.TryGetValue(directoryPath, out CachedDirectoryEntry? cached))
+            {
+                if (cached.ManifestLength == manifestLength
+                    && cached.ManifestLastWriteTimeUtc == manifestLastWriteUtc
+                    && IconMetadataMatches(cached.IconMetadata))
+                {
+                    entry = cached;
+                    return true;
+                }
+
+                _directoryManifestCache.Remove(directoryPath);
+            }
+        }
+
+        entry = null!;
+        return false;
+    }
+
+    private void CacheDirectoryEntry(
+        string directoryPath,
+        RawModInfo info,
+        DateTime manifestLastWriteUtc,
+        long manifestLength,
+        DirectoryIconCache icon)
+    {
+        var cached = new CachedDirectoryEntry
+        {
+            Info = info,
+            ManifestLastWriteTimeUtc = manifestLastWriteUtc,
+            ManifestLength = manifestLength,
+            IconBytes = icon.Bytes,
+            IconMetadata = icon.Metadata
+        };
+
+        lock (_directoryCacheLock)
+        {
+            _directoryManifestCache[directoryPath] = cached;
+        }
+    }
+
+    private void InvalidateDirectoryCache(string directoryPath)
+    {
+        lock (_directoryCacheLock)
+        {
+            _directoryManifestCache.Remove(directoryPath);
+        }
+    }
+
+    private static bool IconMetadataMatches(DirectoryIconMetadata? metadata)
+    {
+        if (metadata == null || string.IsNullOrWhiteSpace(metadata.IconPath))
+        {
+            return true;
+        }
+
+        try
+        {
+            var fileInfo = new FileInfo(metadata.IconPath);
+            if (!fileInfo.Exists)
+            {
+                return metadata.WasMissing;
+            }
+
+            if (metadata.WasMissing)
+            {
+                return false;
+            }
+
+            return fileInfo.LastWriteTimeUtc == metadata.LastWriteTimeUtc
+                && fileInfo.Length == metadata.Length;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private sealed class CachedDirectoryEntry
+    {
+        public required RawModInfo Info { get; init; }
+        public required DateTime ManifestLastWriteTimeUtc { get; init; }
+        public required long ManifestLength { get; init; }
+        public byte[]? IconBytes { get; init; }
+        public DirectoryIconMetadata? IconMetadata { get; init; }
+    }
+
+    private sealed class DirectoryIconCache
+    {
+        public byte[]? Bytes { get; init; }
+        public DirectoryIconMetadata? Metadata { get; init; }
+    }
+
+    private sealed class DirectoryIconMetadata
+    {
+        public string? IconPath { get; init; }
+        public DateTime? LastWriteTimeUtc { get; init; }
+        public long? Length { get; init; }
+        public bool WasMissing { get; init; }
+    }
+
+    private static byte[]? LoadIconFromArchive(ZipArchiveLookup lookup, string? iconPath)
     {
         ZipArchiveEntry? entry = null;
         if (!string.IsNullOrWhiteSpace(iconPath))
         {
-            entry = FindEntry(archive, iconPath);
+            entry = FindEntry(lookup, iconPath);
         }
 
-        entry ??= FindEntry(archive, "modicon.png");
+        entry ??= FindEntry(lookup, "modicon.png");
         if (entry == null)
         {
-            description = null;
             return null;
         }
 
         using MemoryStream buffer = new MemoryStream();
         using Stream iconStream = entry.Open();
         iconStream.CopyTo(buffer);
-        description = entry.FullName;
         return buffer.ToArray();
     }
 
-    private byte[]? LoadDefaultIcon(out string? description)
+    private sealed class ZipArchiveLookup
+    {
+        private readonly Dictionary<string, ZipArchiveEntry?> _byPath;
+        private readonly Dictionary<string, ZipArchiveEntry?> _byFileName;
+
+        public ZipArchiveLookup(Dictionary<string, ZipArchiveEntry?> byPath, Dictionary<string, ZipArchiveEntry?> byFileName)
+        {
+            _byPath = byPath;
+            _byFileName = byFileName;
+        }
+
+        public bool TryGetEntry(string normalizedPath, out ZipArchiveEntry? entry)
+        {
+            if (_byPath.TryGetValue(normalizedPath, out ZipArchiveEntry? value) && value != null)
+            {
+                entry = value;
+                return true;
+            }
+
+            entry = null;
+            return false;
+        }
+
+        public bool TryGetEntryByFileName(string normalizedFileName, out ZipArchiveEntry? entry)
+        {
+            if (_byFileName.TryGetValue(normalizedFileName, out ZipArchiveEntry? value) && value != null)
+            {
+                entry = value;
+                return true;
+            }
+
+            entry = null;
+            return false;
+        }
+    }
+
+    private byte[]? LoadDefaultIcon()
     {
         lock (_defaultIconLock)
         {
             if (!_defaultIconResolved)
             {
-                foreach (string candidate in EnumerateDefaultIconCandidates())
-                {
-                    try
-                    {
-                        if (!File.Exists(candidate))
-                        {
-                            continue;
-                        }
+                _defaultIconBytes = TryLoadBundledDefaultIcon()
+                    ?? TryLoadBundledIconFromBaseDirectory();
 
-                        _defaultIconBytes = File.ReadAllBytes(candidate);
-                        _defaultIconDescription = candidate;
-                        break;
-                    }
-                    catch (IOException)
+                if (_defaultIconBytes == null)
+                {
+                    foreach (string candidate in EnumerateDefaultIconCandidates())
                     {
-                        // Ignore IO failures and continue with other candidates.
-                    }
-                    catch (UnauthorizedAccessException)
-                    {
-                        // Ignore permission issues and continue with other candidates.
-                    }
-                    catch (NotSupportedException)
-                    {
-                        // Ignore invalid path formats and continue with other candidates.
+                        try
+                        {
+                            if (!File.Exists(candidate))
+                            {
+                                continue;
+                            }
+
+                            _defaultIconBytes = File.ReadAllBytes(candidate);
+                            break;
+                        }
+                        catch (IOException)
+                        {
+                            // Ignore IO failures and continue with other candidates.
+                        }
+                        catch (UnauthorizedAccessException)
+                        {
+                            // Ignore permission issues and continue with other candidates.
+                        }
+                        catch (NotSupportedException)
+                        {
+                            // Ignore invalid path formats and continue with other candidates.
+                        }
                     }
                 }
 
                 _defaultIconResolved = true;
             }
 
-            description = _defaultIconDescription;
             return _defaultIconBytes;
         }
+    }
+
+    private static byte[]? TryLoadBundledDefaultIcon()
+    {
+        const string resourcePath = "Resources/mod-default.png";
+        try
+        {
+            var resourceUri = new Uri(resourcePath, UriKind.Relative);
+            StreamResourceInfo? resource = System.Windows.Application.GetResourceStream(resourceUri);
+            if (resource?.Stream != null)
+            {
+                using Stream stream = resource.Stream;
+                using var memory = new MemoryStream();
+                stream.CopyTo(memory);
+                return memory.ToArray();
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+        catch (SecurityException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (UriFormatException)
+        {
+        }
+
+        return null;
+    }
+
+    private static byte[]? TryLoadBundledIconFromBaseDirectory()
+    {
+        string candidate = Path.Combine(AppContext.BaseDirectory, "mod-default.png");
+        try
+        {
+            if (File.Exists(candidate))
+            {
+                return File.ReadAllBytes(candidate);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+
+        return null;
     }
 
     private IEnumerable<string> EnumerateDefaultIconCandidates()
@@ -927,6 +1373,23 @@ public sealed class ModDiscoveryService
         }
 
         return null;
+    }
+
+    private static string NormalizeZipEntryPath(string path)
+    {
+        string normalized = path.Trim().Replace('\\', '/');
+
+        while (normalized.StartsWith("./", StringComparison.Ordinal))
+        {
+            normalized = normalized[2..];
+        }
+
+        if (normalized.Length > 0 && normalized[0] == '/')
+        {
+            normalized = normalized[1..];
+        }
+
+        return normalized;
     }
 
     private static string ToModId(string? name)

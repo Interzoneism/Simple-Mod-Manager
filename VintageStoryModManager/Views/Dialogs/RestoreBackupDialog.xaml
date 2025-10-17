@@ -1,0 +1,49 @@
+<Window x:Class="VintageStoryModManager.Views.Dialogs.RestoreBackupDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        Title="Restore Backup"
+        SizeToContent="WidthAndHeight"
+        MinWidth="420"
+        MinHeight="200"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="SingleBorderWindow"
+        ShowInTaskbar="False"
+        Topmost="False"
+        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Are you sure you want to load this backup Modlist? Your current mods will be deleted and replaced with the mods in this backup."
+                   TextWrapping="Wrap"
+                   MaxWidth="520" />
+
+        <DockPanel Grid.Row="1"
+                   Margin="0,24,0,0">
+            <ui:ToggleSwitch x:Name="RestoreConfigsToggle"
+                              Header="Restore mod configs from backup"
+                              Margin="0,0,24,0"
+                              IsOn="False"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Center" />
+
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        DockPanel.Dock="Right">
+                <Button Content="Restore"
+                        Width="96"
+                        Margin="0,0,12,0"
+                        IsDefault="True"
+                        Click="RestoreButton_OnClick" />
+                <Button Content="Cancel"
+                        Width="96"
+                        IsCancel="True"
+                        Click="CancelButton_OnClick" />
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Window>

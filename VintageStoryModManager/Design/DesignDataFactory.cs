@@ -147,7 +147,6 @@ internal static class DesignDataFactory
             RequiredOnClient = requiredOnClient,
             RequiredOnServer = requiredOnServer,
             IconBytes = SampleIcon,
-            IconDescription = "Sample icon",
             Error = error,
             LoadError = loadError,
             DatabaseInfo = databaseInfo

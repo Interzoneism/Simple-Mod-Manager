@@ -32,7 +32,6 @@ public static class StatusLogService
             if (!string.IsNullOrEmpty(documentsPath))
             {
                 string directory = Path.Combine(documentsPath, "Simple VS Manager");
-                Directory.CreateDirectory(directory);
                 return Path.Combine(directory, "SimpleVSManagerStatus.log");
             }
         }

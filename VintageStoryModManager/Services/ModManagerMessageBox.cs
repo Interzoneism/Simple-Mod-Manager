@@ -11,9 +11,10 @@ public static class ModManagerMessageBox
         string caption,
         MessageBoxButton button,
         MessageBoxImage icon,
-        MessageDialogExtraButton? extraButton = null)
+        MessageDialogExtraButton? extraButton = null,
+        MessageDialogButtonContentOverrides? buttonContentOverrides = null)
     {
-        return ShowInternal(null, messageBoxText, caption, button, icon, extraButton);
+        return ShowInternal(null, messageBoxText, caption, button, icon, extraButton, buttonContentOverrides);
     }
 
     public static MessageBoxResult Show(
@@ -22,9 +23,10 @@ public static class ModManagerMessageBox
         string caption,
         MessageBoxButton button,
         MessageBoxImage icon,
-        MessageDialogExtraButton? extraButton = null)
+        MessageDialogExtraButton? extraButton = null,
+        MessageDialogButtonContentOverrides? buttonContentOverrides = null)
     {
-        return ShowInternal(owner, messageBoxText, caption, button, icon, extraButton);
+        return ShowInternal(owner, messageBoxText, caption, button, icon, extraButton, buttonContentOverrides);
     }
 
     private static MessageBoxResult ShowInternal(
@@ -33,18 +35,20 @@ public static class ModManagerMessageBox
         string caption,
         MessageBoxButton button,
         MessageBoxImage icon,
-        MessageDialogExtraButton? extraButton)
+        MessageDialogExtraButton? extraButton,
+        MessageDialogButtonContentOverrides? buttonContentOverrides)
     {
         Window? resolvedOwner = owner ?? GetActiveWindow();
+        bool hasVisibleOwner = resolvedOwner?.IsVisible == true;
 
         var dialog = new MessageDialogWindow
         {
-            Owner = resolvedOwner,
-            WindowStartupLocation = resolvedOwner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner,
-            Topmost = resolvedOwner is null
+            Owner = hasVisibleOwner ? resolvedOwner : null,
+            WindowStartupLocation = hasVisibleOwner ? WindowStartupLocation.CenterOwner : WindowStartupLocation.CenterScreen,
+            Topmost = resolvedOwner is null || !hasVisibleOwner
         };
 
-        dialog.Initialize(messageBoxText, caption, button, icon, extraButton);
+        dialog.Initialize(messageBoxText, caption, button, icon, extraButton, buttonContentOverrides);
         _ = dialog.ShowDialog();
         return dialog.Result;
     }

@@ -10,13 +10,30 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AssetTargetFallback>$(AssetTargetFallback);net5.0-windows7.0;netcoreapp3.0</AssetTargetFallback>
     <ApplicationIcon>SVSM.ico</ApplicationIcon>
-	  <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+
+    <!-- What Windows/Task Manager shows -->
+    <FileDescription>Simple VS Manager</FileDescription>   <!-- Task Manager "Name" (File description) -->
+    <Product>Simple VS Manager</Product>                   <!-- Product name -->
+    <Company>Interzone</Company>
+    <Description>Portable, user-friendly Vintage Story mod manager.</Description>
+    <AssemblyTitle>Simple VS Manager</AssemblyTitle>       <!-- Also good to set -->
+
+    <!-- File name on disk (the .exe base name) -->
+    <AssemblyName>VintageStoryModManager</AssemblyName>
+
+    <!-- Versions -->
+    <Version>$(AppVersion)</Version>                               <!-- Product version -->
+    <FileVersion>$(AppFileVersion)</FileVersion>                   <!-- File version (Details tab) -->
+    <InformationalVersion>$(AppVersion)</InformationalVersion>     <!-- About box/semver -->
   </PropertyGroup>
 
   <ItemGroup>
     <Resource Include="configicon.png" />
     <Resource Include="webicon.png" />
     <Resource Include="deleteicon.png" />
+    <Resource Include="warning.png" />
+    <Resource Include="error.png" />
     <Resource Include="mod-default.png">
       <Link>Resources\mod-default.png</Link>
     </Resource>
@@ -30,5 +47,20 @@
   <ItemGroup>
     <Folder Include="ViewModels\" />
     <Folder Include="Views\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Settings.Designer.cs">
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
   </ItemGroup>
 </Project>
