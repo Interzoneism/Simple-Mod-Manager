@@ -73,7 +73,13 @@ public partial class CloudModlistDetailsDialog : Window
 
     private void UpdateConfirmButtonState()
     {
-        ConfirmButton.IsEnabled = !string.IsNullOrWhiteSpace(NameTextBox.Text);
+        if (ConfirmButton is null)
+        {
+            return;
+        }
+
+        string? modlistName = NameTextBox?.Text;
+        ConfirmButton.IsEnabled = !string.IsNullOrWhiteSpace(modlistName);
     }
 
     private void Window_OnLoaded(object sender, RoutedEventArgs e)

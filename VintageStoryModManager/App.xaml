@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:converters="clr-namespace:VintageStoryModManager.Converters"
              xmlns:options="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options"
+             xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
              xmlns:ui="http://schemas.modernwpf.com/2019"
              StartupUri="Views/MainWindow.xaml">
     <Application.Resources>
@@ -10,105 +11,58 @@
             <ResourceDictionary.MergedDictionaries>
                 <ui:ThemeResources />
                 <ui:XamlControlsResources />
+                <ResourceDictionary Source="Resources/Themes/DarkVsTheme.xaml" />
             </ResourceDictionary.MergedDictionaries>
-
-            <Color x:Key="IMM.AccentColor">#FF4C8BF5</Color>
-            <Color x:Key="IMM.SurfaceColor">#FFF6F8FB</Color>
-            <Color x:Key="IMM.SurfaceAltColor">#FFEFF3F9</Color>
-            <Color x:Key="IMM.BorderColor">#FFCAD7EB</Color>
-            <Color x:Key="IMM.RowBorderColor">#FF8EA0C0</Color>
-            <Color x:Key="IMM.BorderHoverColor">#FF7AA6F9</Color>
-            <Color x:Key="IMM.ButtonBackgroundColor">#FFF9FBFF</Color>
-            <Color x:Key="IMM.ButtonHoverColor">#FFE7F0FF</Color>
-            <Color x:Key="IMM.ButtonPressedColor">#FFD5E3FF</Color>
-            <Color x:Key="IMM.ButtonDisabledColor">#FFEEF1F6</Color>
-            <Color x:Key="IMM.ToggleOffColor">#FFC7D1E5</Color>
-            <Color x:Key="IMM.ToggleThumbColor">#FFFFFFFF</Color>
-            <Color x:Key="IMM.ToggleDisabledColor">#FFE2E6F0</Color>
-            <Color x:Key="IMM.ToggleDisabledThumbColor">#FFF4F6FB</Color>
-            <Color x:Key="IMM.PlaceholderForegroundColor">#661C2635</Color>
-            <Color x:Key="IMM.ForegroundColor">#FF1C2635</Color>
-            <Color x:Key="IMM.SuccessColor">#FF79C46E</Color>
-            <Color x:Key="IMM.RowHoverColor">#FF7AA6F9</Color>
-            <Color x:Key="IMM.RowSelectionColor">#334C8BF5</Color>
-
-            <!-- Vintage Story dialog and text colors extracted from GuiStyle -->
-            <Color x:Key="VS.DialogLightBackgroundColor">#BF403529</Color>
-            <Color x:Key="VS.DialogDefaultBackgroundColor">#CC403529</Color>
-            <Color x:Key="VS.DialogStrongBackgroundColor">#FF403529</Color>
-            <Color x:Key="VS.DialogBorderColor">#4D000000</Color>
-            <Color x:Key="VS.DialogHighlightColor">#E6A88B6C</Color>
-            <Color x:Key="VS.DialogAlternateBackgroundColor">#EDB5AEA6</Color>
-            <Color x:Key="VS.DialogDefaultTextColor">#FFE9DDCE</Color>
-            <Color x:Key="VS.DialogDarkBrownTextColor">#FF5A4530</Color>
-            <Color x:Key="VS.DialogHotbarNumberTextColor">#805A4530</Color>
-            <Color x:Key="VS.DialogButtonTextColor">#FFE0CFBB</Color>
-            <Color x:Key="VS.DialogActiveButtonTextColor">#FFC58948</Color>
-            <Color x:Key="VS.DialogDisabledTextColor">#59FFFFFF</Color>
-            <Color x:Key="VS.DialogSuccessTextColor">#FF80FF80</Color>
-            <Color x:Key="VS.DialogErrorTextColor">#FFFF8080</Color>
-            <Color x:Key="VS.DialogWarningTextColor">#FFF2C983</Color>
-            <Color x:Key="VS.DialogLinkTextColor">#FF8080FF</Color>
-            <Color x:Key="VS.DialogTitleBarColor">#33000000</Color>
-
-            <SolidColorBrush x:Key="IMM.AccentBrush" Color="{StaticResource IMM.AccentColor}" />
-            <SolidColorBrush x:Key="IMM.SurfaceBrush" Color="{StaticResource IMM.SurfaceColor}" />
-            <SolidColorBrush x:Key="IMM.SurfaceAltBrush" Color="{StaticResource IMM.SurfaceAltColor}" />
-            <SolidColorBrush x:Key="IMM.BorderBrush"
-                              options:Freeze="False"
-                              Color="{StaticResource IMM.BorderColor}" />
-            <SolidColorBrush x:Key="IMM.RowBorderBrush" Color="{StaticResource IMM.RowBorderColor}" />
-            <SolidColorBrush x:Key="IMM.BorderHoverBrush" Color="{StaticResource IMM.BorderHoverColor}" />
-            <SolidColorBrush x:Key="IMM.ButtonBackgroundBrush"
-                              options:Freeze="False"
-                              Color="{StaticResource IMM.ButtonBackgroundColor}" />
-            <SolidColorBrush x:Key="IMM.ButtonHoverBrush"
-                              Color="{StaticResource IMM.ButtonHoverColor}" />
-            <SolidColorBrush x:Key="IMM.ButtonPressedBrush"
-                              Color="{StaticResource IMM.ButtonPressedColor}" />
-            <SolidColorBrush x:Key="IMM.ButtonDisabledBrush"
-                              Color="{StaticResource IMM.ButtonDisabledColor}" />
-            <SolidColorBrush x:Key="IMM.ToggleOffBrush" Color="{StaticResource IMM.BorderHoverColor}" />
-            <SolidColorBrush x:Key="IMM.ToggleThumbBrush" Color="{StaticResource IMM.ToggleThumbColor}" />
-            <SolidColorBrush x:Key="IMM.ToggleDisabledBrush" Color="{StaticResource IMM.ToggleDisabledColor}" />
-            <SolidColorBrush x:Key="IMM.ToggleDisabledThumbBrush" Color="{StaticResource IMM.ToggleDisabledThumbColor}" />
-            <SolidColorBrush x:Key="IMM.PlaceholderForegroundBrush" Color="{StaticResource IMM.PlaceholderForegroundColor}" />
-            <SolidColorBrush x:Key="IMM.ForegroundBrush" Color="{StaticResource IMM.ForegroundColor}" />
-            <SolidColorBrush x:Key="IMM.BodyForegroundBrush" Color="{StaticResource IMM.ForegroundColor}" />
-            <SolidColorBrush x:Key="IMM.SuccessBrush" Color="{StaticResource IMM.SuccessColor}" />
-            <SolidColorBrush x:Key="IMM.RowHoverBrush" Color="{StaticResource IMM.RowHoverColor}" />
-            <SolidColorBrush x:Key="IMM.RowSelectionBrush" Color="{StaticResource IMM.RowSelectionColor}" />
-
-            <SolidColorBrush x:Key="VS.DialogLightBackgroundBrush" Color="{StaticResource VS.DialogLightBackgroundColor}" />
-            <SolidColorBrush x:Key="VS.DialogDefaultBackgroundBrush" Color="{StaticResource VS.DialogDefaultBackgroundColor}" />
-            <SolidColorBrush x:Key="VS.DialogStrongBackgroundBrush" Color="{StaticResource VS.DialogStrongBackgroundColor}" />
-            <SolidColorBrush x:Key="VS.DialogBorderBrush" Color="{StaticResource VS.DialogBorderColor}" />
-            <SolidColorBrush x:Key="VS.DialogHighlightBrush" Color="{StaticResource VS.DialogHighlightColor}" />
-            <SolidColorBrush x:Key="VS.DialogAlternateBackgroundBrush" Color="{StaticResource VS.DialogAlternateBackgroundColor}" />
-            <SolidColorBrush x:Key="VS.DialogDefaultTextBrush" Color="{StaticResource VS.DialogDefaultTextColor}" />
-            <SolidColorBrush x:Key="VS.DialogDarkBrownTextBrush" Color="{StaticResource VS.DialogDarkBrownTextColor}" />
-            <SolidColorBrush x:Key="VS.DialogHotbarNumberTextBrush" Color="{StaticResource VS.DialogHotbarNumberTextColor}" />
-            <SolidColorBrush x:Key="VS.DialogButtonTextBrush" Color="{StaticResource VS.DialogButtonTextColor}" />
-            <SolidColorBrush x:Key="VS.DialogActiveButtonTextBrush" Color="{StaticResource VS.DialogActiveButtonTextColor}" />
-            <SolidColorBrush x:Key="VS.DialogDisabledTextBrush" Color="{StaticResource VS.DialogDisabledTextColor}" />
-            <SolidColorBrush x:Key="VS.DialogSuccessTextBrush" Color="{StaticResource VS.DialogSuccessTextColor}" />
-            <SolidColorBrush x:Key="VS.DialogErrorTextBrush" Color="{StaticResource VS.DialogErrorTextColor}" />
-            <SolidColorBrush x:Key="VS.DialogWarningTextBrush" Color="{StaticResource VS.DialogWarningTextColor}" />
-            <SolidColorBrush x:Key="VS.DialogLinkTextBrush" Color="{StaticResource VS.DialogLinkTextColor}" />
-            <SolidColorBrush x:Key="VS.DialogTitleBarBrush" Color="{StaticResource VS.DialogTitleBarColor}" />
 
             <BooleanToVisibilityConverter x:Key="IMM.BooleanToVisibilityConverter" />
             <converters:ScaledThicknessConverter x:Key="IMM.ScaledThicknessConverter" />
             <converters:ScaledDoubleConverter x:Key="IMM.ScaledDoubleConverter" />
             <converters:DoubleOffsetConverter x:Key="IMM.DoubleOffsetConverter" />
 
+            <ControlTemplate x:Key="IMM.SunkenListControlTemplate" TargetType="{x:Type ListBox}">
+                <Border x:Name="TopAndLeft"
+                        Background="Transparent"
+                        BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Light}"
+                        BorderThickness="0,0,1,1"
+                        CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                        SnapsToDevicePixels="True">
+                    <Border x:Name="BottomAndRight"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Dark}"
+                            BorderThickness="1,1,0,0"
+                            CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                            SnapsToDevicePixels="True">
+                        <Border x:Name="ChromeBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ScrollViewer"
+                                          Focusable="False"
+                                          HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                          VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
+                                          CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}">
+                                <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                            </ScrollViewer>
+                        </Border>
+                    </Border>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter TargetName="ChromeBorder" Property="Opacity" Value="0.6" />
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+
             <Style x:Key="IMM.ToggleSwitchBaseStyle" TargetType="{x:Type ui:ToggleSwitch}">
                 <Setter Property="Width" Value="52" />
                 <Setter Property="Height" Value="24" />
-                <Setter Property="Background" Value="{StaticResource IMM.ToggleOffBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource IMM.ToggleOffBrush}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.ToggleSwitch.Track.Background.Off}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToggleSwitch.Track.Background.Off}" />
                 <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Foreground" Value="{StaticResource IMM.ForegroundBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
                 <Setter Property="HorizontalContentAlignment" Value="Left" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="Padding" Value="12,0,0,0" />
@@ -126,13 +80,6 @@
                                       Height="{TemplateBinding Height}"
                                       VerticalAlignment="Center"
                                       Margin="0">
-                                    <Border x:Name="FocusVisual"
-                                            Margin="-3"
-                                            CornerRadius="16"
-                                            BorderBrush="{StaticResource IMM.AccentBrush}"
-                                            BorderThickness="0"
-                                            Opacity="0.8"
-                                            Visibility="Collapsed" />
                                     <Border x:Name="Track"
                                             CornerRadius="12"
                                             Background="{TemplateBinding Background}"
@@ -143,7 +90,7 @@
                                             Height="20"
                                             CornerRadius="10"
                                             Margin="2"
-                                            Background="{StaticResource IMM.ToggleThumbBrush}"
+                                            Background="{DynamicResource Brush.ToggleSwitch.Thumb.Background.Normal}"
                                             HorizontalAlignment="Left"
                                             VerticalAlignment="Center" />
                                 </Grid>
@@ -158,25 +105,26 @@
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsOn" Value="True">
-                                    <Setter TargetName="Track" Property="Background" Value="{StaticResource IMM.AccentBrush}" />
-                                    <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource IMM.AccentBrush}" />
+                                    <Setter TargetName="Track" Property="Background" Value="{DynamicResource Brush.ToggleSwitch.Track.Background.On}" />
+                                    <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brush.ToggleSwitch.Track.Background.On}" />
+                                    <Setter TargetName="Thumb" Property="Background" Value="{DynamicResource Brush.ToggleSwitch.Thumb.Background.On}" />
                                     <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Opacity" Value="0.5" />
-                                    <Setter TargetName="Track" Property="Background" Value="{StaticResource IMM.ToggleDisabledBrush}" />
-                                    <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource IMM.ToggleDisabledBrush}" />
-                                    <Setter TargetName="Thumb" Property="Background" Value="{StaticResource IMM.ToggleDisabledThumbBrush}" />
+                                    <Setter TargetName="Track" Property="Background" Value="{DynamicResource Brush.ToggleSwitch.Track.Background.Disabled}" />
+                                    <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brush.ToggleSwitch.Track.Background.Disabled}" />
+                                    <Setter TargetName="Thumb" Property="Background" Value="{DynamicResource Brush.ToggleSwitch.Thumb.Background.Disabled}" />
                                     <Setter TargetName="HeaderContent" Property="Opacity" Value="0.6" />
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource IMM.BorderHoverBrush}" />
+                                    <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brush.ToggleSwitch.Hover.Border}" />
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                    <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brush.ToggleSwitch.Focus.Border}" />
                                 </Trigger>
                                 <Trigger Property="Header" Value="{x:Null}">
                                     <Setter TargetName="HeaderContent" Property="Visibility" Value="Collapsed" />
-                                </Trigger>
-                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                    <Setter TargetName="FocusVisual" Property="Visibility" Value="Visible" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -206,10 +154,10 @@
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Border" Property="Background" Value="{StaticResource IMM.ButtonHoverBrush}" />
+                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="Border" Property="Background" Value="{StaticResource IMM.ButtonPressedBrush}" />
+                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter TargetName="Border" Property="Background" Value="Transparent" />
@@ -221,11 +169,187 @@
                 </Setter>
             </Style>
 
-            <Style TargetType="Button">
-                <Setter Property="Foreground" Value="{StaticResource IMM.ForegroundBrush}" />
-                <Setter Property="Background" Value="{StaticResource IMM.ButtonBackgroundBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource IMM.BorderBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
+            <Style x:Key="IMM.DataGridScrollBarThumbStyle" TargetType="{x:Type Thumb}">
+                <Setter Property="MinHeight" Value="18" />
+                <Setter Property="MinWidth" Value="18" />
+                <Setter Property="Background" Value="{DynamicResource Brush.ScrollBar.Thumb}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.ScrollBar.Thumb}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type Thumb}">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="0"
+                                    CornerRadius="4" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="IMM.DataGridScrollBarButtonStyle" TargetType="{x:Type RepeatButton}">
+                <Setter Property="Background" Value="{DynamicResource Brush.ScrollBar.Button}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.ScrollBar.Glyph}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.ScrollBar.Button}" />
+                <Setter Property="MinHeight" Value="18" />
+                <Setter Property="MinWidth" Value="18" />
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type RepeatButton}">
+                            <Border x:Name="Border"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="0"
+                                    CornerRadius="3"
+                                    SnapsToDevicePixels="True">
+                                <Path x:Name="Arrow"
+                                      Width="7"
+                                      Height="7"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Stretch="Uniform"
+                                      Data="M 0 4 L 3.5 0 L 7 4 Z"
+                                      Fill="{TemplateBinding Foreground}"
+                                      RenderTransformOrigin="0.5,0.5">
+                                    <Path.RenderTransform>
+                                        <RotateTransform Angle="{TemplateBinding Tag}" />
+                                    </Path.RenderTransform>
+                                </Path>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.ScrollBar.Thumb}" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.ScrollBar.Thumb}" />
+                                    <Setter TargetName="Border" Property="Opacity" Value="0.85" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.ScrollBar.Track}" />
+                                    <Setter TargetName="Arrow" Property="Opacity" Value="0.4" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="IMM.DataGridScrollBarTrackButtonStyle" TargetType="{x:Type RepeatButton}">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type RepeatButton}">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="0" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="IMM.DataGridScrollBarStyle" TargetType="{x:Type ScrollBar}">
+                <Setter Property="Background" Value="{DynamicResource Brush.ScrollBar.Track}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.ScrollBar.Glyph}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.ScrollBar.Track}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type ScrollBar}">
+                            <Grid x:Name="Root" Background="Transparent" SnapsToDevicePixels="True">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <RepeatButton x:Name="LineDecreaseButton"
+                                              Grid.Row="0"
+                                              Grid.Column="0"
+                                              Grid.ColumnSpan="3"
+                                              Style="{StaticResource IMM.DataGridScrollBarButtonStyle}"
+                                              Command="{x:Static primitives:ScrollBar.LineUpCommand}"
+                                              Tag="0" />
+
+                                <Border x:Name="TrackHost"
+                                        Grid.Row="1"
+                                        Grid.Column="0"
+                                        Grid.ColumnSpan="3"
+                                        Background="{TemplateBinding Background}"
+                                        CornerRadius="3">
+                                    <Track x:Name="PART_Track"
+                                           Margin="0"
+                                           Orientation="{TemplateBinding Orientation}"
+                                           IsDirectionReversed="True"
+                                           Maximum="{TemplateBinding Maximum}"
+                                           Minimum="{TemplateBinding Minimum}"
+                                           Value="{TemplateBinding Value}"
+                                           ViewportSize="{TemplateBinding ViewportSize}">
+                                        <Track.DecreaseRepeatButton>
+                                            <RepeatButton x:Name="DecreasePage"
+                                                          Style="{StaticResource IMM.DataGridScrollBarTrackButtonStyle}"
+                                                          Command="{x:Static primitives:ScrollBar.PageUpCommand}" />
+                                        </Track.DecreaseRepeatButton>
+                                        <Track.Thumb>
+                                            <Thumb Style="{StaticResource IMM.DataGridScrollBarThumbStyle}" />
+                                        </Track.Thumb>
+                                        <Track.IncreaseRepeatButton>
+                                            <RepeatButton x:Name="IncreasePage"
+                                                          Style="{StaticResource IMM.DataGridScrollBarTrackButtonStyle}"
+                                                          Command="{x:Static primitives:ScrollBar.PageDownCommand}" />
+                                        </Track.IncreaseRepeatButton>
+                                    </Track>
+                                </Border>
+
+                                <RepeatButton x:Name="LineIncreaseButton"
+                                              Grid.Row="2"
+                                              Grid.Column="0"
+                                              Grid.ColumnSpan="3"
+                                              Style="{StaticResource IMM.DataGridScrollBarButtonStyle}"
+                                              Command="{x:Static primitives:ScrollBar.LineDownCommand}"
+                                              Tag="180" />
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="Orientation" Value="Horizontal">
+                                    <Setter TargetName="LineDecreaseButton" Property="Grid.Row" Value="0" />
+                                    <Setter TargetName="LineDecreaseButton" Property="Grid.RowSpan" Value="3" />
+                                    <Setter TargetName="LineDecreaseButton" Property="Grid.Column" Value="0" />
+                                    <Setter TargetName="LineDecreaseButton" Property="Grid.ColumnSpan" Value="1" />
+                                    <Setter TargetName="LineDecreaseButton" Property="Tag" Value="270" />
+                                    <Setter TargetName="LineDecreaseButton" Property="Command" Value="{x:Static primitives:ScrollBar.LineLeftCommand}" />
+                                    <Setter TargetName="TrackHost" Property="Grid.Row" Value="0" />
+                                    <Setter TargetName="TrackHost" Property="Grid.RowSpan" Value="3" />
+                                    <Setter TargetName="TrackHost" Property="Grid.Column" Value="1" />
+                                    <Setter TargetName="TrackHost" Property="Grid.ColumnSpan" Value="1" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Grid.Row" Value="0" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Grid.RowSpan" Value="3" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Grid.Column" Value="2" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Grid.ColumnSpan" Value="1" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Tag" Value="90" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Command" Value="{x:Static primitives:ScrollBar.LineRightCommand}" />
+                                    <Setter TargetName="DecreasePage" Property="Command" Value="{x:Static primitives:ScrollBar.PageLeftCommand}" />
+                                    <Setter TargetName="IncreasePage" Property="Command" Value="{x:Static primitives:ScrollBar.PageRightCommand}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="LineDecreaseButton" Property="IsEnabled" Value="False" />
+                                    <Setter TargetName="LineIncreaseButton" Property="IsEnabled" Value="False" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="IMM.ButtonBaseStyle" TargetType="Button">
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Padding" Value="12,6" />
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="FontFamily" Value="Segoe UI" />
@@ -234,208 +358,143 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="Root"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
-                                    Padding="{TemplateBinding Padding}"
-                                    SnapsToDevicePixels="True"
-                                    RenderTransformOrigin="0.5,0.5">
-                                <Border.RenderTransform>
-                                    <ScaleTransform ScaleX="1" ScaleY="1" />
-                                </Border.RenderTransform>
-                                <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal">
-                                        <Storyboard>
-                                            <ColorAnimation Storyboard.TargetName="Root"
-                                                            Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                            To="{StaticResource IMM.ButtonBackgroundColor}"
-                                                            Duration="0:0:0.15">
-                                                <ColorAnimation.EasingFunction>
-                                                    <QuadraticEase EasingMode="EaseOut" />
-                                                </ColorAnimation.EasingFunction>
-                                            </ColorAnimation>
-                                            <ColorAnimation Storyboard.TargetName="Root"
-                                                            Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                                            To="{StaticResource IMM.BorderColor}"
-                                                            Duration="0:0:0.15">
-                                                <ColorAnimation.EasingFunction>
-                                                    <QuadraticEase EasingMode="EaseOut" />
-                                                </ColorAnimation.EasingFunction>
-                                            </ColorAnimation>
-                                            <DoubleAnimation Storyboard.TargetName="Root"
-                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
-                                                             To="1"
-                                                             Duration="0:0:0.1" />
-                                            <DoubleAnimation Storyboard.TargetName="Root"
-                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
-                                                             To="1"
-                                                             Duration="0:0:0.1" />
-                                            <DoubleAnimation Storyboard.TargetName="Root"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="1"
-                                                             Duration="0:0:0.1" />
-                                        </Storyboard>
-                                    </VisualState>
-                                    <VisualState x:Name="MouseOver">
-                                        <Storyboard>
-                                            <ColorAnimation Storyboard.TargetName="Root"
-                                                            Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                            To="{StaticResource IMM.ButtonHoverColor}"
-                                                            Duration="0:0:0.15">
-                                                <ColorAnimation.EasingFunction>
-                                                    <QuadraticEase EasingMode="EaseOut" />
-                                                </ColorAnimation.EasingFunction>
-                                            </ColorAnimation>
-                                            <ColorAnimation Storyboard.TargetName="Root"
-                                                            Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                                            To="{StaticResource IMM.BorderHoverColor}"
-                                                            Duration="0:0:0.15">
-                                                <ColorAnimation.EasingFunction>
-                                                    <QuadraticEase EasingMode="EaseOut" />
-                                                </ColorAnimation.EasingFunction>
-                                            </ColorAnimation>
-                                            <DoubleAnimation Storyboard.TargetName="Root"
-                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
-                                                             To="1.01"
-                                                             Duration="0:0:0.12">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <QuadraticEase EasingMode="EaseOut" />
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
-                                            <DoubleAnimation Storyboard.TargetName="Root"
-                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
-                                                             To="1.01"
-                                                             Duration="0:0:0.12">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <QuadraticEase EasingMode="EaseOut" />
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
-                                        </Storyboard>
-                                    </VisualState>
-                                    <VisualState x:Name="Pressed">
-                                        <Storyboard>
-                                            <ColorAnimation Storyboard.TargetName="Root"
-                                                            Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                            To="{StaticResource IMM.ButtonPressedColor}"
-                                                            Duration="0:0:0.05" />
-                                            <ColorAnimation Storyboard.TargetName="Root"
-                                                            Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                                            To="{StaticResource IMM.AccentColor}"
-                                                            Duration="0:0:0.05" />
-                                            <DoubleAnimation Storyboard.TargetName="Root"
-                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
-                                                             To="0.975"
-                                                             Duration="0:0:0.05" />
-                                            <DoubleAnimation Storyboard.TargetName="Root"
-                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
-                                                             To="0.975"
-                                                             Duration="0:0:0.05" />
-                                        </Storyboard>
-                                    </VisualState>
-                                    <VisualState x:Name="Disabled">
-                                        <Storyboard>
-                                            <ColorAnimation Storyboard.TargetName="Root"
-                                                            Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                            To="{StaticResource IMM.ButtonDisabledColor}"
-                                                            Duration="0:0:0.15" />
-                                            <DoubleAnimation Storyboard.TargetName="Root"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="0.55"
-                                                             Duration="0:0:0.1" />
-                                        </Storyboard>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                                  SnapsToDevicePixels="True" />
-                            </Border>
-                            
+                            <Grid x:Name="LayoutRoot" SnapsToDevicePixels="True">
+                                <Border x:Name="TopAndLeft"
+                                        Background="Transparent"
+                                        BorderBrush="{DynamicResource Brush.Button.Bevel.Light}"
+                                        BorderThickness="1,1,0,0"
+                                        CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                        SnapsToDevicePixels="True">
+                                    <Border x:Name="BottomAndRight"
+                                            Background="Transparent"
+                                            BorderBrush="{DynamicResource Brush.Button.Bevel.Dark}"
+                                            BorderThickness="0,0,1,1"
+                                            CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                            SnapsToDevicePixels="True">
+                                        <Border x:Name="ChromeBorder"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="Transparent"
+                                                BorderThickness="0"
+                                                CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                                Padding="{TemplateBinding Padding}"
+                                                SnapsToDevicePixels="True">
+                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                              RecognizesAccessKey="True"
+                                                              SnapsToDevicePixels="True" />
+                                        </Border>
+                                    </Border>
+                                </Border>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.Primary}" />
+                                    <Setter TargetName="TopAndLeft" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Dark}" />
+                                    <Setter TargetName="BottomAndRight" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Light}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+                                    <Setter TargetName="LayoutRoot" Property="Opacity" Value="0.55" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
             </Style>
 
             <Style x:Key="IMM.SearchTextBoxStyle" TargetType="TextBox">
-                <Setter Property="Foreground" Value="{StaticResource IMM.ForegroundBrush}" />
-                <Setter Property="Background" Value="{StaticResource IMM.ButtonBackgroundBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource IMM.BorderBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Padding" Value="6,3" />
                 <Setter Property="FontFamily" Value="Segoe UI" />
                 <Setter Property="HorizontalContentAlignment" Value="Left" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
-                <Setter Property="SelectionBrush" Value="{StaticResource IMM.AccentBrush}" />
-                <Setter Property="SelectionTextBrush" Value="White" />
-                <Setter Property="CaretBrush" Value="{StaticResource IMM.AccentBrush}" />
+                <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Selection.Background}" />
+                <Setter Property="SelectionTextBrush" Value="{DynamicResource Brush.Text.SelectionForeground}" />
+                <Setter Property="CaretBrush" Value="{DynamicResource Brush.Text.Caret}" />
                 <Setter Property="ui:ControlHelper.CornerRadius" Value="6" />
-                <Setter Property="ui:ControlHelper.PlaceholderForeground" Value="{StaticResource IMM.PlaceholderForegroundBrush}" />
+                <Setter Property="ui:ControlHelper.PlaceholderForeground" Value="{DynamicResource Brush.Text.Placeholder}" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="TextBox">
-                            <Border x:Name="Border"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
+                            <Border x:Name="TopAndLeft"
+                                    Background="Transparent"
+                                    BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Light}"
+                                    BorderThickness="0,0,1,1"
                                     CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
-                                    Padding="{TemplateBinding Padding}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <ScrollViewer x:Name="PART_ContentHost"
-                                                  HorizontalAlignment="Stretch"
-                                                  VerticalAlignment="Stretch"
-                                                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
-                                    <TextBlock x:Name="PlaceholderTextBlock"
-                                               Margin="0"
-                                               Text="{TemplateBinding ui:ControlHelper.PlaceholderText}"
-                                               FontFamily="{TemplateBinding FontFamily}"
-                                               FontSize="{TemplateBinding FontSize}"
-                                               Foreground="{TemplateBinding ui:ControlHelper.PlaceholderForeground}"
-                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                               IsHitTestVisible="False"
-                                               TextTrimming="CharacterEllipsis"
-                                               Visibility="Collapsed" />
-                                    <Button x:Name="ClearButton"
-                                            Grid.Column="1"
-                                            Margin="6,0,0,0"
-                                            Focusable="False"
-                                            Style="{StaticResource IMM.ClearTextButtonStyle}"
-                                            ToolTip="Clear search"
-                                            AutomationProperties.Name="Clear search"
-                                            Visibility="{Binding DataContext.HasSearchText, RelativeSource={RelativeSource AncestorType=TextBox}, Converter={StaticResource IMM.BooleanToVisibilityConverter}}"
-                                            Command="{Binding DataContext.ClearSearchCommand, RelativeSource={RelativeSource AncestorType=TextBox}}">
-                                        <Path Width="12"
-                                              Height="12"
-                                              Stretch="Uniform"
-                                              Stroke="{StaticResource IMM.ForegroundBrush}"
-                                              StrokeThickness="1.6"
-                                              StrokeStartLineCap="Round"
-                                              StrokeEndLineCap="Round"
-                                              Data="M2,2 L10,10 M10,2 L2,10" />
-                                    </Button>
-                                </Grid>
+                                    SnapsToDevicePixels="True">
+                                <Border x:Name="BottomAndRight"
+                                        Background="Transparent"
+                                        BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Dark}"
+                                        BorderThickness="1,1,0,0"
+                                        CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                        SnapsToDevicePixels="True">
+                                    <Border x:Name="ChromeBorder"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                            Padding="{TemplateBinding Padding}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <ScrollViewer x:Name="PART_ContentHost"
+                                                          HorizontalAlignment="Stretch"
+                                                          VerticalAlignment="Stretch"
+                                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                            <TextBlock x:Name="PlaceholderTextBlock"
+                                                       Margin="0"
+                                                       Text="{TemplateBinding ui:ControlHelper.PlaceholderText}"
+                                                       FontFamily="{TemplateBinding FontFamily}"
+                                                       FontSize="{TemplateBinding FontSize}"
+                                                       Foreground="{TemplateBinding ui:ControlHelper.PlaceholderForeground}"
+                                                       HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                       IsHitTestVisible="False"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Visibility="Collapsed" />
+                                            <Button x:Name="ClearButton"
+                                                    Grid.Column="1"
+                                                    Margin="6,0,0,0"
+                                                    Focusable="False"
+                                                    Style="{StaticResource IMM.ClearTextButtonStyle}"
+                                                    ToolTip="Clear search"
+                                                    AutomationProperties.Name="Clear search"
+                                                    Visibility="{Binding DataContext.HasSearchText, RelativeSource={RelativeSource AncestorType=TextBox}, Converter={StaticResource IMM.BooleanToVisibilityConverter}}"
+                                                    Command="{Binding DataContext.ClearSearchCommand, RelativeSource={RelativeSource AncestorType=TextBox}}">
+                                                <Path Width="12"
+                                                      Height="12"
+                                                      Stretch="Uniform"
+                                                      Stroke="{DynamicResource Brush.Text.Primary}"
+                                                      StrokeThickness="1.6"
+                                                      StrokeStartLineCap="Round"
+                                                      StrokeEndLineCap="Round"
+                                                      Data="M2,2 L10,10 M10,2 L2,10" />
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </Border>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsEnabled" Value="False">
-                                    <Setter TargetName="Border" Property="Background" Value="{StaticResource IMM.ButtonDisabledBrush}" />
-                                    <Setter Property="Foreground" Value="{StaticResource IMM.ForegroundBrush}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
                                     <Setter Property="Opacity" Value="0.6" />
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource IMM.BorderHoverBrush}" />
-                                    <Setter TargetName="Border" Property="Background" Value="{StaticResource IMM.ButtonHoverBrush}" />
-                                </Trigger>
-                                <Trigger Property="IsKeyboardFocused" Value="True">
-                                    <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource IMM.AccentBrush}" />
-                                    <Setter TargetName="Border" Property="Background" Value="{StaticResource IMM.ButtonPressedBrush}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="Transparent" />
+                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
                                 </Trigger>
                                 <Trigger Property="Text" Value="">
                                     <Setter TargetName="PlaceholderTextBlock" Property="Visibility" Value="Visible" />
@@ -449,13 +508,54 @@
                 </Setter>
             </Style>
 
+            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource IMM.ButtonBaseStyle}">
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Button.Primary.Border.Normal}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="ui:ControlHelper.CornerRadius" Value="6" />
+                <Setter Property="Padding" Value="8,4" />
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Button.Primary.Border.Normal}" />
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Button.Primary.Border.Normal}" />
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Button.Primary.Border.Normal}" />
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Placeholder}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
             <Style TargetType="ComboBox">
-                <Setter Property="Foreground" Value="{StaticResource IMM.ForegroundBrush}" />
-                <Setter Property="Background" Value="{StaticResource IMM.ButtonBackgroundBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource IMM.BorderBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Normal}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.ComboBox.Border.Normal}" />
                 <Setter Property="Padding" Value="10,4" />
                 <Setter Property="FontFamily" Value="Segoe UI" />
                 <Setter Property="ui:ControlHelper.CornerRadius" Value="6" />
+                <Setter Property="ItemContainerStyle">
+                    <Setter.Value>
+                        <Style TargetType="ComboBoxItem">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                            <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Item.Background.Normal}" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Item.Background.Hover}" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Item.Background.Selected}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Setter.Value>
+                </Setter>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ComboBox">
@@ -476,6 +576,10 @@
                                     </Border.RenderTransform>
                                 </Border>
                                 <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                  Content="{TemplateBinding SelectionBoxItem}"
+                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                  ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                  ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
                                                   VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                                   HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                                   RecognizesAccessKey="True"
@@ -488,7 +592,7 @@
                                       Stretch="Fill"
                                       HorizontalAlignment="Center"
                                       VerticalAlignment="Center"
-                                      Fill="{StaticResource IMM.ForegroundBrush}"
+                                      Fill="{DynamicResource Brush.ComboBox.Glyph}"
                                       IsHitTestVisible="False" />
                                 <ToggleButton x:Name="DropDownToggle"
                                               Grid.ColumnSpan="2"
@@ -508,11 +612,10 @@
                                        Placement="Bottom"
                                        AllowsTransparency="True"
                                        Focusable="False"
-                                       PopupAnimation="Slide"
                                        IsOpen="{TemplateBinding IsDropDownOpen}"
                                        PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}">
-                                    <Border Background="{StaticResource IMM.SurfaceBrush}"
-                                            BorderBrush="{StaticResource IMM.BorderBrush}"
+                                    <Border Background="{DynamicResource Brush.ComboBox.Popup.Background}"
+                                            BorderBrush="{DynamicResource Brush.ComboBox.Popup.Border}"
                                             BorderThickness="1"
                                             CornerRadius="8"
                                             Padding="4"
@@ -529,16 +632,17 @@
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsDropDownOpen" Value="True">
-                                    <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{StaticResource IMM.AccentBrush}" />
-                                    <Setter TargetName="BackgroundBorder" Property="Background" Value="{StaticResource IMM.ButtonHoverBrush}" />
+                                    <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource Brush.ComboBox.Border.Open}" />
+                                    <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Open}" />
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="BackgroundBorder" Property="Background" Value="{StaticResource IMM.ButtonHoverBrush}" />
-                                    <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{StaticResource IMM.BorderHoverBrush}" />
+                                    <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Hover}" />
+                                    <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource Brush.ComboBox.Border.Hover}" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
-                                    <Setter Property="Foreground" Value="#66000000" />
-                                    <Setter TargetName="BackgroundBorder" Property="Opacity" Value="0.6" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Placeholder}" />
+                                    <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Disabled}" />
+                                    <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource Brush.ComboBox.Border.Disabled}" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -547,9 +651,9 @@
             </Style>
 
             <Style TargetType="TextBox">
-                <Setter Property="Foreground" Value="{StaticResource IMM.ForegroundBrush}" />
-                <Setter Property="Background" Value="White" />
-                <Setter Property="BorderBrush" Value="{StaticResource IMM.BorderBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.TextInput.Background.Normal}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Padding" Value="6,4" />
                 <Setter Property="ui:ControlHelper.CornerRadius" Value="4" />
@@ -569,34 +673,8 @@
                                     <Setter TargetName="Root" Property="Opacity" Value="0.6" />
                                 </Trigger>
                                 <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                    <Trigger.EnterActions>
-                                        <BeginStoryboard>
-                                            <Storyboard>
-                                                <ColorAnimation Storyboard.TargetName="Root"
-                                                                Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                                                To="{StaticResource IMM.AccentColor}"
-                                                                Duration="0:0:0.12" />
-                                                <ColorAnimation Storyboard.TargetName="Root"
-                                                                Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                                To="{StaticResource IMM.ButtonHoverColor}"
-                                                                Duration="0:0:0.12" />
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </Trigger.EnterActions>
-                                    <Trigger.ExitActions>
-                                        <BeginStoryboard>
-                                            <Storyboard>
-                                                <ColorAnimation Storyboard.TargetName="Root"
-                                                                Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                                                To="{StaticResource IMM.BorderColor}"
-                                                                Duration="0:0:0.12" />
-                                                <ColorAnimation Storyboard.TargetName="Root"
-                                                                Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                                To="White"
-                                                                Duration="0:0:0.12" />
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </Trigger.ExitActions>
+                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brush.TextInput.Border.Focused}" />
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.TextInput.Background.Focused}" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -605,87 +683,79 @@
             </Style>
 
             <Style x:Key="IMM.ToggleButtonBaseStyle" TargetType="ToggleButton">
-                <Setter Property="Foreground" Value="{StaticResource IMM.ForegroundBrush}" />
-                <Setter Property="Background" Value="{StaticResource IMM.ButtonBackgroundBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource IMM.BorderBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Padding" Value="10,4" />
                 <Setter Property="ui:ControlHelper.CornerRadius" Value="6" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ToggleButton">
-                            <Border x:Name="Root"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
-                                    Padding="{TemplateBinding Padding}"
-                                    RenderTransformOrigin="0.5,0.5">
-                                <Border.RenderTransform>
-                                    <ScaleTransform ScaleX="1" ScaleY="1" />
-                                </Border.RenderTransform>
-                                <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal" />
-                                        <VisualState x:Name="MouseOver">
-                                            <Storyboard>
-                                                <ColorAnimation Storyboard.TargetName="Root"
-                                                            Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                            To="{StaticResource IMM.ButtonHoverColor}"
-                                                            Duration="0:0:0.15" />
-                                                <ColorAnimation Storyboard.TargetName="Root"
-                                                            Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                                            To="{StaticResource IMM.BorderHoverColor}"
-                                                            Duration="0:0:0.15" />
-                                            </Storyboard>
-                                        </VisualState>
-                                        <VisualState x:Name="Disabled">
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="Root"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="0.5"
-                                                             Duration="0:0:0.1" />
-                                        </Storyboard>
-                                    </VisualState>
-                                </VisualStateGroup>
-                                <VisualStateGroup x:Name="CheckStates">
-                                    <VisualState x:Name="Unchecked" />
-                                    <VisualState x:Name="Checked">
-                                        <Storyboard>
-                                            <ColorAnimation Storyboard.TargetName="Root"
-                                                            Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                            To="{StaticResource IMM.AccentColor}"
-                                                            Duration="0:0:0.15" />
-                                            <ColorAnimation Storyboard.TargetName="Root"
-                                                            Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                                            To="{StaticResource IMM.AccentColor}"
-                                                            Duration="0:0:0.15" />
-                                        </Storyboard>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-                                <ContentPresenter HorizontalAlignment="Center"
-                                                  VerticalAlignment="Center" />
-                            </Border>
-                            
+                            <Grid x:Name="LayoutRoot" SnapsToDevicePixels="True">
+                                <Border x:Name="TopAndLeft"
+                                        Background="Transparent"
+                                        BorderBrush="{DynamicResource Brush.Button.Bevel.Light}"
+                                        BorderThickness="1,1,0,0"
+                                        CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                        SnapsToDevicePixels="True">
+                                    <Border x:Name="BottomAndRight"
+                                            Background="Transparent"
+                                            BorderBrush="{DynamicResource Brush.Button.Bevel.Dark}"
+                                            BorderThickness="0,0,1,1"
+                                            CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                            SnapsToDevicePixels="True">
+                                        <Border x:Name="ChromeBorder"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                                Padding="{TemplateBinding Padding}"
+                                                SnapsToDevicePixels="True">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"
+                                                              RecognizesAccessKey="True"
+                                                              SnapsToDevicePixels="True" />
+                                        </Border>
+                                    </Border>
+                                </Border>
+                            </Grid>
+
                             <ControlTemplate.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="LayoutRoot" Property="Opacity" Value="0.5" />
+                                </Trigger>
+                                <MultiTrigger>
+                                    <MultiTrigger.Conditions>
+                                        <Condition Property="IsMouseOver" Value="True" />
+                                        <Condition Property="IsChecked" Value="False" />
+                                    </MultiTrigger.Conditions>
+                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                                </MultiTrigger>
+                                <MultiTrigger>
+                                    <MultiTrigger.Conditions>
+                                        <Condition Property="IsPressed" Value="True" />
+                                        <Condition Property="IsChecked" Value="False" />
+                                    </MultiTrigger.Conditions>
+                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.Primary}" />
+                                    <Setter TargetName="TopAndLeft" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Dark}" />
+                                    <Setter TargetName="BottomAndRight" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Light}" />
+                                </MultiTrigger>
                                 <Trigger Property="IsChecked" Value="True">
-                                    <Setter Property="Foreground" Value="White" />
-                                    <Setter TargetName="Root"
-                                            Property="Background"
-                                            Value="{StaticResource IMM.AccentBrush}" />
-                                    <Setter TargetName="Root"
-                                            Property="BorderBrush"
-                                            Value="{StaticResource IMM.AccentBrush}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.SelectionForeground}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.ToggleButton.Background.Checked}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToggleButton.Border.Checked}" />
+                                    <Setter TargetName="TopAndLeft" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Dark}" />
+                                    <Setter TargetName="BottomAndRight" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Light}" />
                                 </Trigger>
                                 <Trigger Property="IsChecked" Value="False">
-                                    <Setter Property="Foreground" Value="{StaticResource IMM.ForegroundBrush}" />
-                                    <Setter TargetName="Root"
-                                            Property="Background"
-                                            Value="{StaticResource IMM.ButtonBackgroundBrush}" />
-                                    <Setter TargetName="Root"
-                                            Property="BorderBrush"
-                                            Value="{StaticResource IMM.BorderBrush}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+                                    <Setter TargetName="TopAndLeft" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Light}" />
+                                    <Setter TargetName="BottomAndRight" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Dark}" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>

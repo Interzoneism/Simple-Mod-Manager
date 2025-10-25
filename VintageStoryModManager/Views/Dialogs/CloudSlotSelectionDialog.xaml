@@ -9,8 +9,10 @@
         ResizeMode="NoResize"
         WindowStyle="SingleBorderWindow"
         ShowInTaskbar="False"
-        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
-    <Grid Margin="20">
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}">
+    <Grid Margin="20"
+          Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+          TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -30,7 +32,10 @@
                  MaxHeight="260"
                  SelectionMode="Single"
                  MouseDoubleClick="SlotsListBox_OnMouseDoubleClick"
-                 SelectionChanged="SlotsListBox_OnSelectionChanged" />
+                 SelectionChanged="SlotsListBox_OnSelectionChanged"
+                 Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                 Foreground="{DynamicResource Brush.Text.Primary}"
+                 BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
 
         <StackPanel Grid.Row="2"
                     Orientation="Horizontal"

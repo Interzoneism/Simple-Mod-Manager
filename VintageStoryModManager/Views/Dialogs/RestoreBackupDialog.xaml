@@ -11,8 +11,10 @@
         WindowStyle="SingleBorderWindow"
         ShowInTaskbar="False"
         Topmost="False"
-        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
-    <Grid Margin="20">
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}">
+    <Grid Margin="20"
+          Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+          TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />

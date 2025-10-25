@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
@@ -46,7 +47,16 @@ public sealed class ModUpdateService
                 }
 
                 bool treatAsDirectory = descriptor.TargetIsDirectory;
-                return await InstallAsync(descriptor, download.Path, treatAsDirectory, progress, cancellationToken).ConfigureAwait(false);
+                using var installScope = StatusLogService.BeginDebugScope(descriptor.DisplayName, descriptor.ModId, "install");
+                if (installScope != null)
+                {
+                    installScope.SetDetail("mode", treatAsDirectory ? "dir" : "file");
+                    installScope.SetCacheStatus(download.IsCacheHit);
+                }
+
+                ModUpdateResult result = await InstallAsync(descriptor, download.Path, treatAsDirectory, progress, cancellationToken).ConfigureAwait(false);
+                installScope?.SetDetail("success", result.Success ? "y" : "n");
+                return result;
             }
             finally
             {
@@ -75,6 +85,7 @@ public sealed class ModUpdateService
 
     private static async Task<DownloadResult> DownloadAsync(ModUpdateDescriptor descriptor, CancellationToken cancellationToken)
     {
+        using var logScope = StatusLogService.BeginDebugScope(descriptor.DisplayName, descriptor.ModId, "download");
         string? fileName = descriptor.ReleaseFileName;
         if (string.IsNullOrWhiteSpace(fileName))
         {
@@ -89,11 +100,32 @@ public sealed class ModUpdateService
         string? cachePath = ModCacheLocator.GetModCachePath(descriptor.ModId, descriptor.ReleaseVersion, fileName);
         if (cachePath != null && File.Exists(cachePath))
         {
+            if (logScope != null)
+            {
+                logScope.SetCacheStatus(true);
+                logScope.SetDetail("src", "cache");
+                try
+                {
+                    long bytes = new FileInfo(cachePath).Length;
+                    logScope.SetDetail("bytes", bytes);
+                }
+                catch (IOException)
+                {
+                    // Ignore file size failures.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Ignore file size failures.
+                }
+            }
+
             return new DownloadResult(Path: cachePath, IsTemporary: false, CachePath: cachePath, IsCacheHit: true);
         }
 
         string tempDirectory = CreateTemporaryDirectory();
         string downloadPath = Path.Combine(tempDirectory, fileName);
+
+        logScope?.SetCacheStatus(false);
 
         if (descriptor.DownloadUri.IsFile)
         {
@@ -101,6 +133,7 @@ public sealed class ModUpdateService
             await using FileStream sourceStream = File.OpenRead(sourcePath);
             await using FileStream destination = File.Create(downloadPath);
             await sourceStream.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+            logScope?.SetDetail("src", "file");
         }
         else
         {
@@ -113,6 +146,24 @@ public sealed class ModUpdateService
             await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             await using FileStream destination = File.Create(downloadPath);
             await stream.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+            logScope?.SetDetail("src", "net");
+        }
+
+        if (logScope != null)
+        {
+            try
+            {
+                long bytes = new FileInfo(downloadPath).Length;
+                logScope.SetDetail("bytes", bytes);
+            }
+            catch (IOException)
+            {
+                // Ignore file size failures.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Ignore file size failures.
+            }
         }
 
         return new DownloadResult(Path: downloadPath, IsTemporary: true, CachePath: cachePath, IsCacheHit: false);
@@ -560,6 +611,7 @@ public sealed class ModUpdateService
 
 public sealed record ModUpdateDescriptor(
     string ModId,
+    string DisplayName,
     Uri DownloadUri,
     string TargetPath,
     bool TargetIsDirectory,

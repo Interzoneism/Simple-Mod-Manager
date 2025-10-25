@@ -9,8 +9,10 @@
         ResizeMode="CanMinimize"
         WindowStyle="SingleBorderWindow"
         ShowInTaskbar="False"
-        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
-    <Grid Margin="20">
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}">
+    <Grid Margin="20"
+          Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+          TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -23,22 +25,74 @@
                    TextWrapping="Wrap"
                    FontSize="14" />
 
-        <ListView x:Name="ModlistsListView"
-                  Grid.Row="1"
-                  MinHeight="220"
-                  Width="460"
-                  HorizontalAlignment="Stretch"
-                  SelectionMode="Single"
-                  SelectionChanged="ModlistsListView_OnSelectionChanged"
-                  MouseDoubleClick="ModlistsListView_OnMouseDoubleClick">
-            <ListView.View>
-                <GridView>
-                    <GridViewColumn Header="Slot" DisplayMemberBinding="{Binding SlotLabel}" Width="100" />
-                    <GridViewColumn Header="Name" DisplayMemberBinding="{Binding EffectiveName}" Width="240" />
-                    <GridViewColumn Header="Version" DisplayMemberBinding="{Binding Version}" Width="100" />
-                </GridView>
-            </ListView.View>
-        </ListView>
+        <Border Grid.Row="1"
+                Width="460"
+                Background="Transparent"
+                BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Light}"
+                BorderThickness="0,0,1,1"
+                SnapsToDevicePixels="True">
+            <Border Background="Transparent"
+                    BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Dark}"
+                    BorderThickness="1,1,0,0"
+                    SnapsToDevicePixels="True">
+                <ListView x:Name="ModlistsListView"
+                          MinHeight="220"
+                          HorizontalAlignment="Stretch"
+                          SelectionMode="Single"
+                          SelectionChanged="ModlistsListView_OnSelectionChanged"
+                          MouseDoubleClick="ModlistsListView_OnMouseDoubleClick"
+                          Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                          BorderThickness="0"
+                          Foreground="{DynamicResource Brush.Text.Primary}">
+                    <ListView.Resources>
+                        <Style TargetType="GridViewColumnHeader">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                            <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                        </Style>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                            <Setter Property="Background" Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                            <Setter Property="BorderBrush" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                            <Setter Property="Padding" Value="8,4" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListViewItem">
+                                        <Border x:Name="ContainerBorder"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                SnapsToDevicePixels="True">
+                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.Selection.Background}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.SelectionForeground}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListView.Resources>
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Slot" DisplayMemberBinding="{Binding SlotLabel}" Width="100" />
+                            <GridViewColumn Header="Name" DisplayMemberBinding="{Binding EffectiveName}" Width="240" />
+                            <GridViewColumn Header="Version" DisplayMemberBinding="{Binding Version}" Width="100" />
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </Border>
+        </Border>
 
         <StackPanel Grid.Row="2"
                     Orientation="Horizontal"
@@ -53,6 +107,8 @@
                     Content="Delete"
                     MinWidth="88"
                     Margin="0,0,12,0"
+                    Background="{DynamicResource Brush.Status.Error}"
+                    Foreground="{DynamicResource Brush.Text.Primary}"
                     Click="DeleteButton_OnClick" />
             <Button Content="Close"
                     MinWidth="88"

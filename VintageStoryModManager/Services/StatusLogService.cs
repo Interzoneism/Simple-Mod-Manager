@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -13,6 +14,7 @@ namespace VintageStoryModManager.Services;
 public static class StatusLogService
 {
     private const string TimestampFormat = "yyyy-MM-dd HH:mm:ss.fff";
+    private const int MaxModNameLength = 10;
     private const int MaxLogLines = 5000;
     private static readonly object SyncRoot = new();
     private static readonly string LogFilePath = InitializeLogFilePath();
@@ -60,6 +62,47 @@ public static class StatusLogService
         string line = $"[{timestamp}] [{severity}] {message}{Environment.NewLine}";
 
         _ = Task.Run(() => WriteLogEntry(line));
+    }
+
+    public static DebugLogScope? BeginDebugScope(string? modName, string? modId, string process)
+    {
+        if (!_isLoggingEnabled)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(process))
+        {
+            return null;
+        }
+
+        return new DebugLogScope(FormatModName(modName), NormalizeIdentifier(modId), process.Trim());
+    }
+
+    private static string FormatModName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return string.Empty;
+        }
+
+        string trimmed = name.Trim();
+        if (trimmed.Length <= MaxModNameLength)
+        {
+            return trimmed;
+        }
+
+        return trimmed.Substring(0, MaxModNameLength);
+    }
+
+    private static string NormalizeIdentifier(string? identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return string.Empty;
+        }
+
+        return identifier.Trim();
     }
 
     private static void WriteLogEntry(string line)
@@ -154,5 +197,100 @@ public static class StatusLogService
         {
             stream.Seek(0, SeekOrigin.End);
         }
+    }
+}
+
+public sealed class DebugLogScope : IDisposable
+{
+    private readonly string _modDisplay;
+    private readonly string _process;
+    private readonly Stopwatch _stopwatch;
+    private readonly Dictionary<string, string> _details = new(StringComparer.OrdinalIgnoreCase);
+    private bool _disposed;
+
+    internal DebugLogScope(string modName, string modId, string process)
+    {
+        _modDisplay = BuildModDisplay(modName, modId);
+        _process = process;
+        _stopwatch = Stopwatch.StartNew();
+    }
+
+    public void SetCacheStatus(bool cacheHit)
+    {
+        SetDetail("cache", cacheHit ? "hit" : "miss");
+    }
+
+    public void SetDetail(string key, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return;
+        }
+
+        string normalizedKey = key.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _details.Remove(normalizedKey);
+            return;
+        }
+
+        _details[normalizedKey] = value.Trim();
+    }
+
+    public void SetDetail(string key, int value)
+    {
+        SetDetail(key, value.ToString(CultureInfo.InvariantCulture));
+    }
+
+    public void SetDetail(string key, long value)
+    {
+        SetDetail(key, value.ToString(CultureInfo.InvariantCulture));
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _stopwatch.Stop();
+
+        var builder = new StringBuilder();
+        builder.Append("[Debug]");
+        if (!string.IsNullOrEmpty(_modDisplay))
+        {
+            builder.Append('[').Append(_modDisplay).Append(']');
+        }
+
+        builder.Append(' ').Append(_process).Append(' ')
+            .Append(_stopwatch.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture))
+            .Append("ms");
+
+        foreach (var pair in _details)
+        {
+            builder.Append(' ').Append(pair.Key).Append('=').Append(pair.Value);
+        }
+
+        StatusLogService.AppendStatus(builder.ToString(), false);
+    }
+
+    private static string BuildModDisplay(string modName, string modId)
+    {
+        bool hasName = !string.IsNullOrWhiteSpace(modName);
+        bool hasId = !string.IsNullOrWhiteSpace(modId);
+
+        if (!hasName && !hasId)
+        {
+            return string.Empty;
+        }
+
+        if (hasName && hasId)
+        {
+            return $"{modName}|{modId}";
+        }
+
+        return hasName ? modName : modId;
     }
 }

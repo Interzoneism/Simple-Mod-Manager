@@ -1,0 +1,669 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:options="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options"
+                    xmlns:ui="http://schemas.modernwpf.com/2019">
+    <!-- ========================================================= -->
+    <!-- Palette: tweak these base colours to retheme the light UI. -->
+    <!-- ========================================================= -->
+    <!-- Text -->
+    <Color x:Key="Palette.Text.Primary">#FF1C2635</Color>
+    <Color x:Key="Palette.Text.Emphasis">#FF0F3B76</Color>
+    <Color x:Key="Palette.Text.Subtle">#8C1C2635</Color>
+    <Color x:Key="Palette.Text.Placeholder">#661C2635</Color>
+    <Color x:Key="Palette.Text.Link">#FF1552B6</Color>
+    <Color x:Key="Palette.Text.SelectionForeground">#FF0F3B76</Color>
+    <Color x:Key="Palette.Text.Caret">#FF4C8BF5</Color>
+    <Color x:Key="Palette.ToolTip.Text">#FF1C2635</Color>
+
+    <!-- Window shell & panels -->
+    <Color x:Key="Palette.Window.Shell.Background.Solid">#FFF6F8FB</Color>
+    <Color x:Key="Palette.Window.Shell.Border">#FFCAD7EB</Color>
+    <Color x:Key="Palette.Panel.Primary.Background.Solid">#FFF6F8FB</Color>
+    <Color x:Key="Palette.Panel.Secondary.Background.Solid">#FFEFF3F9</Color>
+
+    <!-- Buttons & toggles -->
+    <Color x:Key="Palette.Button.Primary.Background.Normal">#FFF9FBFF</Color>
+    <Color x:Key="Palette.Button.Primary.Background.Hover">#FFE7F0FF</Color>
+    <Color x:Key="Palette.Button.Primary.Background.Pressed">#FFD5E3FF</Color>
+    <Color x:Key="Palette.Button.Primary.Background.Disabled">#FFEEF1F6</Color>
+    <Color x:Key="Palette.Button.Primary.Border">#FFCAD7EB</Color>
+    <Color x:Key="Palette.Accent.Primary">#FF4C8BF5</Color>
+    <Color x:Key="Palette.ToggleSwitch.Track.Background.Off">#FFC7D1E5</Color>
+    <Color x:Key="Palette.ToggleSwitch.Track.Background.On">#FF4C8BF5</Color>
+    <Color x:Key="Palette.ToggleSwitch.Track.Background.Disabled">#FFE2E6F0</Color>
+    <Color x:Key="Palette.ToggleSwitch.Thumb.Background.Normal">#FFFFFFFF</Color>
+    <Color x:Key="Palette.ToggleSwitch.Thumb.Background.On">#FFFFFFFF</Color>
+    <Color x:Key="Palette.ToggleSwitch.Thumb.Background.Disabled">#FFF4F6FB</Color>
+    <Color x:Key="Palette.ToggleSwitch.Focus.Border">#FF4C8BF5</Color>
+    <Color x:Key="Palette.ToggleSwitch.Hover.Border">#FF7AA6F9</Color>
+    <Color x:Key="Palette.ToggleButton.Background.Checked">#FF4C8BF5</Color>
+    <Color x:Key="Palette.ToggleButton.Border.Checked">#FF4C8BF5</Color>
+    <Color x:Key="Palette.Bevel.Highlight">#FFFFFFFF</Color>
+    <Color x:Key="Palette.Bevel.Shadow">#33000000</Color>
+
+    <!-- Text inputs & search -->
+    <Color x:Key="Palette.TextInput.Background.Normal">#FFFFFFFF</Color>
+    <Color x:Key="Palette.TextInput.Background.Focused">#FF4C8BF5</Color>
+    <Color x:Key="Palette.TextInput.Border.Focused">#FF4C8BF5</Color>
+    <Color x:Key="Palette.TextInput.SelectionBackground">#FF4C8BF5</Color>
+    <Color x:Key="Palette.SearchBox.Background">#FFFFFFFF</Color>
+
+    <!-- Combo box -->
+    <Color x:Key="Palette.ComboBox.Background.Normal">#FFF9FBFF</Color>
+    <Color x:Key="Palette.ComboBox.Background.Hover">#FFE7F0FF</Color>
+    <Color x:Key="Palette.ComboBox.Background.Disabled">#FFEEF1F6</Color>
+    <Color x:Key="Palette.ComboBox.Background.Open">#FFE7F0FF</Color>
+    <Color x:Key="Palette.ComboBox.Border.Normal">#FFCAD7EB</Color>
+    <Color x:Key="Palette.ComboBox.Border.Hover">#FF7AA6F9</Color>
+    <Color x:Key="Palette.ComboBox.Border.Disabled">#FFCAD7EB</Color>
+    <Color x:Key="Palette.ComboBox.Border.Open">#FF4C8BF5</Color>
+    <Color x:Key="Palette.ComboBox.Item.Background.Normal">#FFEFF3F9</Color>
+    <Color x:Key="Palette.ComboBox.Item.Background.Hover">#FFE7F0FF</Color>
+    <Color x:Key="Palette.ComboBox.Item.Background.Selected">#334C8BF5</Color>
+    <Color x:Key="Palette.ComboBox.Glyph">#FF1C2635</Color>
+    <Color x:Key="Palette.ComboBox.Popup.Background">#FFEFF3F9</Color>
+    <Color x:Key="Palette.ComboBox.Popup.Border">#FFCAD7EB</Color>
+
+    <!-- Data grid -->
+    <Color x:Key="Palette.DataGrid.Background">#FFFFFFFF</Color>
+    <Color x:Key="Palette.DataGrid.Row.Background.Alternate">#FFF6F8FB</Color>
+    <Color x:Key="Palette.DataGrid.Row.Background.Hover">#FFE7F0FF</Color>
+    <Color x:Key="Palette.DataGrid.Row.Background.Selected">#334C8BF5</Color>
+    <Color x:Key="Palette.DataGrid.Row.Border">#FF8EA0C0</Color>
+    <Color x:Key="Palette.DataGrid.Header.Background">#FFEFF3F9</Color>
+    <Color x:Key="Palette.DataGrid.Header.Background.Hover">#FFE7F0FF</Color>
+    <Color x:Key="Palette.DataGrid.Row.Shadow">#FFEFF3F9</Color>
+
+    <!-- Menus & tooltips -->
+    <Color x:Key="Palette.Menu.Background">#FFF6F8FB</Color>
+    <Color x:Key="Palette.Menu.Border">#FFCAD7EB</Color>
+    <Color x:Key="Palette.Menu.Item.Background.Hover">#FFE7F0FF</Color>
+    <Color x:Key="Palette.Menu.Submenu.Background">#FFF6F8FB</Color>
+    <Color x:Key="Palette.ToolTip.Background">#FFEFF3F9</Color>
+    <Color x:Key="Palette.ToolTip.Border">#FFCAD7EB</Color>
+
+    <!-- Mod cards & grids -->
+    <Color x:Key="Palette.ModCard.Background.Active">#FFF6F8FB</Color>
+    <Color x:Key="Palette.ModCard.Background.Disabled">#FFEFF3F9</Color>
+    <Color x:Key="Palette.ModGrid.Background">#FFF6F8FB</Color>
+    <Color x:Key="Palette.ModCard.Shadow">#FFEFF3F9</Color>
+    <Color x:Key="Palette.ModDetails.Shadow">#FFEFF3F9</Color>
+
+    <!-- Installed mods list -->
+    <Color x:Key="Palette.InstalledMod.Row.Background">#FFF6F8FB</Color>
+    <Color x:Key="Palette.InstalledMod.Row.Border">#FFEFF3F9</Color>
+
+    <!-- Tags & status -->
+    <Color x:Key="Palette.Tag.Badge.Background">#FFE5EDFF</Color>
+    <Color x:Key="Palette.Tag.Badge.Border">#FFB3C7FF</Color>
+    <Color x:Key="Palette.Status.Success">#FF79C46E</Color>
+    <Color x:Key="Palette.Status.Error">#FFE06B6B</Color>
+    <Color x:Key="Palette.Overlay.Warning.Background">#FF0F3B76</Color>
+    <Color x:Key="Palette.Overlay.Success.Background">#FF79C46E</Color>
+
+    <!-- Dialog elements -->
+    <Color x:Key="Palette.Dialog.TextBox.Background">#FFEFF3F9</Color>
+    <Color x:Key="Palette.Dialog.TextBox.Border">#FF4C8BF5</Color>
+    <Color x:Key="Palette.Dialog.TextBox.SelectionBackground">#FF4C8BF5</Color>
+    <Color x:Key="Palette.Dialog.TextBox.SelectionForeground">#FF0F3B76</Color>
+    <Color x:Key="Palette.Dialog.TextBox.Caret">#FF4C8BF5</Color>
+    <Color x:Key="Palette.Dialog.ContentShadow">#33000000</Color>
+
+    <!-- Miscellaneous -->
+    <Color x:Key="Palette.Border.Default">#FFCAD7EB</Color>
+    <Color x:Key="Palette.Border.Hover">#FF7AA6F9</Color>
+    <Color x:Key="Palette.ScrollBar.Thumb">#FFCAD7EB</Color>
+    <Color x:Key="Palette.ScrollBar.Button">#FFE2E6F0</Color>
+    <Color x:Key="Palette.ScrollBar.Glyph">#FF1C2635</Color>
+    <Color x:Key="Palette.Selection.Background">#FF4C8BF5</Color>
+
+    <!-- Mod configuration tree -->
+    <Color x:Key="Palette.ModConfig.TreeNode.Background.Hover">#FFE7F0FF</Color>
+    <Color x:Key="Palette.ModConfig.TreeNode.Background.Selected">#FF4C8BF5</Color>
+    <Color x:Key="Palette.ModConfig.Value.Background.Hover">#FFE7F0FF</Color>
+    <Color x:Key="Palette.ModConfig.Value.Background.Selected">#FFD5E3FF</Color>
+
+    <!-- ====================================================== -->
+    <!-- Window shell and shared panel surfaces (Main windows). -->
+    <!-- ====================================================== -->
+    <SolidColorBrush x:Key="Brush.Window.Shell.Background.Solid" Color="{StaticResource Palette.Window.Shell.Background.Solid}" />
+    <ImageBrush x:Key="Brush.Window.Shell.Background.Image"
+                ImageSource="pack://application:,,,/VintageStoryModManager;component/Views/soilcorrect.png"
+                TileMode="Tile"
+                Viewport="0,0,512,512"
+                ViewportUnits="Absolute"
+                Stretch="Fill"
+                AlignmentX="Left"
+                AlignmentY="Top"
+                Opacity="0" />
+    <!-- Swap the alias below to Brush.Window.Shell.Background.Solid if you prefer a flat colour fill. -->
+    <StaticResource x:Key="Brush.Window.Shell.Background" ResourceKey="Brush.Window.Shell.Background.Image" />
+    <SolidColorBrush x:Key="Brush.Window.Shell.Border" Color="{StaticResource Palette.Window.Shell.Border}" />
+
+    <SolidColorBrush x:Key="Brush.Panel.Primary.Background.Solid" Color="{StaticResource Palette.Panel.Primary.Background.Solid}" />
+    <ImageBrush x:Key="Brush.Panel.Primary.Background.Image"
+                ImageSource="pack://application:,,,/VintageStoryModManager;component/Views/soilcorrect.png"
+                TileMode="FlipXY"
+                Viewport="0,0,342,342"
+                ViewportUnits="Absolute"
+                Stretch="None"
+                AlignmentX="Left"
+                AlignmentY="Top"
+                Opacity="1" />
+    <!-- Swap the alias below to Brush.Panel.Primary.Background.Solid if you prefer a flat colour fill. -->
+    <StaticResource x:Key="Brush.Panel.Primary.Background" ResourceKey="Brush.Panel.Primary.Background.Image" />
+
+    <SolidColorBrush x:Key="Brush.Panel.Secondary.Background.Solid" Color="{StaticResource Palette.Panel.Secondary.Background.Solid}" />
+    <ImageBrush x:Key="Brush.Panel.Secondary.Background.Image"
+                ImageSource="pack://application:,,,/VintageStoryModManager;component/Views/soilcorrect.png"
+                TileMode="Tile"
+                Viewport="0,0,342,342"
+                ViewportUnits="Absolute"
+                AlignmentX="Left"
+                AlignmentY="Top"
+                Opacity="1" />
+    <!-- Swap the alias below to Brush.Panel.Secondary.Background.Solid if you prefer a flat colour fill. -->
+    <StaticResource x:Key="Brush.Panel.Secondary.Background" ResourceKey="Brush.Panel.Secondary.Background.Image" />
+
+    <!-- =============================== -->
+    <!-- Text and typography colouring. -->
+    <!-- =============================== -->
+    <SolidColorBrush x:Key="Brush.Text.Primary" Color="{StaticResource Palette.Text.Primary}" />
+    <SolidColorBrush x:Key="Brush.Text.Body" Color="{StaticResource Palette.Text.Primary}" />
+    <SolidColorBrush x:Key="Brush.Text.Emphasis" Color="{StaticResource Palette.Text.Emphasis}" />
+    <SolidColorBrush x:Key="Brush.Text.Subtle" Color="{StaticResource Palette.Text.Subtle}" />
+    <SolidColorBrush x:Key="Brush.Text.Placeholder" Color="{StaticResource Palette.Text.Placeholder}" />
+    <SolidColorBrush x:Key="Brush.Text.Link" Color="{StaticResource Palette.Text.Link}" />
+    <SolidColorBrush x:Key="Brush.Text.SelectionForeground" Color="{StaticResource Palette.Text.SelectionForeground}" />
+    <SolidColorBrush x:Key="Brush.Text.Caret" Color="{StaticResource Palette.Text.Caret}" />
+    <SolidColorBrush x:Key="Brush.ToolTip.Text" Color="{StaticResource Palette.ToolTip.Text}" />
+
+    <!-- ============================================ -->
+    <!-- Primary buttons and toggle button surfaces. -->
+    <!-- ============================================ -->
+    <SolidColorBrush x:Key="Brush.Button.Primary.Background.Normal" options:Freeze="False" Color="{StaticResource Palette.Button.Primary.Background.Normal}" />
+    <SolidColorBrush x:Key="Brush.Button.Primary.Background.Hover" Color="{StaticResource Palette.Button.Primary.Background.Hover}" />
+    <SolidColorBrush x:Key="Brush.Button.Primary.Background.Pressed" Color="{StaticResource Palette.Button.Primary.Background.Pressed}" />
+    <SolidColorBrush x:Key="Brush.Button.Primary.Background.Disabled" Color="{StaticResource Palette.Button.Primary.Background.Disabled}" />
+    <SolidColorBrush x:Key="Brush.Button.Primary.Border.Normal" Color="{StaticResource Palette.Button.Primary.Border}" />
+    <SolidColorBrush x:Key="Brush.Button.Bevel.Light" Color="{StaticResource Palette.Bevel.Highlight}" />
+    <SolidColorBrush x:Key="Brush.Button.Bevel.Dark" Color="{StaticResource Palette.Bevel.Shadow}" />
+    <SolidColorBrush x:Key="Brush.Accent.Primary" Color="{StaticResource Palette.Accent.Primary}" />
+    <SolidColorBrush x:Key="Brush.ToggleButton.Background.Checked" Color="{StaticResource Palette.ToggleButton.Background.Checked}" />
+    <SolidColorBrush x:Key="Brush.ToggleButton.Border.Checked" Color="{StaticResource Palette.ToggleButton.Border.Checked}" />
+
+    <!-- ============================================ -->
+    <!-- Toggle switches (App.xaml toggle controls). -->
+    <!-- ============================================ -->
+    <SolidColorBrush x:Key="Brush.ToggleSwitch.Track.Background.Off" Color="{StaticResource Palette.ToggleSwitch.Track.Background.Off}" />
+    <SolidColorBrush x:Key="Brush.ToggleSwitch.Track.Background.On" Color="{StaticResource Palette.ToggleSwitch.Track.Background.On}" />
+    <SolidColorBrush x:Key="Brush.ToggleSwitch.Track.Background.Disabled" Color="{StaticResource Palette.ToggleSwitch.Track.Background.Disabled}" />
+    <SolidColorBrush x:Key="Brush.ToggleSwitch.Thumb.Background.Normal" Color="{StaticResource Palette.ToggleSwitch.Thumb.Background.Normal}" />
+    <SolidColorBrush x:Key="Brush.ToggleSwitch.Thumb.Background.On" Color="{StaticResource Palette.ToggleSwitch.Thumb.Background.On}" />
+    <SolidColorBrush x:Key="Brush.ToggleSwitch.Thumb.Background.Disabled" Color="{StaticResource Palette.ToggleSwitch.Thumb.Background.Disabled}" />
+    <SolidColorBrush x:Key="Brush.ToggleSwitch.Focus.Border" Color="{StaticResource Palette.ToggleSwitch.Focus.Border}" />
+    <SolidColorBrush x:Key="Brush.ToggleSwitch.Hover.Border" Color="{StaticResource Palette.ToggleSwitch.Hover.Border}" />
+
+    <!-- =================================== -->
+    <!-- Text inputs and the search controls. -->
+    <!-- =================================== -->
+    <SolidColorBrush x:Key="Brush.TextInput.Background.Normal" Color="{StaticResource Palette.TextInput.Background.Normal}" />
+    <SolidColorBrush x:Key="Brush.TextInput.Background.Focused" Color="{StaticResource Palette.TextInput.Background.Focused}" />
+    <SolidColorBrush x:Key="Brush.TextInput.Border.Focused" Color="{StaticResource Palette.TextInput.Border.Focused}" />
+    <SolidColorBrush x:Key="Brush.TextInput.SelectionBackground" Color="{StaticResource Palette.TextInput.SelectionBackground}" />
+    <SolidColorBrush x:Key="Brush.SearchBox.Background" Color="{StaticResource Palette.SearchBox.Background}" />
+    <SolidColorBrush x:Key="Brush.SunkenSurface.Bevel.Light" Color="{StaticResource Palette.Bevel.Highlight}" />
+    <SolidColorBrush x:Key="Brush.SunkenSurface.Bevel.Dark" Color="{StaticResource Palette.Bevel.Shadow}" />
+    <LinearGradientBrush x:Key="Brush.SunkenSurface.Background" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="{StaticResource Palette.DataGrid.Background}" Offset="0" />
+        <GradientStop Color="{StaticResource Palette.Panel.Primary.Background.Solid}" Offset="0.45" />
+        <GradientStop Color="{StaticResource Palette.Panel.Secondary.Background.Solid}" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- ========================= -->
+    <!-- Combo box colour system. -->
+    <!-- ========================= -->
+    <SolidColorBrush x:Key="Brush.ComboBox.Background.Normal" Color="{StaticResource Palette.ComboBox.Background.Normal}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Background.Hover" Color="{StaticResource Palette.ComboBox.Background.Hover}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Background.Disabled" Color="{StaticResource Palette.ComboBox.Background.Disabled}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Background.Open" Color="{StaticResource Palette.ComboBox.Background.Open}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Border.Normal" Color="{StaticResource Palette.ComboBox.Border.Normal}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Border.Hover" Color="{StaticResource Palette.ComboBox.Border.Hover}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Border.Disabled" Color="{StaticResource Palette.ComboBox.Border.Disabled}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Border.Open" Color="{StaticResource Palette.ComboBox.Border.Open}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Item.Background.Normal" Color="{StaticResource Palette.ComboBox.Item.Background.Normal}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Item.Background.Hover" Color="{StaticResource Palette.ComboBox.Item.Background.Hover}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Item.Background.Selected" Color="{StaticResource Palette.ComboBox.Item.Background.Selected}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Glyph" Color="{StaticResource Palette.ComboBox.Glyph}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Popup.Background" Color="{StaticResource Palette.ComboBox.Popup.Background}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Popup.Border" Color="{StaticResource Palette.ComboBox.Popup.Border}" />
+
+    <!-- ===================== -->
+    <!-- Data grid formatting. -->
+    <!-- ===================== -->
+    <SolidColorBrush x:Key="Brush.DataGrid.Background" Color="{StaticResource Palette.DataGrid.Background}" />
+    <SolidColorBrush x:Key="Brush.ModTabs.Background" Color="{StaticResource Palette.DataGrid.Background}" />
+    <SolidColorBrush x:Key="Brush.DataGrid.Row.Background.Alternate" Color="{StaticResource Palette.DataGrid.Row.Background.Alternate}" />
+    <SolidColorBrush x:Key="Brush.DataGrid.Row.Background.Hover" Color="{StaticResource Palette.DataGrid.Row.Background.Hover}" />
+    <SolidColorBrush x:Key="Brush.DataGrid.Row.Background.Selected" Color="{StaticResource Palette.DataGrid.Row.Background.Selected}" />
+    <SolidColorBrush x:Key="Brush.DataGrid.RowBorder" Color="{StaticResource Palette.DataGrid.Row.Border}" />
+    <SolidColorBrush x:Key="Brush.DataGrid.Header.Background" Color="{StaticResource Palette.DataGrid.Header.Background}" />
+    <SolidColorBrush x:Key="Brush.DataGrid.Header.Background.Hover" Color="{StaticResource Palette.DataGrid.Header.Background.Hover}" />
+    <SolidColorBrush x:Key="Brush.DataGrid.RowShadow" Color="{StaticResource Palette.DataGrid.Row.Shadow}" />
+
+    <!-- ===================================== -->
+    <!-- Menu, context menu, and tool tip UI. -->
+    <!-- ===================================== -->
+    <SolidColorBrush x:Key="Brush.Menu.Background" Color="{StaticResource Palette.Menu.Background}" />
+    <SolidColorBrush x:Key="Brush.Menu.Border" Color="{StaticResource Palette.Menu.Border}" />
+    <SolidColorBrush x:Key="Brush.Menu.Item.Background.Hover" Color="{StaticResource Palette.Menu.Item.Background.Hover}" />
+    <SolidColorBrush x:Key="Brush.Menu.Submenu.Background" Color="{StaticResource Palette.Menu.Submenu.Background}" />
+    <SolidColorBrush x:Key="Brush.ToolTip.Background" Color="{StaticResource Palette.ToolTip.Background}" />
+    <SolidColorBrush x:Key="Brush.ToolTip.Border" Color="{StaticResource Palette.ToolTip.Border}" />
+
+    <!-- ================================== -->
+    <!-- Mod list cards, grids, and shadows -->
+    <!-- ================================== -->
+    <SolidColorBrush x:Key="Brush.ModCard.Background.Active.Solid" Color="{StaticResource Palette.ModCard.Background.Active}" />
+    <ImageBrush x:Key="Brush.ModCard.Background.Active.Image"
+                ImageSource="pack://application:,,,/VintageStoryModManager;component/Views/soilcorrect.png"
+                TileMode="Tile"
+                Viewport="0,0,342,342"
+                ViewportUnits="Absolute"
+                AlignmentX="Left"
+                AlignmentY="Top"
+                Opacity="1" />
+    <!-- Swap the alias below to Brush.ModCard.Background.Active.Solid if you prefer a flat colour fill. -->
+    <StaticResource x:Key="Brush.ModCard.Background.Active" ResourceKey="Brush.ModCard.Background.Active.Image" />
+
+    <SolidColorBrush x:Key="Brush.ModCard.Background.Disabled.Solid" Color="{StaticResource Palette.ModCard.Background.Disabled}" />
+    <ImageBrush x:Key="Brush.ModCard.Background.Disabled.Image"
+                ImageSource="pack://application:,,,/VintageStoryModManager;component/Views/soilcorrect.png"
+                TileMode="Tile"
+                Viewport="0,0,320,320"
+                ViewportUnits="Absolute"
+                Stretch="Fill"
+                AlignmentX="Left"
+                AlignmentY="Top"
+                Opacity="0" />
+    <!-- Swap the alias below to Brush.ModCard.Background.Disabled.Solid if you prefer a flat colour fill. -->
+    <StaticResource x:Key="Brush.ModCard.Background.Disabled" ResourceKey="Brush.ModCard.Background.Disabled.Image" />
+
+    <SolidColorBrush x:Key="Brush.ModGrid.Background.Solid" Color="{StaticResource Palette.ModGrid.Background}" />
+    <ImageBrush x:Key="Brush.ModGrid.Background.Image"
+                ImageSource="pack://application:,,,/VintageStoryModManager;component/Views/soilcorrect.png"
+                TileMode="Tile"
+                Viewport="0,0,320,320"
+                ViewportUnits="Absolute"
+                Stretch="Fill"
+                AlignmentX="Left"
+                AlignmentY="Top"
+                Opacity="0" />
+    <!-- Swap the alias below to Brush.ModGrid.Background.Solid if you prefer a flat colour fill. -->
+    <StaticResource x:Key="Brush.ModGrid.Background" ResourceKey="Brush.ModGrid.Background.Image" />
+
+    <SolidColorBrush x:Key="Brush.ModCard.Shadow" Color="{StaticResource Palette.ModCard.Shadow}" />
+    <SolidColorBrush x:Key="Brush.ModDetails.Shadow" Color="{StaticResource Palette.ModDetails.Shadow}" />
+
+    <!-- =============================== -->
+    <!-- Installed mods list formatting. -->
+    <!-- =============================== -->
+    <SolidColorBrush x:Key="Brush.InstalledMod.Row.Background" Color="{StaticResource Palette.InstalledMod.Row.Background}" />
+    <SolidColorBrush x:Key="Brush.InstalledMod.Row.Border" Color="{StaticResource Palette.InstalledMod.Row.Border}" />
+
+    <!-- ============================== -->
+    <!-- Tags, statuses, and overlays. -->
+    <!-- ============================== -->
+    <SolidColorBrush x:Key="Brush.Tag.Badge.Background" Color="{StaticResource Palette.Tag.Badge.Background}" />
+    <SolidColorBrush x:Key="Brush.Tag.Badge.Border" Color="{StaticResource Palette.Tag.Badge.Border}" />
+    <SolidColorBrush x:Key="Brush.Status.Success" Color="{StaticResource Palette.Status.Success}" />
+    <SolidColorBrush x:Key="Brush.Status.Error" Color="{StaticResource Palette.Status.Error}" />
+    <SolidColorBrush x:Key="Brush.Overlay.Warning.Background" Color="{StaticResource Palette.Overlay.Warning.Background}" Opacity="0.4" />
+    <SolidColorBrush x:Key="Brush.Overlay.Success.Background" Color="{StaticResource Palette.Overlay.Success.Background}" Opacity="0.7" />
+
+    <!-- ================================ -->
+    <!-- Dialog specific text box styles -->
+    <!-- ================================ -->
+    <SolidColorBrush x:Key="Brush.Dialog.TextBox.Background" Color="{StaticResource Palette.Dialog.TextBox.Background}" />
+    <SolidColorBrush x:Key="Brush.Dialog.TextBox.Border" Color="{StaticResource Palette.Dialog.TextBox.Border}" />
+    <SolidColorBrush x:Key="Brush.Dialog.TextBox.SelectionBackground" Color="{StaticResource Palette.Dialog.TextBox.SelectionBackground}" />
+    <SolidColorBrush x:Key="Brush.Dialog.TextBox.SelectionForeground" Color="{StaticResource Palette.Dialog.TextBox.SelectionForeground}" />
+    <SolidColorBrush x:Key="Brush.Dialog.TextBox.Caret" Color="{StaticResource Palette.Dialog.TextBox.Caret}" />
+    <SolidColorBrush x:Key="Brush.Dialog.ContentShadow" Color="{StaticResource Palette.Dialog.ContentShadow}" />
+
+    <!-- ============================== -->
+    <!-- Miscellaneous global brushes. -->
+    <!-- ============================== -->
+    <SolidColorBrush x:Key="Brush.Border.Default" options:Freeze="False" Color="{StaticResource Palette.Border.Default}" />
+    <SolidColorBrush x:Key="Brush.Border.Hover" Color="{StaticResource Palette.Border.Hover}" />
+    <SolidColorBrush x:Key="Brush.ScrollBar.Thumb" Color="{StaticResource Palette.ScrollBar.Thumb}" />
+    <SolidColorBrush x:Key="Brush.ScrollBar.Track" Color="{StaticResource Palette.Panel.Secondary.Background.Solid}" />
+    <SolidColorBrush x:Key="Brush.ScrollBar.Button" Color="{StaticResource Palette.ScrollBar.Button}" />
+    <SolidColorBrush x:Key="Brush.ScrollBar.Glyph" Color="{StaticResource Palette.ScrollBar.Glyph}" />
+    <SolidColorBrush x:Key="Brush.Selection.Background" Color="{StaticResource Palette.Selection.Background}" />
+
+    <!-- ================================== -->
+    <!-- Mod configuration tree formatting -->
+    <!-- ================================== -->
+    <SolidColorBrush x:Key="Brush.ModConfig.TreeNode.Background.Hover" Color="{StaticResource Palette.ModConfig.TreeNode.Background.Hover}" />
+    <SolidColorBrush x:Key="Brush.ModConfig.TreeNode.Background.Selected" Color="{StaticResource Palette.ModConfig.TreeNode.Background.Selected}" />
+    <SolidColorBrush x:Key="Brush.ModConfig.Value.Background.Hover" Color="{StaticResource Palette.ModConfig.Value.Background.Hover}" />
+    <SolidColorBrush x:Key="Brush.ModConfig.Value.Background.Selected" Color="{StaticResource Palette.ModConfig.Value.Background.Selected}" />
+
+    <!-- ==================== -->
+    <!-- Control base styles -->
+    <!-- ==================== -->
+    <Style TargetType="{x:Type TextBlock}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+
+    <Style TargetType="{x:Type TextBox}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.TextInput.Background.Normal}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Brush.TextInput.SelectionBackground}" />
+        <Setter Property="SelectionTextBrush" Value="{DynamicResource Brush.Text.SelectionForeground}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Brush.Text.Caret}" />
+    </Style>
+
+    <Style TargetType="{x:Type PasswordBox}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.TextInput.Background.Normal}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Brush.TextInput.SelectionBackground}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Brush.Text.Caret}" />
+    </Style>
+
+    <Style TargetType="{x:Type ComboBox}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Normal}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.ComboBox.Border.Normal}" />
+    </Style>
+
+    <Style TargetType="{x:Type ComboBoxItem}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Item.Background.Normal}" />
+    </Style>
+
+    <Style TargetType="{x:Type ListBox}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Panel.Primary.Background}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="ui:ControlHelper.CornerRadius" Value="6" />
+        <Setter Property="Template" Value="{DynamicResource IMM.SunkenListControlTemplate}" />
+    </Style>
+
+    <Style TargetType="{x:Type ListBoxItem}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+
+    <Style TargetType="{x:Type ListView}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Panel.Primary.Background}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="ui:ControlHelper.CornerRadius" Value="6" />
+        <Setter Property="Template" Value="{DynamicResource IMM.SunkenListControlTemplate}" />
+    </Style>
+
+    <Style TargetType="{x:Type TreeView}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+
+    <Style TargetType="{x:Type TreeViewItem}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+
+    <Style TargetType="{x:Type Label}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+
+    <Style TargetType="{x:Type CheckBox}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+
+    <Style TargetType="{x:Type RadioButton}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+
+    <Style TargetType="{x:Type Button}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+
+    <Style TargetType="{x:Type ToggleButton}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+
+    <Style TargetType="{x:Type DataGrid}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+
+    <Style TargetType="{x:Type DataGridRow}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+
+    <Style TargetType="{x:Type Hyperlink}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Link}" />
+    </Style>
+
+    <Style TargetType="{x:Type ToolTip}">
+        <Setter Property="Background" Value="{DynamicResource Brush.ToolTip.Background}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.ToolTip.Text}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToolTip.Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Style.Resources>
+            <SolidColorBrush x:Key="Brush.Text.Primary" Color="{StaticResource Palette.ToolTip.Text}" />
+            <Style TargetType="{x:Type TextBlock}">
+                <Setter Property="Foreground" Value="{DynamicResource Brush.ToolTip.Text}" />
+            </Style>
+        </Style.Resources>
+    </Style>
+
+    <Style TargetType="{x:Type ContextMenu}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Menu.Background}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Menu.Border}" />
+    </Style>
+
+    <Style TargetType="{x:Type Menu}">
+        <Setter Property="Background" Value="{DynamicResource Brush.Menu.Background}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+    </Style>
+
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="{x:Type Separator}">
+        <Setter Property="Margin" Value="0,6,0,6" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Separator}">
+                    <Grid Height="8"
+                          Background="{DynamicResource Brush.Menu.Background}"
+                          SnapsToDevicePixels="True">
+                        <Border Height="1"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource Brush.Border.Default}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type MenuItem}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Menu.Background}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="12,6,12,6" />
+        <Style.Resources>
+            <ControlTemplate x:Key="{x:Static MenuItem.TopLevelHeaderTemplateKey}"
+                             TargetType="{x:Type MenuItem}">
+                <Grid SnapsToDevicePixels="True">
+                    <Border x:Name="Border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <ContentPresenter x:Name="HeaderHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          RecognizesAccessKey="True"
+                                          ContentSource="Header"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                    <Popup x:Name="PART_Popup"
+                           Placement="Bottom"
+                           HorizontalOffset="0"
+                           VerticalOffset="0"
+                           IsOpen="{TemplateBinding IsSubmenuOpen}"
+                           AllowsTransparency="True"
+                           Focusable="False">
+                        <Border x:Name="SubMenuBorder"
+                                Background="{DynamicResource Brush.Panel.Primary.Background}"
+                                BorderBrush="{DynamicResource Brush.Border.Default}"
+                                BorderThickness="1"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer CanContentScroll="True">
+                                <StackPanel IsItemsHost="True"
+                                            KeyboardNavigation.DirectionalNavigation="Cycle" />
+                            </ScrollViewer>
+                        </Border>
+                    </Popup>
+                </Grid>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsSubmenuOpen" Value="True">
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                    </Trigger>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Subtle}" />
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+            <ControlTemplate x:Key="{x:Static MenuItem.TopLevelItemTemplateKey}"
+                             TargetType="{x:Type MenuItem}">
+                <Grid SnapsToDevicePixels="True">
+                    <Border x:Name="Border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          RecognizesAccessKey="True" />
+                    </Border>
+                </Grid>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Subtle}" />
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+            <ControlTemplate x:Key="{x:Static MenuItem.SubmenuHeaderTemplateKey}"
+                             TargetType="{x:Type MenuItem}">
+                <Grid SnapsToDevicePixels="True">
+                    <Border x:Name="Border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter Grid.Column="1"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              RecognizesAccessKey="True"
+                                              ContentSource="Header" />
+                            <Path x:Name="Glyph"
+                                  Grid.Column="2"
+                                  Margin="10,0,0,0"
+                                  Width="6"
+                                  Height="10"
+                                  Fill="{DynamicResource Brush.Accent.Primary}"
+                                  Stretch="Uniform"
+                                  RenderTransformOrigin="0.5,0.5"
+                                  Data="M0,0 L0,10 6,5 Z"
+                                  FlowDirection="LeftToRight" />
+                        </Grid>
+                    </Border>
+                    <Popup x:Name="PART_Popup"
+                           Placement="Right"
+                           HorizontalOffset="2"
+                           VerticalOffset="-3"
+                           IsOpen="{TemplateBinding IsSubmenuOpen}"
+                           AllowsTransparency="True"
+                           Focusable="False"
+                           PopupAnimation="Fade">
+                        <Border x:Name="SubMenuBorder"
+                                Background="{DynamicResource Brush.Menu.Submenu.Background}"
+                                BorderBrush="{DynamicResource Brush.Border.Default}"
+                                BorderThickness="1"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer CanContentScroll="True">
+                                <StackPanel Margin="0"
+                                            IsItemsHost="True"
+                                            KeyboardNavigation.DirectionalNavigation="Cycle" />
+                            </ScrollViewer>
+                        </Border>
+                    </Popup>
+                </Grid>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                    </Trigger>
+                    <Trigger Property="IsSubmenuOpen" Value="True">
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                    </Trigger>
+                    <Trigger Property="FlowDirection" Value="RightToLeft">
+                        <Setter TargetName="Glyph" Property="RenderTransform">
+                            <Setter.Value>
+                                <ScaleTransform ScaleX="-1" />
+                            </Setter.Value>
+                        </Setter>
+                        <Setter TargetName="PART_Popup" Property="Placement" Value="Left" />
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Subtle}" />
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+            <ControlTemplate x:Key="{x:Static MenuItem.SubmenuItemTemplateKey}"
+                             TargetType="{x:Type MenuItem}">
+                <Grid SnapsToDevicePixels="True">
+                    <Border x:Name="Border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          RecognizesAccessKey="True" />
+                    </Border>
+                </Grid>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Subtle}" />
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Style.Resources>
+    </Style>
+</ResourceDictionary>

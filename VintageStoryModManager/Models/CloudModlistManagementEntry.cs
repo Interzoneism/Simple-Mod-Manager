@@ -36,4 +36,19 @@ public sealed class CloudModlistManagementEntry
     public string? CachedContent { get; }
 
     public string EffectiveName => Name ?? "Unnamed Modlist";
+
+    public override string ToString()
+    {
+        if (!string.IsNullOrWhiteSpace(DisplayName))
+        {
+            return DisplayName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(Name))
+        {
+            return Name;
+        }
+
+        return SlotLabel;
+    }
 }

@@ -19,6 +19,53 @@ public sealed class UserConfigurationService
     private const string ModConfigPathsFileName = "SimpleVSManagerModConfigPaths.json";
     private static readonly string CurrentModManagerVersion = ResolveCurrentVersion();
     private static readonly string CurrentConfigurationVersion = CurrentModManagerVersion;
+    private static readonly IReadOnlyDictionary<string, string> VintageStoryPaletteColors =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Palette.BaseSurface.Shadowed"] = "#FF403529",
+            ["Palette.BaseSurface.Raised"] = "#FF4D3D2D",
+            ["Palette.BaseSurface.HoverGlow"] = "#FF5A4530",
+            ["Palette.Interactive.Surface"] = "#FF453525",
+            ["Palette.Accent.Primary"] = "#FF479BBE",
+            ["Palette.Interactive.DisabledSurface"] = "#FF332A21",
+            ["Palette.Text.Primary"] = "#FFC8BCAE",
+            ["Palette.Text.Link"] = "#FF479BBE",
+            ["Palette.Bevel.Highlight"] = "#80FFFFFF",
+            ["Palette.Bevel.Shadow"] = "#40000000",
+            ["Palette.Overlay.HoverTint"] = "#10FFFFFF"
+        };
+
+    private static readonly IReadOnlyDictionary<string, string> DarkPaletteColors =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Palette.Accent.Primary"] = "#FF0078D4",
+            ["Palette.BaseSurface.Shadowed"] = "#FF202020",
+            ["Palette.BaseSurface.HoverGlow"] = "#FF323232",
+            ["Palette.BaseSurface.Raised"] = "#FF2B2B2B",
+            ["Palette.Bevel.Shadow"] = "#26000000",
+            ["Palette.Bevel.Highlight"] = "#21FFFFFF",
+            ["Palette.Interactive.DisabledSurface"] = "#FF2A2A2A",
+            ["Palette.Interactive.Surface"] = "#FF2E2E2E",
+            ["Palette.Overlay.HoverTint"] = "#14FFFFFF",
+            ["Palette.Text.Link"] = "#FF0F6CBD",
+            ["Palette.Text.Primary"] = "#FFEDEDED"
+        };
+
+    private static readonly IReadOnlyDictionary<string, string> LightPaletteColors =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Palette.Accent.Primary"] = "#FF0078D4",
+            ["Palette.BaseSurface.HoverGlow"] = "#FFE0EAF5",
+            ["Palette.BaseSurface.Raised"] = "#FFFFFFFF",
+            ["Palette.BaseSurface.Shadowed"] = "#FFD0DBE5",
+            ["Palette.Bevel.Highlight"] = "#80FFFFFF",
+            ["Palette.Bevel.Shadow"] = "#66000000",
+            ["Palette.Interactive.DisabledSurface"] = "#FFBAC5D0",
+            ["Palette.Interactive.Surface"] = "#FFE5F0FA",
+            ["Palette.Overlay.HoverTint"] = "#20000000",
+            ["Palette.Text.Link"] = "#FF0078D4",
+            ["Palette.Text.Primary"] = "#FF000000"
+        };
     private const int DefaultModDatabaseSearchResultLimit = 30;
     private const int DefaultModDatabaseNewModsRecentMonths = 3;
     private const int MaxModDatabaseNewModsRecentMonths = 24;
@@ -27,6 +74,10 @@ public sealed class UserConfigurationService
     private readonly string _modConfigPathsPath;
     private readonly Dictionary<string, string> _modConfigPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ModConfigPathEntry> _storedModConfigPaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _themePaletteColors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _customThemePaletteColors = new(StringComparer.OrdinalIgnoreCase);
+    private string? _previousConfigurationVersion;
+    private string? _previousModManagerVersion;
     private string? _selectedPresetName;
     private string _configurationVersion = CurrentConfigurationVersion;
     private string _modManagerVersion = CurrentModManagerVersion;
@@ -34,10 +85,12 @@ public sealed class UserConfigurationService
     private bool _useModDbDesignView = true;
     private ModDatabaseAutoLoadMode _modDatabaseAutoLoadMode = ModDatabaseAutoLoadMode.TotalDownloads;
     private bool _excludeInstalledModDatabaseResults;
+    private bool _onlyShowCompatibleModDatabaseResults;
     private bool _cacheAllVersionsLocally = true;
     private bool _disableInternetAccess;
     private bool _enableDebugLogging;
     private bool _suppressModlistSavePrompt;
+    private bool _suppressRefreshCachePrompt;
     private ModlistAutoLoadBehavior _modlistAutoLoadBehavior = ModlistAutoLoadBehavior.Prompt;
     private int _modDatabaseSearchResultLimit = DefaultModDatabaseSearchResultLimit;
     private int _modDatabaseNewModsRecentMonths = DefaultModDatabaseNewModsRecentMonths;
@@ -50,6 +103,8 @@ public sealed class UserConfigurationService
     private bool _isPersistenceEnabled;
     private bool _hasPendingSave;
     private bool _hasPendingModConfigPathSave;
+    private ColorTheme _colorTheme = ColorTheme.VintageStory;
+    private bool _hasVersionMismatch;
 
     public UserConfigurationService()
     {
@@ -69,19 +124,31 @@ public sealed class UserConfigurationService
 
     public string ModManagerVersion => _modManagerVersion;
 
+    public bool HasVersionMismatch => _hasVersionMismatch;
+
+    public string? PreviousConfigurationVersion => _previousConfigurationVersion;
+
+    public string? PreviousModManagerVersion => _previousModManagerVersion;
+
     public bool IsCompactView => _isCompactView;
 
     public bool UseModDbDesignView => _useModDbDesignView;
 
     public bool CacheAllVersionsLocally => _cacheAllVersionsLocally;
 
+    public ColorTheme ColorTheme => _colorTheme;
+
     public bool ExcludeInstalledModDatabaseResults => _excludeInstalledModDatabaseResults;
+
+    public bool OnlyShowCompatibleModDatabaseResults => _onlyShowCompatibleModDatabaseResults;
 
     public bool DisableInternetAccess => _disableInternetAccess;
 
     public bool EnableDebugLogging => _enableDebugLogging;
 
     public bool SuppressModlistSavePrompt => _suppressModlistSavePrompt;
+
+    public bool SuppressRefreshCachePrompt => _suppressRefreshCachePrompt;
 
     public ModlistAutoLoadBehavior ModlistAutoLoadBehavior => _modlistAutoLoadBehavior;
 
@@ -98,6 +165,61 @@ public sealed class UserConfigurationService
     public string? CustomShortcutPath => _customShortcutPath;
 
     public string? CloudUploaderName => _cloudUploaderName;
+
+    public IReadOnlyDictionary<string, string> GetThemePaletteColors()
+    {
+        return new Dictionary<string, string>(_themePaletteColors, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public bool TrySetThemePaletteColor(string key, string color)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return false;
+        }
+
+        string normalizedKey = key.Trim();
+        if (!_themePaletteColors.ContainsKey(normalizedKey))
+        {
+            return false;
+        }
+
+        if (!TryNormalizeHexColor(color, out string normalizedColor))
+        {
+            return false;
+        }
+
+        if (_themePaletteColors.TryGetValue(normalizedKey, out string? current)
+            && string.Equals(current, normalizedColor, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        _themePaletteColors[normalizedKey] = normalizedColor;
+        if (_colorTheme == ColorTheme.Custom)
+        {
+            EnsureCustomThemePaletteInitialized();
+            _customThemePaletteColors[normalizedKey] = normalizedColor;
+        }
+        Save();
+        return true;
+    }
+
+    public void ResetThemePalette()
+    {
+        if (_colorTheme == ColorTheme.Custom)
+        {
+            ResetCustomThemePaletteToDefaults();
+        }
+
+        ResetThemePaletteToDefaults();
+        Save();
+    }
+
+    public static IReadOnlyDictionary<string, string> GetDefaultThemePalette(ColorTheme theme)
+    {
+        return new Dictionary<string, string>(GetDefaultPalette(theme), StringComparer.OrdinalIgnoreCase);
+    }
 
     public (string? SortMemberPath, ListSortDirection Direction) GetModListSortPreference()
     {
@@ -244,6 +366,28 @@ public sealed class UserConfigurationService
 
         _useModDbDesignView = useModDbDesignView;
         Save();
+    }
+
+    public void SetColorTheme(ColorTheme theme, IReadOnlyDictionary<string, string>? paletteOverride = null)
+    {
+        bool paletteChanged = false;
+
+        if (_colorTheme != theme)
+        {
+            _colorTheme = theme;
+            ResetThemePaletteToDefaults();
+            paletteChanged = true;
+        }
+
+        if (paletteOverride is not null)
+        {
+            paletteChanged |= ApplyThemePaletteOverride(paletteOverride);
+        }
+
+        if (paletteChanged)
+        {
+            Save();
+        }
     }
 
     public void SetEnableDebugLogging(bool enableDebugLogging)
@@ -414,6 +558,17 @@ public sealed class UserConfigurationService
         Save();
     }
 
+    public void SetSuppressRefreshCachePrompt(bool suppress)
+    {
+        if (_suppressRefreshCachePrompt == suppress)
+        {
+            return;
+        }
+
+        _suppressRefreshCachePrompt = suppress;
+        Save();
+    }
+
     public void SetCloudUploaderName(string? name)
     {
         string? normalized = NormalizeUploaderName(name);
@@ -438,9 +593,23 @@ public sealed class UserConfigurationService
         Save();
     }
 
+    public void SetOnlyShowCompatibleModDatabaseResults(bool onlyCompatible)
+    {
+        if (_onlyShowCompatibleModDatabaseResults == onlyCompatible)
+        {
+            return;
+        }
+
+        _onlyShowCompatibleModDatabaseResults = onlyCompatible;
+        Save();
+    }
+
     private void Load()
     {
         _modConfigPaths.Clear();
+        ResetCustomThemePaletteToDefaults();
+        _colorTheme = ColorTheme.VintageStory;
+        ResetThemePaletteToDefaults();
         _selectedPresetName = null;
 
         try
@@ -469,6 +638,23 @@ public sealed class UserConfigurationService
             _disableInternetAccess = obj["disableInternetAccess"]?.GetValue<bool?>() ?? false;
             _enableDebugLogging = obj["enableDebugLogging"]?.GetValue<bool?>() ?? false;
             _suppressModlistSavePrompt = obj["suppressModlistSavePrompt"]?.GetValue<bool?>() ?? false;
+            _suppressRefreshCachePrompt = obj["suppressRefreshCachePrompt"]?.GetValue<bool?>() ?? false;
+            string? colorThemeValue = GetOptionalString(obj["colorTheme"]);
+            bool? legacyDarkVsMode = obj["useDarkVsMode"]?.GetValue<bool?>();
+            if (!string.IsNullOrWhiteSpace(colorThemeValue)
+                && Enum.TryParse(colorThemeValue.Trim(), ignoreCase: true, out ColorTheme parsedTheme))
+            {
+                _colorTheme = parsedTheme;
+            }
+            else
+            {
+                _colorTheme = legacyDarkVsMode.HasValue && !legacyDarkVsMode.Value
+                    ? ColorTheme.Light
+                    : ColorTheme.VintageStory;
+                _hasPendingSave = true;
+            }
+            bool hasCustomPalette = LoadCustomThemePalette(obj["customThemePalette"]);
+            ResetThemePaletteToDefaults();
             _modlistAutoLoadBehavior = ParseModlistAutoLoadBehavior(GetOptionalString(obj["modlistAutoLoadBehavior"]));
             _modsSortMemberPath = NormalizeSortMemberPath(GetOptionalString(obj["modsSortMemberPath"]));
             _modsSortDirection = ParseSortDirection(GetOptionalString(obj["modsSortDirection"]));
@@ -477,9 +663,19 @@ public sealed class UserConfigurationService
                 obj["modDatabaseNewModsRecentMonths"]?.GetValue<int?>());
             _modDatabaseAutoLoadMode = ParseModDatabaseAutoLoadMode(GetOptionalString(obj["modDatabaseAutoLoadMode"]));
             _excludeInstalledModDatabaseResults = obj["excludeInstalledModDatabaseResults"]?.GetValue<bool?>() ?? false;
+            _onlyShowCompatibleModDatabaseResults = obj["onlyShowCompatibleModDatabaseResults"]?.GetValue<bool?>() ?? false;
             _windowWidth = NormalizeWindowDimension(obj["windowWidth"]?.GetValue<double?>());
             _windowHeight = NormalizeWindowDimension(obj["windowHeight"]?.GetValue<double?>());
             LoadModConfigPaths(obj["modConfigPaths"]);
+            LoadThemePalette(obj["themePalette"] ?? obj["darkVsPalette"]);
+            if (_colorTheme == ColorTheme.Custom)
+            {
+                SyncCustomThemePaletteWithCurrentTheme();
+                if (!hasCustomPalette)
+                {
+                    _hasPendingSave = true;
+                }
+            }
             _selectedPresetName = NormalizePresetName(GetOptionalString(obj["selectedPreset"]));
             _customShortcutPath = NormalizePath(GetOptionalString(obj["customShortcutPath"]));
             _cloudUploaderName = NormalizeUploaderName(GetOptionalString(obj["cloudUploaderName"]));
@@ -490,6 +686,9 @@ public sealed class UserConfigurationService
             DataDirectory = null;
             GameDirectory = null;
             _modConfigPaths.Clear();
+            _colorTheme = ColorTheme.VintageStory;
+            ResetCustomThemePaletteToDefaults();
+            ResetThemePaletteToDefaults();
             _configurationVersion = CurrentConfigurationVersion;
             _modManagerVersion = CurrentModManagerVersion;
             _isCompactView = false;
@@ -498,6 +697,7 @@ public sealed class UserConfigurationService
             _disableInternetAccess = false;
             _enableDebugLogging = false;
             _suppressModlistSavePrompt = false;
+            _suppressRefreshCachePrompt = false;
             _modlistAutoLoadBehavior = ModlistAutoLoadBehavior.Prompt;
             _modsSortMemberPath = null;
             _modsSortDirection = ListSortDirection.Ascending;
@@ -506,6 +706,7 @@ public sealed class UserConfigurationService
             _modDatabaseNewModsRecentMonths = DefaultModDatabaseNewModsRecentMonths;
             _modDatabaseAutoLoadMode = ModDatabaseAutoLoadMode.TotalDownloads;
             _excludeInstalledModDatabaseResults = false;
+            _onlyShowCompatibleModDatabaseResults = false;
             _windowWidth = null;
             _windowHeight = null;
             _customShortcutPath = null;
@@ -546,6 +747,9 @@ public sealed class UserConfigurationService
                 ["disableInternetAccess"] = _disableInternetAccess,
                 ["enableDebugLogging"] = _enableDebugLogging,
                 ["suppressModlistSavePrompt"] = _suppressModlistSavePrompt,
+                ["suppressRefreshCachePrompt"] = _suppressRefreshCachePrompt,
+                ["useDarkVsMode"] = _colorTheme != ColorTheme.Light,
+                ["colorTheme"] = _colorTheme.ToString(),
                 ["modlistAutoLoadBehavior"] = _modlistAutoLoadBehavior.ToString(),
                 ["modsSortMemberPath"] = _modsSortMemberPath,
                 ["modsSortDirection"] = _modsSortDirection.ToString(),
@@ -553,9 +757,13 @@ public sealed class UserConfigurationService
                 ["modDatabaseNewModsRecentMonths"] = _modDatabaseNewModsRecentMonths,
                 ["modDatabaseAutoLoadMode"] = _modDatabaseAutoLoadMode.ToString(),
                 ["excludeInstalledModDatabaseResults"] = _excludeInstalledModDatabaseResults,
+                ["onlyShowCompatibleModDatabaseResults"] = _onlyShowCompatibleModDatabaseResults,
                 ["windowWidth"] = _windowWidth,
                 ["windowHeight"] = _windowHeight,
                 ["modConfigPaths"] = BuildModConfigPathsJson(),
+                ["themePalette"] = BuildThemePaletteJson(),
+                ["darkVsPalette"] = BuildThemePaletteJson(),
+                ["customThemePalette"] = BuildCustomThemePaletteJson(),
                 ["selectedPreset"] = _selectedPresetName,
                 ["customShortcutPath"] = _customShortcutPath,
                 ["cloudUploaderName"] = _cloudUploaderName
@@ -578,6 +786,17 @@ public sealed class UserConfigurationService
     private void InitializeVersionMetadata(string? configurationVersion, string? modManagerVersion)
     {
         bool requiresSave = false;
+
+        _previousConfigurationVersion = configurationVersion;
+        _previousModManagerVersion = modManagerVersion;
+
+        bool configurationMismatch = !string.IsNullOrWhiteSpace(configurationVersion)
+            && !string.Equals(configurationVersion, CurrentConfigurationVersion, StringComparison.OrdinalIgnoreCase);
+
+        bool modManagerMismatch = !string.IsNullOrWhiteSpace(modManagerVersion)
+            && !string.Equals(modManagerVersion, CurrentModManagerVersion, StringComparison.OrdinalIgnoreCase);
+
+        _hasVersionMismatch = configurationMismatch || modManagerMismatch;
 
         string resolvedConfigurationVersion = string.IsNullOrWhiteSpace(configurationVersion)
             ? CurrentConfigurationVersion
@@ -700,6 +919,48 @@ public sealed class UserConfigurationService
         return result;
     }
 
+    private JsonObject BuildThemePaletteJson()
+    {
+        IReadOnlyDictionary<string, string> defaults = _colorTheme == ColorTheme.Custom
+            ? _customThemePaletteColors
+            : GetDefaultPalette(_colorTheme);
+        return BuildPaletteJson(_themePaletteColors, defaults);
+    }
+
+    private JsonObject BuildCustomThemePaletteJson()
+    {
+        return BuildPaletteJson(_customThemePaletteColors, GetDefaultPalette(ColorTheme.Custom));
+    }
+
+    private static JsonObject BuildPaletteJson(
+        IReadOnlyDictionary<string, string> palette,
+        IReadOnlyDictionary<string, string> defaults)
+    {
+        var result = new JsonObject();
+
+        foreach (var pair in palette.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
+            {
+                continue;
+            }
+
+            result[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in defaults.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (result.ContainsKey(pair.Key))
+            {
+                continue;
+            }
+
+            result[pair.Key] = pair.Value;
+        }
+
+        return result;
+    }
+
     private void LoadModConfigPaths(JsonNode? node)
     {
         _modConfigPaths.Clear();
@@ -726,6 +987,264 @@ public sealed class UserConfigurationService
 
             _modConfigPaths[modId.Trim()] = normalized;
         }
+    }
+
+    private void LoadThemePalette(JsonNode? node)
+    {
+        IReadOnlyDictionary<string, string> defaults = GetCurrentThemeDefaults();
+
+        if (node is not JsonObject obj)
+        {
+            EnsurePaletteDefaults(_themePaletteColors, defaults);
+            _hasPendingSave = true;
+            return;
+        }
+
+        bool requiresSave = false;
+        var processedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var pair in obj)
+        {
+            string key = pair.Key;
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            string normalizedKey = key.Trim();
+            if (!_themePaletteColors.ContainsKey(normalizedKey))
+            {
+                if (defaults.ContainsKey(normalizedKey))
+                {
+                    _themePaletteColors[normalizedKey] = defaults[normalizedKey];
+                }
+
+                continue;
+            }
+
+            string? value = GetOptionalString(pair.Value);
+            if (!TryNormalizeHexColor(value, out string normalized))
+            {
+                requiresSave = true;
+                continue;
+            }
+
+            _themePaletteColors[normalizedKey] = normalized;
+            processedKeys.Add(normalizedKey);
+        }
+
+        foreach (var pair in defaults)
+        {
+            if (!processedKeys.Contains(pair.Key))
+            {
+                requiresSave = true;
+            }
+
+            if (!_themePaletteColors.ContainsKey(pair.Key))
+            {
+                _themePaletteColors[pair.Key] = pair.Value;
+            }
+        }
+
+        if (requiresSave)
+        {
+            _hasPendingSave = true;
+        }
+    }
+
+    private bool LoadCustomThemePalette(JsonNode? node)
+    {
+        IReadOnlyDictionary<string, string> defaults = GetDefaultPalette(ColorTheme.Custom);
+        _customThemePaletteColors.Clear();
+
+        bool requiresSave = false;
+        bool propertyFound;
+        var processedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (node is JsonObject obj)
+        {
+            propertyFound = true;
+
+            foreach (var pair in obj)
+            {
+                string key = pair.Key;
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    continue;
+                }
+
+                string normalizedKey = key.Trim();
+                if (!defaults.ContainsKey(normalizedKey))
+                {
+                    continue;
+                }
+
+                string? value = GetOptionalString(pair.Value);
+                if (!TryNormalizeHexColor(value, out string normalized))
+                {
+                    requiresSave = true;
+                    continue;
+                }
+
+                _customThemePaletteColors[normalizedKey] = normalized;
+                processedKeys.Add(normalizedKey);
+            }
+        }
+        else
+        {
+            propertyFound = false;
+            requiresSave = true;
+        }
+
+        foreach (var pair in defaults)
+        {
+            if (!processedKeys.Contains(pair.Key))
+            {
+                requiresSave = true;
+            }
+
+            if (!_customThemePaletteColors.ContainsKey(pair.Key))
+            {
+                _customThemePaletteColors[pair.Key] = pair.Value;
+            }
+        }
+
+        if (requiresSave)
+        {
+            _hasPendingSave = true;
+        }
+
+        return propertyFound;
+    }
+
+    private void SyncCustomThemePaletteWithCurrentTheme()
+    {
+        EnsureCustomThemePaletteInitialized();
+
+        foreach (var pair in _themePaletteColors)
+        {
+            _customThemePaletteColors[pair.Key] = pair.Value;
+        }
+
+        EnsurePaletteDefaults(_customThemePaletteColors, GetDefaultPalette(ColorTheme.Custom));
+    }
+
+    private void ResetThemePaletteToDefaults()
+    {
+        _themePaletteColors.Clear();
+
+        if (_colorTheme == ColorTheme.Custom)
+        {
+            EnsureCustomThemePaletteInitialized();
+            foreach (var pair in _customThemePaletteColors)
+            {
+                _themePaletteColors[pair.Key] = pair.Value;
+            }
+
+            EnsurePaletteDefaults(_themePaletteColors, GetDefaultPalette(ColorTheme.Custom));
+            return;
+        }
+
+        foreach (var pair in GetDefaultPalette(_colorTheme))
+        {
+            _themePaletteColors[pair.Key] = pair.Value;
+        }
+    }
+
+    private bool ApplyThemePaletteOverride(IReadOnlyDictionary<string, string> paletteOverride)
+    {
+        bool changed = false;
+
+        foreach (var pair in paletteOverride)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key))
+            {
+                continue;
+            }
+
+            string normalizedKey = pair.Key.Trim();
+            if (!_themePaletteColors.ContainsKey(normalizedKey))
+            {
+                continue;
+            }
+
+            if (!TryNormalizeHexColor(pair.Value, out string normalizedValue))
+            {
+                continue;
+            }
+
+            if (!_themePaletteColors.TryGetValue(normalizedKey, out string? currentValue)
+                || !string.Equals(currentValue, normalizedValue, StringComparison.OrdinalIgnoreCase))
+            {
+                _themePaletteColors[normalizedKey] = normalizedValue;
+                if (_colorTheme == ColorTheme.Custom)
+                {
+                    EnsureCustomThemePaletteInitialized();
+                    _customThemePaletteColors[normalizedKey] = normalizedValue;
+                }
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    private void ResetCustomThemePaletteToDefaults()
+    {
+        _customThemePaletteColors.Clear();
+
+        foreach (var pair in GetDefaultPalette(ColorTheme.Custom))
+        {
+            _customThemePaletteColors[pair.Key] = pair.Value;
+        }
+    }
+
+    private void EnsureCustomThemePaletteInitialized()
+    {
+        if (_customThemePaletteColors.Count == 0)
+        {
+            ResetCustomThemePaletteToDefaults();
+            return;
+        }
+
+        EnsurePaletteDefaults(_customThemePaletteColors, GetDefaultPalette(ColorTheme.Custom));
+    }
+
+    private IReadOnlyDictionary<string, string> GetCurrentThemeDefaults()
+    {
+        if (_colorTheme == ColorTheme.Custom)
+        {
+            EnsureCustomThemePaletteInitialized();
+            return _customThemePaletteColors;
+        }
+
+        return GetDefaultPalette(_colorTheme);
+    }
+
+    private static void EnsurePaletteDefaults(
+        IDictionary<string, string> palette,
+        IReadOnlyDictionary<string, string> defaults)
+    {
+        foreach (var pair in defaults)
+        {
+            if (!palette.ContainsKey(pair.Key))
+            {
+                palette[pair.Key] = pair.Value;
+            }
+        }
+    }
+
+    private static IReadOnlyDictionary<string, string> GetDefaultPalette(ColorTheme theme)
+    {
+        return theme switch
+        {
+            ColorTheme.VintageStory => VintageStoryPaletteColors,
+            ColorTheme.Dark => DarkPaletteColors,
+            ColorTheme.Light => LightPaletteColors,
+            ColorTheme.SurpriseMe => VintageStoryPaletteColors,
+            ColorTheme.Custom => VintageStoryPaletteColors,
+            _ => VintageStoryPaletteColors
+        };
     }
 
     private void LoadPersistentModConfigPaths()
@@ -968,6 +1487,46 @@ public sealed class UserConfigurationService
         return null;
     }
 
+    private static bool TryNormalizeHexColor(string? value, out string normalized)
+    {
+        normalized = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string trimmed = value.Trim();
+        if (!trimmed.StartsWith('#') || trimmed.Length <= 1)
+        {
+            return false;
+        }
+
+        string hex = trimmed[1..];
+        if (hex.Length is not 6 and not 8)
+        {
+            return false;
+        }
+
+        foreach (char c in hex)
+        {
+            if (!IsHexDigit(c))
+            {
+                return false;
+            }
+        }
+
+        normalized = "#" + hex.ToUpperInvariant();
+        return true;
+    }
+
+    private static bool IsHexDigit(char c)
+    {
+        return (c >= '0' && c <= '9')
+            || (c >= 'A' && c <= 'F')
+            || (c >= 'a' && c <= 'f');
+    }
+
     private static string? GetOptionalString(JsonNode? node)
     {
         if (node is null)
@@ -993,25 +1552,33 @@ public sealed class UserConfigurationService
     {
         Assembly assembly = typeof(UserConfigurationService).Assembly;
 
-        string? informationalVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        if (!string.IsNullOrWhiteSpace(informationalVersion))
+        string? version = VersionStringUtility.Normalize(
+            assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+        if (!string.IsNullOrWhiteSpace(version))
         {
-            return informationalVersion!;
+            return version!;
         }
 
-        string? fileVersion = assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version;
-        if (!string.IsNullOrWhiteSpace(fileVersion))
+        version = VersionStringUtility.Normalize(
+            assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version);
+        if (!string.IsNullOrWhiteSpace(version))
         {
-            return fileVersion!;
+            return version!;
         }
 
-        Version? version = assembly.GetName().Version;
-        return version?.ToString() ?? "0.0.0";
+        version = VersionStringUtility.Normalize(assembly.GetName().Version?.ToString());
+        return string.IsNullOrWhiteSpace(version) ? "0.0.0" : version!;
     }
 
     private static string? NormalizeVersion(string? version)
     {
-        return string.IsNullOrWhiteSpace(version) ? null : version.Trim();
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return null;
+        }
+
+        string? normalized = VersionStringUtility.Normalize(version);
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 
     private static string? NormalizePath(string? path)

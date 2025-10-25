@@ -72,6 +72,7 @@ public sealed class ModListItemViewModel : ObservableObject
     private bool _hasUpdate;
     private string? _updateMessage;
     private ModVersionOptionViewModel? _selectedVersionOption;
+    private string? _modDatabaseSide;
 
     public sealed record ReleaseChangelog(string Version, string Changelog);
 
@@ -158,6 +159,7 @@ public sealed class ModListItemViewModel : ObservableObject
         Side = entry.Side;
         RequiredOnClient = entry.RequiredOnClient;
         RequiredOnServer = entry.RequiredOnServer;
+        _modDatabaseSide = entry.DatabaseInfo?.Side;
 
         Icon = CreateImage(entry.IconBytes, "Icon bytes");
         LogDebug($"Icon image created: {Icon is not null}. Will fall back to database logo when null.");
@@ -416,7 +418,14 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public string? Side { get; }
 
-    public string SideDisplay => string.IsNullOrWhiteSpace(Side) ? "—" : Side!;
+    public string SideDisplay
+    {
+        get
+        {
+            string? preferredSide = GetPreferredSide();
+            return string.IsNullOrWhiteSpace(preferredSide) ? "—" : preferredSide!;
+        }
+    }
 
     public bool? RequiredOnClient { get; }
 
@@ -546,6 +555,14 @@ public sealed class ModListItemViewModel : ObservableObject
         if (info is null)
         {
             return;
+        }
+
+        string? previousSide = NormalizeSide(_modDatabaseSide);
+        string? updatedSide = NormalizeSide(info.Side);
+        _modDatabaseSide = info.Side;
+        if (!string.Equals(previousSide, updatedSide, StringComparison.Ordinal))
+        {
+            OnPropertyChanged(nameof(SideDisplay));
         }
 
         IReadOnlyList<string> tags = info.Tags ?? Array.Empty<string>();
@@ -1487,6 +1504,41 @@ public sealed class ModListItemViewModel : ObservableObject
         return false;
     }
 
+    private string? GetPreferredSide()
+    {
+        string? databaseSide = NormalizeSide(_modDatabaseSide);
+        if (!string.IsNullOrWhiteSpace(databaseSide))
+        {
+            return databaseSide;
+        }
+
+        return NormalizeSide(Side);
+    }
+
+    private static string? NormalizeSide(string? side)
+    {
+        if (string.IsNullOrWhiteSpace(side))
+        {
+            return null;
+        }
+
+        string trimmed = side.Trim();
+        if (trimmed.Length == 0)
+        {
+            return null;
+        }
+
+        string lower = trimmed.ToLowerInvariant();
+        return lower switch
+        {
+            "both" => "both",
+            "client" => "client",
+            "server" => "server",
+            "universal" or "all" or "any" => "both",
+            _ => trimmed
+        };
+    }
+
     private static string NormalizeSearchText(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1770,9 +1822,9 @@ public sealed class ModListItemViewModel : ObservableObject
         return Task.CompletedTask;
     }
 
-    private void LogDebug(string message)
+    private static void LogDebug(string message)
     {
-        StatusLogService.AppendStatus($"[Debug][{DisplayName} ({ModId})] {message}", false);
+        _ = message;
     }
 
     private static void TryFreezeImageSource(ImageSource image, string context, Action<string>? log)

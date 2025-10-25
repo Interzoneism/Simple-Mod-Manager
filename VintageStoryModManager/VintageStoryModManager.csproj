@@ -27,11 +27,15 @@
     <FileVersion>$(AppFileVersion)</FileVersion>                   <!-- File version (Details tab) -->
     <InformationalVersion>$(AppVersion)</InformationalVersion>     <!-- About box/semver -->
   </PropertyGroup>
+  <ItemGroup>
+    <None Remove="soil.png" />
+    <None Remove="Views\soilcorrect.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Remove="Resources\Themes\LightTheme.xaml" />
+  </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="configicon.png" />
-    <Resource Include="webicon.png" />
-    <Resource Include="deleteicon.png" />
     <Resource Include="warning.png" />
     <Resource Include="error.png" />
     <Resource Include="mod-default.png">
@@ -42,11 +46,11 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="ModernWpfUI" Version="0.9.6" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.11.61" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="ViewModels\" />
-    <Folder Include="Views\" />
   </ItemGroup>
 
   <ItemGroup>

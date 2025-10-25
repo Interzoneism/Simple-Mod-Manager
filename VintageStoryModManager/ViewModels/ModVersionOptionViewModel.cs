@@ -44,8 +44,20 @@ public sealed class ModVersionOptionViewModel : ObservableObject
     public bool IsInstalled
     {
         get => _isInstalled;
-        set => SetProperty(ref _isInstalled, value);
+        set
+        {
+            if (SetProperty(ref _isInstalled, value))
+            {
+                OnPropertyChanged(nameof(SelectionDisplay));
+            }
+        }
     }
+
+    public string SelectionDisplay => IsInstalled
+        ? $"{VersionDisplay} (Installed)"
+        : VersionDisplay;
+
+    public override string ToString() => SelectionDisplay;
 
     public static ModVersionOptionViewModel FromRelease(ModReleaseInfo release, bool isInstalled)
     {

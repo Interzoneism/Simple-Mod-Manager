@@ -75,6 +75,29 @@ internal static class ModManifestCacheService
         }
     }
 
+    public static void ClearCache()
+    {
+        lock (IndexLock)
+        {
+            _index = null;
+        }
+
+        string? root = GetMetadataRoot();
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(root, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            throw new IOException($"Failed to delete the mod metadata cache at {root}.", ex);
+        }
+    }
+
     public static void StoreManifest(
         string sourcePath,
         DateTime lastWriteTimeUtc,

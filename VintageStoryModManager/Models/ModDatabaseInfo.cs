@@ -45,4 +45,6 @@ public sealed class ModDatabaseInfo
     public IReadOnlyList<ModReleaseInfo> Releases { get; init; } = Array.Empty<ModReleaseInfo>();
 
     public bool IsOfflineOnly { get; init; }
+
+    public string? Side { get; init; }
 }

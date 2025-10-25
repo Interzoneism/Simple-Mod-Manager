@@ -19,6 +19,7 @@ internal sealed class ModDatabaseCacheService
     private const int CacheSchemaVersion = 2;
     private const int MinimumSupportedCacheSchemaVersion = 1;
     private const string AnyGameVersionToken = "any";
+    private static readonly TimeSpan CacheEntryMaxAge = TimeSpan.FromHours(12);
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -29,10 +30,29 @@ internal sealed class ModDatabaseCacheService
 
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new(StringComparer.OrdinalIgnoreCase);
 
+    internal static void ClearCacheDirectory()
+    {
+        string? baseDirectory = ModCacheLocator.GetModDatabaseCacheDirectory();
+        if (string.IsNullOrWhiteSpace(baseDirectory) || !Directory.Exists(baseDirectory))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(baseDirectory, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            throw new IOException($"Failed to delete the mod database cache at {baseDirectory}.", ex);
+        }
+    }
+
     public async Task<ModDatabaseInfo?> TryLoadAsync(
         string modId,
         string? normalizedGameVersion,
         string? installedModVersion,
+        bool allowExpiredEntryRefresh,
         CancellationToken cancellationToken)
     {
         string? cachePath = GetCacheFilePath(modId, normalizedGameVersion);
@@ -53,6 +73,19 @@ internal sealed class ModDatabaseCacheService
                 || !IsSupportedSchemaVersion(cached.SchemaVersion)
                 || !IsGameVersionMatch(cached.GameVersion, normalizedGameVersion))
             {
+                return null;
+            }
+
+            if (IsCacheEntryExpired(cached.CachedUtc))
+            {
+                bool canRefreshExpiredEntry = allowExpiredEntryRefresh
+                    && !InternetAccessManager.IsInternetAccessDisabled;
+
+                if (!canRefreshExpiredEntry)
+                {
+                    return ConvertToDatabaseInfo(cached, normalizedGameVersion, installedModVersion);
+                }
+
                 return null;
             }
 
@@ -261,7 +294,8 @@ internal sealed class ModDatabaseCacheService
             LastReleasedUtc = info.LastReleasedUtc,
             CreatedUtc = info.CreatedUtc,
             RequiredGameVersions = info.RequiredGameVersions?.ToArray() ?? Array.Empty<string>(),
-            Releases = releaseModels.ToArray()
+            Releases = releaseModels.ToArray(),
+            Side = info.Side
         };
     }
 
@@ -305,7 +339,8 @@ internal sealed class ModDatabaseCacheService
             CreatedUtc = cached.CreatedUtc,
             LatestRelease = latestRelease,
             LatestCompatibleRelease = latestCompatibleRelease,
-            Releases = releases
+            Releases = releases,
+            Side = cached.Side
         };
     }
 
@@ -453,6 +488,17 @@ internal sealed class ModDatabaseCacheService
         return gate;
     }
 
+    private static bool IsCacheEntryExpired(DateTime cachedUtc)
+    {
+        if (cachedUtc == default)
+        {
+            return true;
+        }
+
+        DateTime expirationThreshold = DateTime.UtcNow - CacheEntryMaxAge;
+        return cachedUtc < expirationThreshold;
+    }
+
     private static bool IsSupportedSchemaVersion(int schemaVersion)
     {
         return schemaVersion >= MinimumSupportedCacheSchemaVersion
@@ -526,6 +572,8 @@ internal sealed class ModDatabaseCacheService
         public string[] RequiredGameVersions { get; init; } = Array.Empty<string>();
 
         public CachedModRelease[] Releases { get; init; } = Array.Empty<CachedModRelease>();
+
+        public string? Side { get; init; }
     }
 
     private sealed class CachedModRelease

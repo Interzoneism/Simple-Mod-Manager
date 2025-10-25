@@ -10,11 +10,13 @@
         WindowStyle="SingleBorderWindow"
         ShowInTaskbar="False"
         Loaded="Window_OnLoaded"
-        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Window.Resources>
-    <Grid Margin="20">
+    <Grid Margin="20"
+          Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+          TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -35,13 +37,23 @@
                  Grid.Column="1"
                  Margin="0,0,0,12"
                  MinWidth="220"
-                 TextChanged="NameTextBox_OnTextChanged" />
+                 TextChanged="NameTextBox_OnTextChanged"
+                 Background="{DynamicResource Brush.Dialog.TextBox.Background}"
+                 BorderBrush="{DynamicResource Brush.Dialog.TextBox.Border}"
+                 SelectionBrush="{DynamicResource Brush.Dialog.TextBox.SelectionBackground}"
+                 SelectionTextBrush="{DynamicResource Brush.Dialog.TextBox.SelectionForeground}"
+                 CaretBrush="{DynamicResource Brush.Dialog.TextBox.Caret}" />
 
         <TextBlock Text="Version:" Grid.Row="1" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" />
         <TextBox x:Name="VersionTextBox"
                  Grid.Row="1"
                  Grid.Column="1"
-                 Margin="0,0,0,12" />
+                 Margin="0,0,0,12"
+                 Background="{DynamicResource Brush.Dialog.TextBox.Background}"
+                 BorderBrush="{DynamicResource Brush.Dialog.TextBox.Border}"
+                 SelectionBrush="{DynamicResource Brush.Dialog.TextBox.SelectionBackground}"
+                 SelectionTextBrush="{DynamicResource Brush.Dialog.TextBox.SelectionForeground}"
+                 CaretBrush="{DynamicResource Brush.Dialog.TextBox.Caret}" />
 
         <TextBlock Text="Description:" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,0,6" />
         <TextBox x:Name="DescriptionTextBox"
@@ -52,7 +64,12 @@
                  TextWrapping="Wrap"
                  AcceptsReturn="True"
                  MaxLength="190"
-                 VerticalScrollBarVisibility="Auto" />
+                 VerticalScrollBarVisibility="Auto"
+                 Background="{DynamicResource Brush.Dialog.TextBox.Background}"
+                 BorderBrush="{DynamicResource Brush.Dialog.TextBox.Border}"
+                 SelectionBrush="{DynamicResource Brush.Dialog.TextBox.SelectionBackground}"
+                 SelectionTextBrush="{DynamicResource Brush.Dialog.TextBox.SelectionForeground}"
+                 CaretBrush="{DynamicResource Brush.Dialog.TextBox.Caret}" />
 
         <Grid Grid.Row="0" Grid.Column="3" Grid.RowSpan="4">
             <Grid.RowDefinitions>
@@ -89,12 +106,16 @@
 
             <Border Grid.Row="2"
                     BorderThickness="1"
-                    BorderBrush="{DynamicResource IMM.BorderBrush}"
+                    BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                    Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
                     Padding="6">
                 <ListBox ItemsSource="{Binding ConfigOptions, RelativeSource={RelativeSource AncestorType=Window}}"
                          Visibility="{Binding HasConfigOptions, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}"
                          Height="220"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                         BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                         Foreground="{DynamicResource Brush.Text.Primary}">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="MinHeight" Value="26" />
@@ -127,7 +148,8 @@
             <TextBlock Grid.Row="3"
                        Text="No mods with saved configuration paths were found."
                        TextWrapping="Wrap"
-                       Foreground="{DynamicResource IMM.SubtleForegroundBrush}"
+                       Foreground="{DynamicResource Brush.Text.Primary}"
+                       Opacity="0.6"
                        Margin="0,8,0,0">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">

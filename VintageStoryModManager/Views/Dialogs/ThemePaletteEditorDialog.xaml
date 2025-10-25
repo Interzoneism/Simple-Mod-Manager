@@ -1,0 +1,78 @@
+<Window x:Class="VintageStoryModManager.Views.Dialogs.ThemePaletteEditorDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Custom Theme Palette"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner"
+        MinWidth="540"
+        MinHeight="360"
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}"
+        ResizeMode="CanResizeWithGrip">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <TextBlock Text="Select a color to customise the current theme palette. Changes apply immediately."
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,16" />
+        <ListView Grid.Row="1"
+                  ItemsSource="{Binding PaletteItems}"
+                  MinHeight="220"
+                  VerticalAlignment="Stretch">
+            <ListView.Resources>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="Margin" Value="0,0,0,8" />
+                </Style>
+            </ListView.Resources>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding DisplayName}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0" />
+                        <Border Grid.Column="1"
+                                Width="42"
+                                Height="22"
+                                Margin="0,0,12,0"
+                                CornerRadius="4"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource Brush.Border.Default}"
+                                Background="{Binding PreviewBrush}" />
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding HexValue}"
+                                   FontFamily="Consolas"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0" />
+                        <Button Grid.Column="3"
+                                Content="Change..."
+                                Padding="14,4"
+                                Command="{Binding SelectColorCommand}" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button Width="96"
+                    Height="32"
+                    Margin="0,0,12,0"
+                    Content="Reset"
+                    Click="ResetButton_OnClick" />
+            <Button Width="96"
+                    Height="32"
+                    Content="Close"
+                    IsDefault="True"
+                    Click="CloseButton_OnClick" />
+        </StackPanel>
+    </Grid>
+</Window>

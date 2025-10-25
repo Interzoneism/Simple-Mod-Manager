@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -28,7 +29,9 @@ namespace VintageStoryModManager.ViewModels;
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
     private static readonly TimeSpan ModDatabaseSearchDebounce = TimeSpan.FromMilliseconds(320);
+    private static readonly TimeSpan BusyStateReleaseDelay = TimeSpan.FromMilliseconds(600);
     private const string InternetAccessDisabledStatusMessage = "Enable Internet Access in the File menu to use.";
+    private const string NoCompatibleModDatabaseResultsStatusMessage = "No compatible mods found in the mod database.";
     private const int MaxConcurrentDatabaseRefreshes = 4;
     private const int MaxNewModsRecentMonths = 24;
     private const int InstalledModsIncrementalBatchSize = 32;
@@ -82,6 +85,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private ModDatabaseAutoLoadMode _modDatabaseAutoLoadMode = ModDatabaseAutoLoadMode.TotalDownloads;
     private readonly object _busyStateLock = new();
     private int _busyOperationCount;
+    private bool _hasActiveBusyScope;
+    private CancellationTokenSource? _busyReleaseCts;
     private bool _isLoadingMods;
     private bool _isLoadingModDetails;
     private int _pendingModDetailsRefreshCount;
@@ -108,6 +113,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _hasRequestedAdditionalModDatabaseResults;
     private bool _hasSelectedTags;
     private bool _disposed;
+    private bool _onlyShowCompatibleModDatabaseResults;
 
     public MainViewModel(
         string dataDirectory,
@@ -115,7 +121,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         int newModsRecentMonths,
         ModDatabaseAutoLoadMode initialModDatabaseAutoLoadMode = ModDatabaseAutoLoadMode.TotalDownloads,
         string? gameDirectory = null,
-        bool excludeInstalledModDatabaseResults = false)
+        bool excludeInstalledModDatabaseResults = false,
+        bool onlyShowCompatibleModDatabaseResults = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
 
@@ -145,12 +152,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SelectedSortOption?.Apply(ModsView);
 
         _excludeInstalledModDatabaseResults = excludeInstalledModDatabaseResults;
+        _onlyShowCompatibleModDatabaseResults = onlyShowCompatibleModDatabaseResults;
 
         _clearSearchCommand = new RelayCommand(() => SearchText = string.Empty, () => HasSearchText);
         ClearSearchCommand = _clearSearchCommand;
 
         _showInstalledModsCommand = new RelayCommand(() => SetViewSection(ViewSection.InstalledMods));
-        _showModDatabaseCommand = new RelayCommand(() => SetViewSection(ViewSection.ModDatabase));
+        _showModDatabaseCommand = new RelayCommand(
+            () => SetViewSection(ViewSection.ModDatabase),
+            () => !InternetAccessManager.IsInternetAccessDisabled);
         _showCloudModlistsCommand = new RelayCommand(
             () => SetViewSection(ViewSection.CloudModlists),
             () => !InternetAccessManager.IsInternetAccessDisabled);
@@ -216,16 +226,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _isBusy, value);
     }
 
+    public IDisposable EnterBusyScope()
+    {
+        return BeginBusyScope();
+    }
+
     public bool IsLoadingMods
     {
         get => _isLoadingMods;
-        private set => SetProperty(ref _isLoadingMods, value);
+        private set
+        {
+            if (SetProperty(ref _isLoadingMods, value))
+            {
+                RecalculateIsBusy();
+            }
+        }
     }
 
     public bool IsLoadingModDetails
     {
         get => _isLoadingModDetails;
-        private set => SetProperty(ref _isLoadingModDetails, value);
+        private set
+        {
+            if (SetProperty(ref _isLoadingModDetails, value))
+            {
+                RecalculateIsBusy();
+            }
+        }
     }
 
     public bool IsCompactView
@@ -275,6 +302,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => !ExcludeInstalledModDatabaseResults;
         set => ExcludeInstalledModDatabaseResults = !value;
+    }
+
+    public bool OnlyShowCompatibleModDatabaseResults
+    {
+        get => _onlyShowCompatibleModDatabaseResults;
+        set
+        {
+            if (SetProperty(ref _onlyShowCompatibleModDatabaseResults, value))
+            {
+                if (_viewSection == ViewSection.ModDatabase)
+                {
+                    TriggerModDatabaseSearch();
+                }
+            }
+        }
     }
 
     public bool IsModInfoExpanded
@@ -408,6 +450,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _isModDatabaseLoading, value))
             {
                 NotifyLoadMoreCommandCanExecuteChanged();
+                RecalculateIsBusy();
             }
         }
     }
@@ -464,6 +507,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (_viewSection == section)
         {
+            return;
+        }
+
+        if (section == ViewSection.ModDatabase && InternetAccessManager.IsInternetAccessDisabled)
+        {
+            SetStatus(InternetAccessDisabledStatusMessage, false);
             return;
         }
 
@@ -1102,6 +1151,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         IsLoadingMods = true;
         using var busyScope = BeginBusyScope();
         SetStatus("Loading mods...", false);
+
+        // Yield once so the UI thread has a chance to process the busy-state
+        // notification before we start potentially expensive work below. This
+        // keeps the refresh progress ring responsive instead of appearing to
+        // freeze when the refresh begins.
+        await Task.Yield();
 
         try
         {
@@ -2044,6 +2099,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
 
             bool excludeInstalled = ExcludeInstalledModDatabaseResults;
+            bool onlyShowCompatible = OnlyShowCompatibleModDatabaseResults;
             HashSet<string> installedModIds = await GetInstalledModIdsAsync(cancellationToken).ConfigureAwait(false);
             int desiredResultCount = _modDatabaseCurrentResultLimit;
             int queryLimit = desiredResultCount;
@@ -2187,11 +2243,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
 
             var entries = finalResults
-                .Select(result => new
-                {
-                    Entry = CreateSearchResultEntry(result),
-                    IsInstalled = IsResultInstalled(result, installedModIds)
-                })
+                .Select(result => (
+                    Entry: CreateSearchResultEntry(result),
+                    IsInstalled: IsResultInstalled(result, installedModIds)))
                 .ToList();
 
             if (entries.Count == 0)
@@ -2208,7 +2262,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 .Select(item => CreateSearchResultViewModel(item.Entry, item.IsInstalled))
                 .ToList();
 
-            await UpdateSearchResultsAsync(viewModels, cancellationToken).ConfigureAwait(false);
+            if (onlyShowCompatible)
+            {
+                await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await UpdateSearchResultsAsync(viewModels, cancellationToken).ConfigureAwait(false);
+            }
 
             await InvokeOnDispatcherAsync(
                     () =>
@@ -2296,6 +2357,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (cancellationToken.IsCancellationRequested)
             {
                 return;
+            }
+
+            if (onlyShowCompatible)
+            {
+                RemoveIncompatibleModDatabaseResults(entries, viewModels);
+
+                if (viewModels.Count == 0)
+                {
+                    await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken).ConfigureAwait(false);
+
+                    await InvokeOnDispatcherAsync(
+                            () => SetStatus(NoCompatibleModDatabaseResultsStatusMessage, false),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    return;
+                }
+
+                await UpdateSearchResultsAsync(viewModels, cancellationToken).ConfigureAwait(false);
             }
 
             await InvokeOnDispatcherAsync(
@@ -2392,11 +2472,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private IDisposable BeginBusyScope()
     {
         bool isBusy;
+        CancellationTokenSource? pendingRelease = null;
         lock (_busyStateLock)
         {
             _busyOperationCount++;
             isBusy = _busyOperationCount > 0;
+
+            if (_busyReleaseCts is not null)
+            {
+                pendingRelease = _busyReleaseCts;
+                _busyReleaseCts = null;
+            }
         }
+
+        pendingRelease?.Cancel();
 
         UpdateIsBusy(isBusy);
         return new BusyScope(this);
@@ -2405,6 +2494,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void EndBusyScope()
     {
         bool isBusy;
+        CancellationTokenSource? pendingRelease = null;
+        CancellationTokenSource? releaseToSchedule = null;
         lock (_busyStateLock)
         {
             if (_busyOperationCount > 0)
@@ -2413,13 +2504,91 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
 
             isBusy = _busyOperationCount > 0;
+            if (!isBusy)
+            {
+                pendingRelease = _busyReleaseCts;
+                releaseToSchedule = new CancellationTokenSource();
+                _busyReleaseCts = releaseToSchedule;
+            }
         }
 
-        UpdateIsBusy(isBusy);
+        pendingRelease?.Cancel();
+
+        if (isBusy)
+        {
+            UpdateIsBusy(true);
+        }
+        else
+        {
+            ScheduleBusyRelease(releaseToSchedule);
+        }
+    }
+
+    private void ScheduleBusyRelease(CancellationTokenSource? releaseCts)
+    {
+        if (releaseCts is null)
+        {
+            UpdateIsBusy(false);
+            return;
+        }
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(BusyStateReleaseDelay, releaseCts.Token).ConfigureAwait(false);
+
+                lock (_busyStateLock)
+                {
+                    if (!ReferenceEquals(_busyReleaseCts, releaseCts))
+                    {
+                        return;
+                    }
+
+                    _busyReleaseCts = null;
+                }
+
+                UpdateIsBusy(false);
+            }
+            catch (TaskCanceledException)
+            {
+            }
+            finally
+            {
+                releaseCts.Dispose();
+            }
+        });
     }
 
     private void UpdateIsBusy(bool isBusy)
     {
+        if (System.Windows.Application.Current?.Dispatcher is Dispatcher dispatcher)
+        {
+            if (dispatcher.CheckAccess())
+            {
+                _hasActiveBusyScope = isBusy;
+                RecalculateIsBusy();
+            }
+            else
+            {
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _hasActiveBusyScope = isBusy;
+                    RecalculateIsBusy();
+                }));
+            }
+        }
+        else
+        {
+            _hasActiveBusyScope = isBusy;
+            RecalculateIsBusy();
+        }
+    }
+
+    private void RecalculateIsBusy()
+    {
+        bool isBusy = _hasActiveBusyScope || _isLoadingMods || _isLoadingModDetails || _isModDatabaseLoading;
+
         if (System.Windows.Application.Current?.Dispatcher is Dispatcher dispatcher)
         {
             if (dispatcher.CheckAccess())
@@ -2480,19 +2649,40 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private string BuildModDatabaseResultsMessage(bool hasSearchTokens, int resultCount)
     {
+        string compatibilityQualifier = OnlyShowCompatibleModDatabaseResults ? " compatible" : string.Empty;
+
         if (hasSearchTokens)
         {
-            return $"Found {resultCount} mods in the mod database.";
+            return $"Found {resultCount}{compatibilityQualifier} mods in the mod database.";
         }
 
         return _modDatabaseAutoLoadMode switch
         {
             ModDatabaseAutoLoadMode.DownloadsLastThirtyDays =>
-                $"Showing {resultCount} of the most downloaded mods from the last 30 days.",
+                $"Showing {resultCount}{compatibilityQualifier} of the most downloaded mods from the last 30 days.",
             ModDatabaseAutoLoadMode.DownloadsNewModsRecentMonths =>
-                $"Showing {resultCount} of the most downloaded newly created mods {BuildRecentMonthsPhrase()}.",
-            _ => $"Showing {resultCount} of the most downloaded mods."
+                $"Showing {resultCount}{compatibilityQualifier} of the most downloaded newly created mods {BuildRecentMonthsPhrase()}.",
+            _ => $"Showing {resultCount}{compatibilityQualifier} of the most downloaded mods."
         };
+    }
+
+    private static void RemoveIncompatibleModDatabaseResults(
+        IList<(ModEntry Entry, bool IsInstalled)> entries,
+        IList<ModListItemViewModel> viewModels)
+    {
+        if (entries.Count != viewModels.Count)
+        {
+            return;
+        }
+
+        for (int i = viewModels.Count - 1; i >= 0; i--)
+        {
+            if (!viewModels[i].LatestReleaseIsCompatible)
+            {
+                entries.RemoveAt(i);
+                viewModels.RemoveAt(i);
+            }
+        }
     }
 
     private void UpdateLoadedModsStatus()
@@ -2588,6 +2778,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private string BuildNoModDatabaseResultsMessage(bool hasSearchTokens)
     {
+        if (OnlyShowCompatibleModDatabaseResults)
+        {
+            return NoCompatibleModDatabaseResultsStatusMessage;
+        }
+
         if (hasSearchTokens)
         {
             return "No mods found in the mod database.";
@@ -2777,7 +2972,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Follows = result.Follows,
             TrendingPoints = result.TrendingPoints,
             LogoUrl = result.LogoUrl,
-            LastReleasedUtc = result.LastReleasedUtc
+            LastReleasedUtc = result.LastReleasedUtc,
+            Side = result.Side
         };
 
         return new ModEntry
@@ -3215,23 +3411,38 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         await limiter.WaitAsync().ConfigureAwait(false);
 
+        using var logScope = StatusLogService.BeginDebugScope(entry.Name, entry.ModId, "metadata");
+        bool cacheHit = false;
+        string source = string.Empty;
+        int tagCount = 0;
+        int releaseCount = 0;
+
         try
         {
             ModDatabaseInfo? cachedInfo = await _databaseService
                 .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion)
                 .ConfigureAwait(false);
 
+            cacheHit = cachedInfo != null;
+
             if (cachedInfo != null)
             {
                 await ApplyDatabaseInfoAsync(entry, cachedInfo, loadLogoImmediately: false).ConfigureAwait(false);
+                tagCount = cachedInfo.Tags?.Count ?? 0;
+                releaseCount = cachedInfo.Releases?.Count ?? 0;
+
                 if (InternetAccessManager.IsInternetAccessDisabled)
                 {
+                    source = "cache";
                     return;
                 }
             }
             else if (InternetAccessManager.IsInternetAccessDisabled)
             {
                 await PopulateOfflineInfoForEntryAsync(entry).ConfigureAwait(false);
+                tagCount = entry.DatabaseInfo?.Tags?.Count ?? 0;
+                releaseCount = entry.DatabaseInfo?.Releases?.Count ?? 0;
+                source = "offline";
                 return;
             }
 
@@ -3244,24 +3455,45 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
             catch (Exception)
             {
+                source = cacheHit ? "cache" : "error";
                 return;
             }
 
             if (info is null)
             {
-                if (InternetAccessManager.IsInternetAccessDisabled)
+                if (cacheHit)
                 {
-                    await PopulateOfflineInfoForEntryAsync(entry).ConfigureAwait(false);
+                    source = "cache";
+                    return;
                 }
 
+                await PopulateOfflineInfoForEntryAsync(entry).ConfigureAwait(false);
+                tagCount = entry.DatabaseInfo?.Tags?.Count ?? 0;
+                releaseCount = entry.DatabaseInfo?.Releases?.Count ?? 0;
+                source = "offline";
                 return;
             }
 
             await ApplyDatabaseInfoAsync(entry, info).ConfigureAwait(false);
+            tagCount = info.Tags?.Count ?? tagCount;
+            releaseCount = info.Releases?.Count ?? releaseCount;
+            source = info.IsOfflineOnly ? "offline" : "net";
         }
         finally
         {
             limiter.Release();
+            if (logScope != null)
+            {
+                logScope.SetCacheStatus(cacheHit);
+                if (!string.IsNullOrWhiteSpace(source))
+                {
+                    logScope.SetDetail("src", source);
+                }
+
+                logScope.SetDetail("tags", tagCount);
+                logScope.SetDetail("rel", releaseCount);
+            }
+
             OnModDetailsRefreshCompleted();
         }
     }
@@ -3381,7 +3613,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             LatestCompatibleRelease = latestCompatibleRelease ?? latestRelease,
             Releases = releases,
             LastReleasedUtc = lastUpdatedUtc,
-            IsOfflineOnly = true
+            IsOfflineOnly = true,
+            Side = entry.Side
         };
     }
 
@@ -3434,7 +3667,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             LatestRelease = latestRelease,
             LatestCompatibleRelease = latestCompatibleRelease ?? latestRelease,
             Releases = mergedReleases,
-            IsOfflineOnly = offlineInfo.IsOfflineOnly && (cachedInfo?.IsOfflineOnly ?? true)
+            IsOfflineOnly = offlineInfo.IsOfflineOnly && (cachedInfo?.IsOfflineOnly ?? true),
+            Side = cachedInfo?.Side ?? offlineInfo.Side
         };
     }
 
@@ -3902,8 +4136,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             mod.RefreshInternetAccessDependentState();
         }
 
+        _showModDatabaseCommand.NotifyCanExecuteChanged();
         _showCloudModlistsCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanAccessCloudModlists));
+
+        if (InternetAccessManager.IsInternetAccessDisabled && _viewSection == ViewSection.ModDatabase)
+        {
+            SetStatus(InternetAccessDisabledStatusMessage, false);
+            SetViewSection(ViewSection.InstalledMods);
+            return;
+        }
 
         if (InternetAccessManager.IsInternetAccessDisabled && _viewSection == ViewSection.CloudModlists)
         {
