@@ -331,6 +331,50 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public bool HasNewerReleaseChangelogs => _newerReleaseChangelogs.Count > 0;
 
+    public IReadOnlyList<ReleaseChangelog> GetChangelogEntriesForUpgrade(string? targetVersion)
+    {
+        if (_releases.Count == 0 || string.IsNullOrWhiteSpace(targetVersion))
+        {
+            return Array.Empty<ReleaseChangelog>();
+        }
+
+        string trimmedTarget = targetVersion.Trim();
+        string? normalizedTarget = VersionStringUtility.Normalize(targetVersion);
+
+        string? installedVersion = Version;
+        string? normalizedInstalled = VersionStringUtility.Normalize(installedVersion);
+
+        var entries = new List<ReleaseChangelog>();
+        bool capturing = false;
+
+        foreach (ModReleaseInfo release in _releases)
+        {
+            if (!capturing && DoesReleaseMatchVersion(release, trimmedTarget, normalizedTarget))
+            {
+                capturing = true;
+            }
+
+            if (!capturing)
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(installedVersion)
+                && DoesReleaseMatchVersion(release, installedVersion.Trim(), normalizedInstalled))
+            {
+                break;
+            }
+
+            string? changelog = release.Changelog?.Trim();
+            if (!string.IsNullOrEmpty(changelog))
+            {
+                entries.Add(new ReleaseChangelog(release.Version, changelog));
+            }
+        }
+
+        return entries.Count == 0 ? Array.Empty<ReleaseChangelog>() : entries;
+    }
+
     public string InstallButtonToolTip
     {
         get
@@ -1163,6 +1207,24 @@ public sealed class ModListItemViewModel : ObservableObject
         if (normalizedInstalled != null && !string.IsNullOrWhiteSpace(release.NormalizedVersion))
         {
             return string.Equals(release.NormalizedVersion, normalizedInstalled, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    private static bool DoesReleaseMatchVersion(ModReleaseInfo release, string trimmedVersion, string? normalizedVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(release.Version)
+            && string.Equals(release.Version.Trim(), trimmedVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(release.NormalizedVersion)
+            && normalizedVersion != null
+            && string.Equals(release.NormalizedVersion, normalizedVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
         }
 
         return false;

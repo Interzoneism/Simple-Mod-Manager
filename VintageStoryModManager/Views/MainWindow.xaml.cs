@@ -61,6 +61,10 @@ public partial class MainWindow : Window
     private const string CloudModListCacheDirectoryName = "Modlists (Cloud Cache)";
     private const string BackupDirectoryName = "Backups";
     private const int AutomaticConfigMaxWordDistance = 2;
+    private static readonly HttpClient ConnectivityTestHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(10)
+    };
 
     private readonly record struct PresetLoadOptions(bool ApplyModStatus, bool ApplyModVersions, bool ForceExclusive);
 
@@ -73,6 +77,21 @@ public partial class MainWindow : Window
     private static readonly PresetLoadOptions StandardPresetLoadOptions = new(true, false, false);
     private static readonly PresetLoadOptions ModListLoadOptions = new(true, true, true);
     private readonly record struct ManagerDeletionResult(List<string> DeletedPaths, List<string> FailedPaths);
+
+    private enum InstalledModsColumn
+    {
+        Active,
+        Icon,
+        Name,
+        Installed,
+        Version,
+        LatestVersion,
+        Downloads,
+        Authors,
+        Tags,
+        Status,
+        Side
+    }
 
     private static readonly DependencyProperty BoundModProperty =
         DependencyProperty.RegisterAttached(
@@ -132,6 +151,8 @@ public partial class MainWindow : Window
     private CloudModlistListEntry? _selectedCloudModlist;
     private string? _recentLocalModBackupDirectory;
     private List<string>? _recentLocalModBackupModNames;
+    private readonly Dictionary<InstalledModsColumn, bool> _installedColumnVisibilityPreferences = new();
+    private bool _isSearchingModDatabase;
 
 
     public MainWindow()
@@ -140,9 +161,14 @@ public partial class MainWindow : Window
             RefreshModsWithErrorHandlingAsync,
             AsyncRelayCommandOptions.AllowConcurrentExecutions);
 
+        _userConfiguration = new UserConfigurationService();
+
         InitializeComponent();
 
-        _userConfiguration = new UserConfigurationService();
+        UpdateModlistLoadingUiState();
+
+        InitializeColumnVisibilityMenu();
+
         ApplyStoredWindowDimensions();
         CacheAllVersionsMenuItem.IsChecked = _userConfiguration.CacheAllVersionsLocally;
         DisableInternetAccessMenuItem.IsChecked = _userConfiguration.DisableInternetAccess;
@@ -189,6 +215,84 @@ public partial class MainWindow : Window
         InternetAccessManager.InternetAccessChanged += InternetAccessManager_OnInternetAccessChanged;
 
         UpdateCloudModlistControlsEnabledState();
+    }
+
+    private void InitializeColumnVisibilityMenu()
+    {
+        RegisterColumnMenuItem(ActiveColumnMenuItem, InstalledModsColumn.Active);
+        RegisterColumnMenuItem(IconColumnMenuItem, InstalledModsColumn.Icon);
+        RegisterColumnMenuItem(NameColumnMenuItem, InstalledModsColumn.Name);
+        RegisterColumnMenuItem(VersionColumnMenuItem, InstalledModsColumn.Version);
+        RegisterColumnMenuItem(LatestVersionColumnMenuItem, InstalledModsColumn.LatestVersion);
+        RegisterColumnMenuItem(AuthorsColumnMenuItem, InstalledModsColumn.Authors);
+        RegisterColumnMenuItem(TagsColumnMenuItem, InstalledModsColumn.Tags);
+        RegisterColumnMenuItem(StatusColumnMenuItem, InstalledModsColumn.Status);
+        RegisterColumnMenuItem(SideColumnMenuItem, InstalledModsColumn.Side);
+
+        UpdateColumnVisibility();
+    }
+
+    private void RegisterColumnMenuItem(MenuItem? menuItem, InstalledModsColumn column)
+    {
+        if (menuItem == null)
+        {
+            return;
+        }
+
+        menuItem.Tag = column;
+        if (_userConfiguration.GetInstalledColumnVisibility(column.ToString()) is bool storedVisibility)
+        {
+            menuItem.IsChecked = storedVisibility;
+        }
+        _installedColumnVisibilityPreferences[column] = menuItem.IsChecked;
+        menuItem.Checked += InstalledModsColumnMenuItem_OnChecked;
+        menuItem.Unchecked += InstalledModsColumnMenuItem_OnChecked;
+    }
+
+    private void InstalledModsColumnMenuItem_OnChecked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem || menuItem.Tag is not InstalledModsColumn column)
+        {
+            return;
+        }
+
+        _installedColumnVisibilityPreferences[column] = menuItem.IsChecked;
+        _userConfiguration.SetInstalledColumnVisibility(column.ToString(), menuItem.IsChecked);
+        UpdateColumnVisibility();
+    }
+
+    private void UpdateColumnVisibility()
+    {
+        bool isSearching = _isSearchingModDatabase;
+        bool isCompactView = _viewModel?.IsCompactView == true;
+
+        SetColumnVisibility(ActiveColumn, InstalledModsColumn.Active, !isSearching);
+        SetColumnVisibility(IconColumn, InstalledModsColumn.Icon, !isSearching && !isCompactView);
+        SetColumnVisibility(NameColumn, InstalledModsColumn.Name, true);
+        SetColumnVisibility(InstalledColumn, InstalledModsColumn.Installed, isSearching);
+        SetColumnVisibility(VersionColumn, InstalledModsColumn.Version, !isSearching);
+        SetColumnVisibility(LatestVersionColumn, InstalledModsColumn.LatestVersion, true);
+        SetColumnVisibility(DownloadsColumn, InstalledModsColumn.Downloads, isSearching);
+        SetColumnVisibility(AuthorsColumn, InstalledModsColumn.Authors, true);
+        SetColumnVisibility(TagsColumn, InstalledModsColumn.Tags, true);
+        SetColumnVisibility(StatusColumn, InstalledModsColumn.Status, !isSearching);
+        SetColumnVisibility(SideColumn, InstalledModsColumn.Side, true);
+    }
+
+    private void SetColumnVisibility(DataGridColumn? column, InstalledModsColumn columnKey, bool isContextuallyVisible)
+    {
+        if (column == null)
+        {
+            return;
+        }
+
+        bool isPreferredVisible = _installedColumnVisibilityPreferences.TryGetValue(columnKey, out bool preference)
+            ? preference
+            : true;
+
+        column.Visibility = isPreferredVisible && isContextuallyVisible
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -256,7 +360,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            await Task.Run(ClearManagerCaches).ConfigureAwait(true);
+            await Task.Run(() => ClearManagerCaches(preserveModCache: false)).ConfigureAwait(true);
             await RefreshDeleteCachedModsMenuHeaderAsync().ConfigureAwait(true);
 
             WpfMessageBox.Show(
@@ -277,9 +381,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private Task EnsureInstalledModsCachedAsync(MainViewModel viewModel)
+    private Task EnsureInstalledModsCachedAsync(MainViewModel viewModel, bool ignoreUserSetting = false)
     {
-        if (viewModel is null || !_userConfiguration.CacheAllVersionsLocally)
+        if (viewModel is null || (!_userConfiguration.CacheAllVersionsLocally && !ignoreUserSetting))
         {
             return Task.CompletedTask;
         }
@@ -797,50 +901,13 @@ public partial class MainWindow : Window
 
     private void ApplyCompactViewState(bool isCompactView)
     {
-        if (IconColumn == null)
-        {
-            return;
-        }
-
-        if (_viewModel?.SearchModDatabase == true)
-        {
-            IconColumn.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        IconColumn.Visibility = isCompactView ? Visibility.Collapsed : Visibility.Visible;
+        UpdateColumnVisibility();
     }
 
     private void UpdateSearchColumnVisibility(bool isSearchingModDatabase)
     {
-        Visibility visibility = isSearchingModDatabase ? Visibility.Collapsed : Visibility.Visible;
-
-        if (ActiveColumn != null)
-        {
-            ActiveColumn.Visibility = visibility;
-        }
-
-        if (StatusColumn != null)
-        {
-            StatusColumn.Visibility = visibility;
-        }
-
-        if (VersionColumn != null)
-        {
-            VersionColumn.Visibility = visibility;
-        }
-
-        if (InstalledColumn != null)
-        {
-            InstalledColumn.Visibility = isSearchingModDatabase ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        if (DownloadsColumn != null)
-        {
-            DownloadsColumn.Visibility = isSearchingModDatabase ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        ApplyCompactViewState(_viewModel?.IsCompactView ?? false);
+        _isSearchingModDatabase = isSearchingModDatabase;
+        UpdateColumnVisibility();
         UpdateSearchSortingBehavior(isSearchingModDatabase);
     }
 
@@ -2571,6 +2638,11 @@ public partial class MainWindow : Window
 
     private async Task<bool> TryHandleModListKeyDownAsync(System.Windows.Input.KeyEventArgs e)
     {
+        if (_isApplyingPreset)
+        {
+            return true;
+        }
+
         if (_viewModel?.SearchModDatabase == true)
         {
             return false;
@@ -2603,6 +2675,12 @@ public partial class MainWindow : Window
 
     private void ModsDataGrid_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (_isApplyingPreset)
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Handled)
         {
             return;
@@ -2681,6 +2759,12 @@ public partial class MainWindow : Window
 
     private void ModsDataGridRow_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (_isApplyingPreset)
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (ShouldIgnoreRowSelection(e.OriginalSource as DependencyObject))
         {
             return;
@@ -2698,6 +2782,12 @@ public partial class MainWindow : Window
 
     private void ModDatabaseCard_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (_isApplyingPreset)
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (ShouldIgnoreRowSelection(e.OriginalSource as DependencyObject))
         {
             return;
@@ -3779,6 +3869,11 @@ public partial class MainWindow : Window
 
     private async void RebuildButton_OnClick(object sender, RoutedEventArgs e)
     {
+        if (_isApplyingPreset)
+        {
+            return;
+        }
+
         if (_isFullRefreshInProgress)
         {
             return;
@@ -3811,6 +3906,20 @@ public partial class MainWindow : Window
             return;
         }
 
+        try
+        {
+            await EnsureInstalledModsCachedAsync(viewModel, ignoreUserSetting: true).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            WpfMessageBox.Show(
+                $"Failed to cache the currently installed mods before rebuilding:\n{ex.Message}",
+                "Simple VS Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
         string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
         string requestedModlistName = $"Rebuilt_{timestamp}";
         string savedModlistName = string.Empty;
@@ -3828,7 +3937,7 @@ public partial class MainWindow : Window
 
             try
             {
-                await Task.Run(ClearManagerCaches).ConfigureAwait(true);
+                await Task.Run(() => ClearManagerCaches(preserveModCache: true)).ConfigureAwait(true);
                 cachesCleared = true;
             }
             catch (Exception ex)
@@ -3888,6 +3997,11 @@ public partial class MainWindow : Window
 
     private async void UpdateAllModsMenuItem_OnClick(object sender, RoutedEventArgs e)
     {
+        if (_isApplyingPreset)
+        {
+            return;
+        }
+
         if (_isModUpdateInProgress || _viewModel?.ModsView == null)
         {
             return;
@@ -3916,8 +4030,38 @@ public partial class MainWindow : Window
             return;
         }
 
+        var dialog = new UpdateModsDialog(_userConfiguration, mods, overrides)
+        {
+            Owner = this
+        };
+
+        bool? dialogResult = dialog.ShowDialog();
+        if (dialogResult != true)
+        {
+            return;
+        }
+
+        IReadOnlyList<ModListItemViewModel> selectedMods = dialog.SelectedMods;
+        if (selectedMods.Count == 0)
+        {
+            return;
+        }
+
+        Dictionary<ModListItemViewModel, ModReleaseInfo>? selectedOverrides = null;
+        if (overrides != null)
+        {
+            foreach (ModListItemViewModel mod in selectedMods)
+            {
+                if (overrides.TryGetValue(mod, out ModReleaseInfo? release) && release != null)
+                {
+                    selectedOverrides ??= new Dictionary<ModListItemViewModel, ModReleaseInfo>();
+                    selectedOverrides[mod] = release;
+                }
+            }
+        }
+
         await CreateAutomaticBackupAsync().ConfigureAwait(true);
-        await UpdateModsAsync(mods, isBulk: true, overrides);
+        await UpdateModsAsync(selectedMods, isBulk: true, selectedOverrides).ConfigureAwait(true);
     }
 
     private async void CheckModsCompatibilityMenuItem_OnClick(object sender, RoutedEventArgs e)
@@ -4609,6 +4753,62 @@ public partial class MainWindow : Window
         }
     }
 
+    private void PrepareForModlistLoad()
+    {
+        SwitchToInstalledModsTab();
+        ClearSelection(resetAnchor: true);
+    }
+
+    private void UpdateModlistLoadingUiState()
+    {
+        bool isEnabled = !_isApplyingPreset;
+
+        if (UpdateAllButton != null)
+        {
+            UpdateAllButton.IsEnabled = isEnabled;
+        }
+
+        if (RebuildButton != null)
+        {
+            RebuildButton.IsEnabled = isEnabled;
+        }
+
+        if (LaunchGameButton != null)
+        {
+            LaunchGameButton.IsEnabled = isEnabled;
+        }
+
+        if (ModDatabaseTabButton != null)
+        {
+            ModDatabaseTabButton.IsEnabled = isEnabled;
+        }
+
+        if (ModlistsTabButton != null)
+        {
+            ModlistsTabButton.IsEnabled = isEnabled;
+        }
+
+        if (PresetsAndModlistsMenuItem != null)
+        {
+            PresetsAndModlistsMenuItem.IsEnabled = isEnabled;
+        }
+
+        if (UpdateAllModsMenuItem != null)
+        {
+            UpdateAllModsMenuItem.IsEnabled = isEnabled;
+        }
+
+        if (ModsDataGrid != null)
+        {
+            ModsDataGrid.IsEnabled = isEnabled;
+        }
+
+        if (ModDatabaseCardsListView != null)
+        {
+            ModDatabaseCardsListView.IsEnabled = isEnabled;
+        }
+    }
+
     private async Task RefreshDeleteCachedModsMenuHeaderAsync()
     {
         if (DeleteCachedModsMenuItem is null)
@@ -4880,7 +5080,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private static void ClearManagerCaches()
+    private static void ClearManagerCaches(bool preserveModCache)
     {
         var errors = new List<string>();
 
@@ -4903,7 +5103,7 @@ public partial class MainWindow : Window
         }
 
         string? cachedModsDirectory = ModCacheLocator.GetCachedModsDirectory();
-        if (!string.IsNullOrWhiteSpace(cachedModsDirectory))
+        if (!preserveModCache && !string.IsNullOrWhiteSpace(cachedModsDirectory))
         {
             try
             {
@@ -5003,6 +5203,11 @@ public partial class MainWindow : Window
 
     private void LaunchGameButton_OnClick(object sender, RoutedEventArgs e)
     {
+        if (_isApplyingPreset)
+        {
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(_customShortcutPath))
         {
             if (!File.Exists(_customShortcutPath))
@@ -5955,45 +6160,205 @@ public partial class MainWindow : Window
 
     private async Task<bool> EnsureModDatabaseReachableForRebuildAsync()
     {
+        if (_viewModel is null)
+        {
+            return false;
+        }
+
+        IReadOnlyList<ModPresetModState> states = _viewModel.GetCurrentModStates();
+        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var candidates = new List<ModPresetModState>(5);
+
+        foreach (ModPresetModState state in states)
+        {
+            if (state is null || string.IsNullOrWhiteSpace(state.ModId))
+            {
+                continue;
+            }
+
+            string trimmedId = state.ModId.Trim();
+            if (!seenIds.Add(trimmedId))
+            {
+                continue;
+            }
+
+            candidates.Add(state);
+            if (candidates.Count >= 5)
+            {
+                break;
+            }
+        }
+
+        if (candidates.Count == 0)
+        {
+            try
+            {
+                await _modDatabaseService.GetMostDownloadedModsAsync(1).ConfigureAwait(true);
+                return true;
+            }
+            catch (InternetAccessDisabledException ex)
+            {
+                WpfMessageBox.Show(
+                    ex.Message,
+                    "Simple VS Manager",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return false;
+            }
+            catch (HttpRequestException)
+            {
+                WpfMessageBox.Show(
+                    ModDatabaseUnavailableMessage,
+                    "Simple VS Manager",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                return false;
+            }
+            catch (TaskCanceledException)
+            {
+                WpfMessageBox.Show(
+                    ModDatabaseUnavailableMessage,
+                    "Simple VS Manager",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                WpfMessageBox.Show(
+                    $"{ModDatabaseUnavailableMessage}.{Environment.NewLine}{ex.Message}",
+                    "Simple VS Manager",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                return false;
+            }
+        }
+
+        string? installedGameVersion = _viewModel.InstalledGameVersion;
+        foreach (ModPresetModState candidate in candidates)
+        {
+            try
+            {
+                if (await TryTestRebuildModConnectivityAsync(candidate, installedGameVersion).ConfigureAwait(true))
+                {
+                    return true;
+                }
+            }
+            catch (InternetAccessDisabledException ex)
+            {
+                WpfMessageBox.Show(
+                    ex.Message,
+                    "Simple VS Manager",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return false;
+            }
+        }
+
+        WpfMessageBox.Show(
+            "Aborted because couldn't reach mod DB, check connection.",
+            "Simple VS Manager",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+
+        return false;
+    }
+
+    private async Task<bool> TryTestRebuildModConnectivityAsync(ModPresetModState state, string? installedGameVersion)
+    {
+        string modId = state.ModId?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(modId))
+        {
+            return false;
+        }
+
+        string? desiredVersion = string.IsNullOrWhiteSpace(state.Version) ? null : state.Version!.Trim();
+
+        ModDatabaseInfo? info = await _modDatabaseService
+            .TryLoadDatabaseInfoAsync(modId, desiredVersion, installedGameVersion)
+            .ConfigureAwait(true);
+
+        if (info is null)
+        {
+            Trace.TraceWarning("Connectivity test failed to load metadata for mod {0}.", modId);
+            return false;
+        }
+
+        ModReleaseInfo? release = TrySelectReleaseForConnectivityTest(info, desiredVersion);
+        if (release?.DownloadUri is null)
+        {
+            Trace.TraceWarning("Connectivity test could not find a downloadable release for mod {0}.", modId);
+            return false;
+        }
+
+        bool success = await TryProbeModDownloadAsync(release.DownloadUri).ConfigureAwait(true);
+        if (!success)
+        {
+            Trace.TraceWarning("Connectivity test failed to reach download URI for mod {0} (version {1}).", modId, release.Version);
+        }
+
+        return success;
+    }
+
+    private static ModReleaseInfo? TrySelectReleaseForConnectivityTest(ModDatabaseInfo info, string? desiredVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(desiredVersion))
+        {
+            string trimmedVersion = desiredVersion.Trim();
+            string? normalizedDesired = VersionStringUtility.Normalize(desiredVersion);
+
+            foreach (ModReleaseInfo release in info.Releases ?? Array.Empty<ModReleaseInfo>())
+            {
+                if (!string.IsNullOrWhiteSpace(release.Version)
+                    && string.Equals(release.Version.Trim(), trimmedVersion, StringComparison.OrdinalIgnoreCase))
+                {
+                    return release;
+                }
+
+                if (normalizedDesired is not null
+                    && !string.IsNullOrWhiteSpace(release.NormalizedVersion)
+                    && string.Equals(release.NormalizedVersion, normalizedDesired, StringComparison.OrdinalIgnoreCase))
+                {
+                    return release;
+                }
+            }
+        }
+
+        IReadOnlyList<ModReleaseInfo> releases = info.Releases ?? Array.Empty<ModReleaseInfo>();
+
+        return info.LatestCompatibleRelease
+            ?? info.LatestRelease
+            ?? (releases.Count > 0 ? releases[0] : null);
+    }
+
+    private static async Task<bool> TryProbeModDownloadAsync(Uri downloadUri)
+    {
         try
         {
-            await _modDatabaseService.GetMostDownloadedModsAsync(1).ConfigureAwait(true);
-            return true;
+            InternetAccessManager.ThrowIfInternetAccessDisabled();
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, downloadUri);
+            using HttpResponseMessage response = await ConnectivityTestHttpClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
+                .ConfigureAwait(true);
+
+            return response.IsSuccessStatusCode;
         }
-        catch (InternetAccessDisabledException ex)
+        catch (HttpRequestException ex)
         {
-            WpfMessageBox.Show(
-                ex.Message,
-                "Simple VS Manager",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            Trace.TraceWarning("Connectivity test download probe failed for {0}: {1}", downloadUri, ex.Message);
+            return false;
         }
-        catch (HttpRequestException)
+        catch (TaskCanceledException ex)
         {
-            WpfMessageBox.Show(
-                ModDatabaseUnavailableMessage,
-                "Simple VS Manager",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-        }
-        catch (TaskCanceledException)
-        {
-            WpfMessageBox.Show(
-                ModDatabaseUnavailableMessage,
-                "Simple VS Manager",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            Trace.TraceWarning("Connectivity test download probe timed out for {0}: {1}", downloadUri, ex.Message);
+            return false;
         }
         catch (Exception ex)
         {
-            WpfMessageBox.Show(
-                $"{ModDatabaseUnavailableMessage}.{Environment.NewLine}{ex.Message}",
-                "Simple VS Manager",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            Trace.TraceWarning("Connectivity test download probe encountered an unexpected error for {0}: {1}", downloadUri, ex.Message);
+            return false;
         }
-
-        return false;
     }
 
     private ModlistLoadMode? PromptModlistLoadMode()
@@ -6727,8 +7092,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        _viewModel.ShowInstalledModsCommand.Execute(null);
-
         ModlistLoadMode? loadMode = PromptModlistLoadMode();
         if (loadMode is not ModlistLoadMode mode)
         {
@@ -6739,6 +7102,8 @@ public partial class MainWindow : Window
         {
             return;
         }
+
+        PrepareForModlistLoad();
 
         PresetLoadOptions loadOptions = GetModlistLoadOptions(mode);
         string fallbackName = entry.Name ?? entry.DisplayName ?? "Modlist";
@@ -6806,6 +7171,8 @@ public partial class MainWindow : Window
             {
                 return;
             }
+
+            PrepareForModlistLoad();
 
             PresetLoadOptions loadOptions = GetModlistLoadOptions(mode);
             string? json = selectedSlot.CachedContent;
@@ -7107,6 +7474,8 @@ public partial class MainWindow : Window
         {
             return;
         }
+
+        PrepareForModlistLoad();
 
         PresetLoadOptions loadOptions = GetModlistLoadOptions(mode);
 
@@ -7743,7 +8112,8 @@ public partial class MainWindow : Window
                 metadata.Version,
                 metadata.Uploader,
                 metadata.Mods,
-                entry.ContentJson));
+                entry.ContentJson,
+                entry.DateAdded));
         }
 
         list.Sort((left, right) =>
@@ -8243,6 +8613,7 @@ public partial class MainWindow : Window
 
         bool scheduleRefreshAfterLoad = false;
         _isApplyingPreset = true;
+        UpdateModlistLoadingUiState();
         try
         {
             if (preset.IncludesModVersions && preset.ModStates.Count > 0)
@@ -8270,6 +8641,7 @@ public partial class MainWindow : Window
         finally
         {
             _isApplyingPreset = false;
+            UpdateModlistLoadingUiState();
 
             if (scheduleRefreshAfterLoad)
             {
@@ -9105,6 +9477,11 @@ public partial class MainWindow : Window
 
     private void HandleModRowSelection(ModListItemViewModel mod)
     {
+        if (_isApplyingPreset)
+        {
+            return;
+        }
+
         bool isShiftPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         bool isCtrlPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
 
@@ -9154,6 +9531,11 @@ public partial class MainWindow : Window
 
     private void SelectAllModsInCurrentView()
     {
+        if (_isApplyingPreset)
+        {
+            return;
+        }
+
         if (_viewModel?.SearchModDatabase == true)
         {
             return;
@@ -9717,7 +10099,10 @@ public partial class MainWindow : Window
                 requiresRefresh = true;
                 _viewModel.ReportStatus($"Updated {mod.DisplayName} to {release.Version}.");
                 await _viewModel.PreserveActivationStateAsync(mod.ModId, mod.Version, release.Version, mod.IsActive).ConfigureAwait(true);
-                results.Add(ModUpdateOperationResult.SuccessResult(mod, release.Version));
+                IReadOnlyList<ModListItemViewModel.ReleaseChangelog> appliedChangelogEntries =
+                    mod.GetChangelogEntriesForUpgrade(release.Version);
+                string? changelogSummary = BuildChangelogSummary(appliedChangelogEntries);
+                results.Add(ModUpdateOperationResult.SuccessResult(mod, release.Version, mod.Version, changelogSummary));
             }
 
             if (requiresRefresh && _viewModel.RefreshCommand != null)
@@ -9742,6 +10127,11 @@ public partial class MainWindow : Window
 
             if (results.Count > 0 && showSummary)
             {
+                if (isBulk)
+                {
+                    ShowBulkUpdateChangelogDialog(results);
+                }
+
                 ShowUpdateSummary(results, isBulk, abortRequested);
             }
             else if (abortRequested && showSummary)
@@ -10033,6 +10423,72 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ShowBulkUpdateChangelogDialog(IReadOnlyList<ModUpdateOperationResult> results)
+    {
+        if (results is not { Count: > 0 })
+        {
+            return;
+        }
+
+        var items = new List<BulkUpdateChangelogWindow.BulkUpdateChangelogItem>();
+
+        foreach (ModUpdateOperationResult result in results)
+        {
+            if (!result.Success)
+            {
+                continue;
+            }
+
+            string fromVersion = string.IsNullOrWhiteSpace(result.OldVersion)
+                ? "Unknown"
+                : result.OldVersion!;
+            string toVersion = string.IsNullOrWhiteSpace(result.NewVersion)
+                ? "Unknown"
+                : result.NewVersion!;
+            string title = $"{result.Mod.DisplayName} ({fromVersion} → {toVersion})";
+            string changelog = string.IsNullOrWhiteSpace(result.ChangelogSummary)
+                ? "No changelog entries were provided for this update."
+                : result.ChangelogSummary!;
+            items.Add(new BulkUpdateChangelogWindow.BulkUpdateChangelogItem(title, changelog));
+        }
+
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        var dialog = new BulkUpdateChangelogWindow(items)
+        {
+            Owner = this
+        };
+
+        dialog.ShowDialog();
+    }
+
+    private static string? BuildChangelogSummary(IReadOnlyList<ModListItemViewModel.ReleaseChangelog> changelogEntries)
+    {
+        if (changelogEntries is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var builder = new StringBuilder();
+
+        for (int i = 0; i < changelogEntries.Count; i++)
+        {
+            ModListItemViewModel.ReleaseChangelog entry = changelogEntries[i];
+            if (i > 0)
+            {
+                builder.AppendLine();
+            }
+
+            builder.AppendLine($"{entry.Version}:");
+            builder.AppendLine(entry.Changelog);
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
     private static void ShowUpdateSummary(IReadOnlyList<ModUpdateOperationResult> results, bool isBulk, bool aborted)
     {
         if (results.Count == 0)
@@ -10045,6 +10501,11 @@ public partial class MainWindow : Window
         int skippedCount = results.Count(result => result.Skipped);
 
         if (!isBulk && failureCount == 0 && skippedCount == 0)
+        {
+            return;
+        }
+
+        if (isBulk && failureCount == 0 && skippedCount == 0 && !aborted)
         {
             return;
         }
@@ -10106,16 +10567,27 @@ public partial class MainWindow : Window
         LatestCompatible
     }
 
-    private readonly record struct ModUpdateOperationResult(ModListItemViewModel Mod, bool Success, bool Skipped, string Message)
+    private readonly record struct ModUpdateOperationResult(
+        ModListItemViewModel Mod,
+        bool Success,
+        bool Skipped,
+        string Message,
+        string? OldVersion,
+        string? NewVersion,
+        string? ChangelogSummary)
     {
-        public static ModUpdateOperationResult SuccessResult(ModListItemViewModel mod, string version) =>
-            new(mod, true, false, $"Updated to {version}.");
+        public static ModUpdateOperationResult SuccessResult(
+            ModListItemViewModel mod,
+            string newVersion,
+            string? previousVersion,
+            string? changelogSummary) =>
+            new(mod, true, false, $"Updated to {newVersion}.", previousVersion, newVersion, changelogSummary);
 
         public static ModUpdateOperationResult Failure(ModListItemViewModel mod, string message) =>
-            new(mod, false, false, message);
+            new(mod, false, false, message, mod.Version, null, null);
 
         public static ModUpdateOperationResult SkippedResult(ModListItemViewModel mod, string message) =>
-            new(mod, false, true, message);
+            new(mod, false, true, message, mod.Version, null, null);
     }
 
     private void ActiveToggle_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)

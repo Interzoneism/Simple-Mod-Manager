@@ -76,6 +76,8 @@ public sealed class UserConfigurationService
     private readonly Dictionary<string, ModConfigPathEntry> _storedModConfigPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _themePaletteColors = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _customThemePaletteColors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, bool> _installedColumnVisibility = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, bool> _bulkUpdateModExclusions = new(StringComparer.OrdinalIgnoreCase);
     private string? _previousConfigurationVersion;
     private string? _previousModManagerVersion;
     private string? _selectedPresetName;
@@ -91,6 +93,7 @@ public sealed class UserConfigurationService
     private bool _enableDebugLogging;
     private bool _suppressModlistSavePrompt;
     private bool _suppressRefreshCachePrompt;
+    private string? _suppressRefreshCachePromptVersion;
     private ModlistAutoLoadBehavior _modlistAutoLoadBehavior = ModlistAutoLoadBehavior.Prompt;
     private int _modDatabaseSearchResultLimit = DefaultModDatabaseSearchResultLimit;
     private int _modDatabaseNewModsRecentMonths = DefaultModDatabaseNewModsRecentMonths;
@@ -148,7 +151,26 @@ public sealed class UserConfigurationService
 
     public bool SuppressModlistSavePrompt => _suppressModlistSavePrompt;
 
-    public bool SuppressRefreshCachePrompt => _suppressRefreshCachePrompt;
+    public bool SuppressRefreshCachePrompt
+    {
+        get
+        {
+            if (!_suppressRefreshCachePrompt)
+            {
+                return false;
+            }
+
+            if (_suppressRefreshCachePromptVersion is null)
+            {
+                return true;
+            }
+
+            return string.Equals(
+                _suppressRefreshCachePromptVersion,
+                _modManagerVersion,
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
 
     public ModlistAutoLoadBehavior ModlistAutoLoadBehavior => _modlistAutoLoadBehavior;
 
@@ -224,6 +246,39 @@ public sealed class UserConfigurationService
     public (string? SortMemberPath, ListSortDirection Direction) GetModListSortPreference()
     {
         return (_modsSortMemberPath, _modsSortDirection);
+    }
+
+    public bool? GetInstalledColumnVisibility(string columnName)
+    {
+        string? normalized = NormalizeInstalledColumnKey(columnName);
+
+        if (normalized is null)
+        {
+            return null;
+        }
+
+        return _installedColumnVisibility.TryGetValue(normalized, out bool value)
+            ? value
+            : null;
+    }
+
+    public void SetInstalledColumnVisibility(string columnName, bool isVisible)
+    {
+        string? normalized = NormalizeInstalledColumnKey(columnName);
+
+        if (normalized is null)
+        {
+            throw new ArgumentException("Column name cannot be empty.", nameof(columnName));
+        }
+
+        if (_installedColumnVisibility.TryGetValue(normalized, out bool current)
+            && current == isVisible)
+        {
+            return;
+        }
+
+        _installedColumnVisibility[normalized] = isVisible;
+        Save();
     }
 
     public string GetConfigurationDirectory()
@@ -560,12 +615,21 @@ public sealed class UserConfigurationService
 
     public void SetSuppressRefreshCachePrompt(bool suppress)
     {
-        if (_suppressRefreshCachePrompt == suppress)
+        string? normalizedVersion = suppress
+            ? NormalizeVersion(_modManagerVersion) ?? _modManagerVersion
+            : null;
+
+        if (_suppressRefreshCachePrompt == suppress
+            && string.Equals(
+                _suppressRefreshCachePromptVersion,
+                normalizedVersion,
+                StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
         _suppressRefreshCachePrompt = suppress;
+        _suppressRefreshCachePromptVersion = normalizedVersion;
         Save();
     }
 
@@ -604,9 +668,49 @@ public sealed class UserConfigurationService
         Save();
     }
 
+    public bool IsModExcludedFromBulkUpdates(string? modId)
+    {
+        string? normalized = NormalizeModId(modId);
+        if (normalized is null)
+        {
+            return false;
+        }
+
+        return _bulkUpdateModExclusions.TryGetValue(normalized, out bool isExcluded) && isExcluded;
+    }
+
+    public void SetModExcludedFromBulkUpdates(string? modId, bool isExcluded)
+    {
+        string? normalized = NormalizeModId(modId);
+        if (normalized is null)
+        {
+            return;
+        }
+
+        if (isExcluded)
+        {
+            if (_bulkUpdateModExclusions.TryGetValue(normalized, out bool current) && current)
+            {
+                return;
+            }
+
+            _bulkUpdateModExclusions[normalized] = true;
+            Save();
+            return;
+        }
+
+        if (!_bulkUpdateModExclusions.Remove(normalized))
+        {
+            return;
+        }
+
+        Save();
+    }
+
     private void Load()
     {
         _modConfigPaths.Clear();
+        _bulkUpdateModExclusions.Clear();
         ResetCustomThemePaletteToDefaults();
         _colorTheme = ColorTheme.VintageStory;
         ResetThemePaletteToDefaults();
@@ -639,6 +743,20 @@ public sealed class UserConfigurationService
             _enableDebugLogging = obj["enableDebugLogging"]?.GetValue<bool?>() ?? false;
             _suppressModlistSavePrompt = obj["suppressModlistSavePrompt"]?.GetValue<bool?>() ?? false;
             _suppressRefreshCachePrompt = obj["suppressRefreshCachePrompt"]?.GetValue<bool?>() ?? false;
+            _suppressRefreshCachePromptVersion = NormalizeVersion(
+                GetOptionalString(obj["suppressRefreshCachePromptVersion"]));
+            if (_suppressRefreshCachePrompt)
+            {
+                if (_suppressRefreshCachePromptVersion is null)
+                {
+                    _suppressRefreshCachePromptVersion = _previousModManagerVersion ?? _modManagerVersion;
+                    _hasPendingSave = true;
+                }
+            }
+            else
+            {
+                _suppressRefreshCachePromptVersion = null;
+            }
             string? colorThemeValue = GetOptionalString(obj["colorTheme"]);
             bool? legacyDarkVsMode = obj["useDarkVsMode"]?.GetValue<bool?>();
             if (!string.IsNullOrWhiteSpace(colorThemeValue)
@@ -666,7 +784,9 @@ public sealed class UserConfigurationService
             _onlyShowCompatibleModDatabaseResults = obj["onlyShowCompatibleModDatabaseResults"]?.GetValue<bool?>() ?? false;
             _windowWidth = NormalizeWindowDimension(obj["windowWidth"]?.GetValue<double?>());
             _windowHeight = NormalizeWindowDimension(obj["windowHeight"]?.GetValue<double?>());
+            LoadBulkUpdateModExclusions(obj["bulkUpdateModExclusions"]);
             LoadModConfigPaths(obj["modConfigPaths"]);
+            LoadInstalledColumnVisibility(obj["installedColumnVisibility"]);
             LoadThemePalette(obj["themePalette"] ?? obj["darkVsPalette"]);
             if (_colorTheme == ColorTheme.Custom)
             {
@@ -698,6 +818,7 @@ public sealed class UserConfigurationService
             _enableDebugLogging = false;
             _suppressModlistSavePrompt = false;
             _suppressRefreshCachePrompt = false;
+            _suppressRefreshCachePromptVersion = null;
             _modlistAutoLoadBehavior = ModlistAutoLoadBehavior.Prompt;
             _modsSortMemberPath = null;
             _modsSortDirection = ListSortDirection.Ascending;
@@ -711,6 +832,8 @@ public sealed class UserConfigurationService
             _windowHeight = null;
             _customShortcutPath = null;
             _cloudUploaderName = null;
+            _installedColumnVisibility.Clear();
+            _bulkUpdateModExclusions.Clear();
         }
 
         LoadPersistentModConfigPaths();
@@ -748,6 +871,7 @@ public sealed class UserConfigurationService
                 ["enableDebugLogging"] = _enableDebugLogging,
                 ["suppressModlistSavePrompt"] = _suppressModlistSavePrompt,
                 ["suppressRefreshCachePrompt"] = _suppressRefreshCachePrompt,
+                ["suppressRefreshCachePromptVersion"] = _suppressRefreshCachePromptVersion,
                 ["useDarkVsMode"] = _colorTheme != ColorTheme.Light,
                 ["colorTheme"] = _colorTheme.ToString(),
                 ["modlistAutoLoadBehavior"] = _modlistAutoLoadBehavior.ToString(),
@@ -760,7 +884,9 @@ public sealed class UserConfigurationService
                 ["onlyShowCompatibleModDatabaseResults"] = _onlyShowCompatibleModDatabaseResults,
                 ["windowWidth"] = _windowWidth,
                 ["windowHeight"] = _windowHeight,
+                ["bulkUpdateModExclusions"] = BuildBulkUpdateModExclusionsJson(),
                 ["modConfigPaths"] = BuildModConfigPathsJson(),
+                ["installedColumnVisibility"] = BuildInstalledColumnVisibilityJson(),
                 ["themePalette"] = BuildThemePaletteJson(),
                 ["darkVsPalette"] = BuildThemePaletteJson(),
                 ["customThemePalette"] = BuildCustomThemePaletteJson(),
@@ -919,6 +1045,40 @@ public sealed class UserConfigurationService
         return result;
     }
 
+    private JsonObject BuildInstalledColumnVisibilityJson()
+    {
+        var result = new JsonObject();
+
+        foreach (var pair in _installedColumnVisibility.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key))
+            {
+                continue;
+            }
+
+            result[pair.Key] = pair.Value;
+        }
+
+        return result;
+    }
+
+    private JsonObject BuildBulkUpdateModExclusionsJson()
+    {
+        var result = new JsonObject();
+
+        foreach (var pair in _bulkUpdateModExclusions.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key) || !pair.Value)
+            {
+                continue;
+            }
+
+            result[pair.Key] = true;
+        }
+
+        return result;
+    }
+
     private JsonObject BuildThemePaletteJson()
     {
         IReadOnlyDictionary<string, string> defaults = _colorTheme == ColorTheme.Custom
@@ -961,6 +1121,47 @@ public sealed class UserConfigurationService
         return result;
     }
 
+    private void LoadBulkUpdateModExclusions(JsonNode? node)
+    {
+        _bulkUpdateModExclusions.Clear();
+
+        if (node is not JsonObject obj)
+        {
+            return;
+        }
+
+        bool requiresSave = false;
+
+        foreach ((string key, JsonNode? value) in obj)
+        {
+            string? normalized = NormalizeModId(key);
+            if (normalized is null)
+            {
+                requiresSave = true;
+                continue;
+            }
+
+            bool isExcluded = value?.GetValue<bool?>() ?? false;
+            if (!isExcluded)
+            {
+                requiresSave = true;
+                continue;
+            }
+
+            if (_bulkUpdateModExclusions.ContainsKey(normalized))
+            {
+                continue;
+            }
+
+            _bulkUpdateModExclusions[normalized] = true;
+        }
+
+        if (requiresSave)
+        {
+            _hasPendingSave = true;
+        }
+    }
+
     private void LoadModConfigPaths(JsonNode? node)
     {
         _modConfigPaths.Clear();
@@ -986,6 +1187,29 @@ public sealed class UserConfigurationService
             }
 
             _modConfigPaths[modId.Trim()] = normalized;
+        }
+    }
+
+    private void LoadInstalledColumnVisibility(JsonNode? node)
+    {
+        _installedColumnVisibility.Clear();
+
+        if (node is not JsonObject obj)
+        {
+            return;
+        }
+
+        foreach (var pair in obj)
+        {
+            string? columnKey = NormalizeInstalledColumnKey(pair.Key);
+            bool? isVisible = pair.Value?.GetValue<bool?>();
+
+            if (columnKey is null || !isVisible.HasValue)
+            {
+                continue;
+            }
+
+            _installedColumnVisibility[columnKey] = isVisible.Value;
         }
     }
 
@@ -1552,22 +1776,45 @@ public sealed class UserConfigurationService
     {
         Assembly assembly = typeof(UserConfigurationService).Assembly;
 
-        string? version = VersionStringUtility.Normalize(
-            assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+        string? version = TrimToSemanticVersion(
+            VersionStringUtility.Normalize(
+                assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion));
         if (!string.IsNullOrWhiteSpace(version))
         {
             return version!;
         }
 
-        version = VersionStringUtility.Normalize(
-            assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version);
+        version = TrimToSemanticVersion(
+            VersionStringUtility.Normalize(
+                assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version));
         if (!string.IsNullOrWhiteSpace(version))
         {
             return version!;
         }
 
-        version = VersionStringUtility.Normalize(assembly.GetName().Version?.ToString());
+        version = TrimToSemanticVersion(VersionStringUtility.Normalize(assembly.GetName().Version?.ToString()));
         return string.IsNullOrWhiteSpace(version) ? "0.0.0" : version!;
+    }
+
+    private static string? TrimToSemanticVersion(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return null;
+        }
+
+        string[] parts = version.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return null;
+        }
+
+        if (parts.Length <= 3)
+        {
+            return string.Join('.', parts);
+        }
+
+        return string.Join('.', parts.Take(3));
     }
 
     private static string? NormalizeVersion(string? version)
@@ -1606,6 +1853,21 @@ public sealed class UserConfigurationService
         }
 
         return sortMemberPath.Trim();
+    }
+
+    private static string? NormalizeInstalledColumnKey(string? columnName)
+    {
+        if (string.IsNullOrWhiteSpace(columnName))
+        {
+            return null;
+        }
+
+        return columnName.Trim();
+    }
+
+    private static string? NormalizeModId(string? modId)
+    {
+        return string.IsNullOrWhiteSpace(modId) ? null : modId.Trim();
     }
 
     private static ListSortDirection ParseSortDirection(string? value)

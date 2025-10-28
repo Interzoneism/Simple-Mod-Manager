@@ -39,6 +39,7 @@ public sealed class MainWindowDesignData
 
         TotalMods = _mods.Count;
         ActiveMods = _mods.Count(mod => mod.IsActive);
+        UpdatableModsCount = _mods.Count(mod => mod.CanUpdate);
 
         StatusMessage = "Loaded sample mods.";
     }
@@ -76,6 +77,16 @@ public sealed class MainWindowDesignData
     public string SummaryText => TotalMods == 0
         ? "No mods found."
         : $"{ActiveMods} active of {TotalMods} mods";
+
+    public int UpdatableModsCount { get; }
+
+    public string UpdateAllButtonLabel => UpdatableModsCount == 0
+        ? "Update All"
+        : $"Update All ({UpdatableModsCount})";
+
+    public string UpdateAllModsMenuHeader => UpdatableModsCount == 0
+        ? "_Update All Mods"
+        : $"_Update All Mods ({UpdatableModsCount})";
 
     public string NoModsFoundMessage =>
         $"No mods found. If this is unexpected, verify that your VintageStoryData folder is correctly set: {DataDirectory}. You can change it in the File Menu.";

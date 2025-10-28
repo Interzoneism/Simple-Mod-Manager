@@ -1,0 +1,105 @@
+<Window x:Class="VintageStoryModManager.Views.Dialogs.UpdateModsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:viewModels="clr-namespace:VintageStoryModManager.ViewModels"
+        Title="Select Mods to Update"
+        SizeToContent="WidthAndHeight"
+        MinWidth="520"
+        MinHeight="360"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="SingleBorderWindow"
+        ShowInTaskbar="False"
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </Window.Resources>
+    <Grid Margin="20"
+          Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+          TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="Select which mods to update. Deselect any mods you want to skip."
+                   Margin="0,0,0,12"
+                   TextWrapping="Wrap"
+                   FontSize="14" />
+
+        <CheckBox Grid.Row="1"
+                  Content="Select / Deselect All"
+                  IsThreeState="True"
+                  IsChecked="{Binding SelectAllState, Mode=TwoWay}"
+                  Margin="0,0,0,12" />
+
+        <ScrollViewer Grid.Row="2"
+                      VerticalScrollBarVisibility="Auto"
+                      Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+                      BorderBrush="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+                      MaxHeight="420">
+            <ItemsControl ItemsSource="{Binding Mods}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type viewModels:UpdateModSelectionViewModel}">
+                        <Border Margin="0,0,0,12"
+                                Padding="12"
+                                Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                                BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}">
+                            <StackPanel>
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                                    <CheckBox.Content>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding DisplayName}"
+                                                       FontSize="14"
+                                                       FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding VersionSummary}"
+                                                       Margin="0,4,0,0"
+                                                       Foreground="{DynamicResource Brush.Text.Secondary}" />
+                                        </StackPanel>
+                                    </CheckBox.Content>
+                                </CheckBox>
+
+                                <Expander Header="{Binding ChangelogHeader}"
+                                          FontWeight="Bold"
+                                          Margin="24,8,0,0"
+                                          Visibility="{Binding HasChangelogs, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <ItemsControl ItemsSource="{Binding Changelogs}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,0,0,12">
+                                                    <TextBlock Text="{Binding Version}"
+                                                               FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Changelog}"
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,4,0,0" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Expander>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,18,0,0">
+            <Button x:Name="UpdateButton"
+                    Content="Update Selected"
+                    MinWidth="120"
+                    Margin="0,0,12,0"
+                    IsDefault="True"
+                    Click="UpdateButton_OnClick" />
+            <Button Content="Cancel"
+                    MinWidth="88"
+                    IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace VintageStoryModManager.Models;
@@ -18,7 +19,8 @@ public sealed class CloudModlistListEntry
         string? version,
         string? uploader,
         IReadOnlyList<string> mods,
-        string contentJson)
+        string contentJson,
+        DateTimeOffset? dateAdded)
     {
         OwnerId = ownerId ?? throw new ArgumentNullException(nameof(ownerId));
         SlotKey = slotKey ?? throw new ArgumentNullException(nameof(slotKey));
@@ -29,6 +31,7 @@ public sealed class CloudModlistListEntry
         Uploader = string.IsNullOrWhiteSpace(uploader) ? OwnerId : uploader.Trim();
         Mods = mods?.ToList() ?? throw new ArgumentNullException(nameof(mods));
         ContentJson = contentJson ?? throw new ArgumentNullException(nameof(contentJson));
+        DateAdded = dateAdded;
     }
 
     public string OwnerId { get; }
@@ -49,6 +52,8 @@ public sealed class CloudModlistListEntry
 
     public string ContentJson { get; }
 
+    public DateTimeOffset? DateAdded { get; }
+
     public string DisplayName => Name ?? "Unnamed Modlist";
 
     public string ModsSummary => Mods.Count == 0
@@ -56,4 +61,6 @@ public sealed class CloudModlistListEntry
         : Mods.Count == 1
             ? "1 mod"
             : $"{Mods.Count} mods";
+
+    public string DateAddedDisplay => DateAdded?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "—";
 }

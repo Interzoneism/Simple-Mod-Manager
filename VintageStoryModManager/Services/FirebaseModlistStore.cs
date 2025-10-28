@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -51,13 +52,21 @@ namespace SimpleVsManager.Cloud
 
             [JsonPropertyName("content")]
             public JsonElement Content { get; set; }
+
+            [JsonPropertyName("dateAdded")]
+            public string? DateAdded { get; set; }
         }
 
         // Build a user-slot JSON object with optional registryId and mandatory content
-        private static string BuildSlotNodeJson(string contentJson, string? registryId)
+        private static string BuildSlotNodeJson(string contentJson, string? registryId, string dateAdded)
         {
             using var contentDoc = JsonDocument.Parse(contentJson);
-            var node = new SlotNode { RegistryId = registryId, Content = contentDoc.RootElement.Clone() };
+            var node = new SlotNode
+            {
+                RegistryId = registryId,
+                Content = contentDoc.RootElement.Clone(),
+                DateAdded = dateAdded
+            };
             return JsonSerializer.Serialize(node, JsonOpts);
         }
 
@@ -142,8 +151,10 @@ namespace SimpleVsManager.Cloud
                 ? existing.Value.RegistryId!
                 : GenerateEntryId();
 
+            string dateAddedIso = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+
             // Build the user slot payload including registryId
-            string userSlotJson = BuildSlotNodeJson(normalizedContent, registryId);
+            string userSlotJson = BuildSlotNodeJson(normalizedContent, registryId, dateAddedIso);
 
             // 2) Atomic multi-location PATCH:
             // - write /users/{uid}/{slot} (content + registryId)
@@ -154,7 +165,8 @@ namespace SimpleVsManager.Cloud
                 string rootUrl = BuildAuthenticatedUrl(session.IdToken, null /* root */);
 
                 // public registry stores only the content object, not registryId
-                string registryNodeJson = $"{{\"content\":{normalizedContent}}}";
+                string registryNodeJson =
+                    $"{{\"content\":{normalizedContent},\"dateAdded\":{JsonSerializer.Serialize(dateAddedIso)}}}";
                 string registryOwnerJson = JsonSerializer.Serialize(session.UserId);
 
                 string patchJson =
@@ -309,7 +321,7 @@ namespace SimpleVsManager.Cloud
 
             var results = new List<CloudModlistRegistryEntry>();
 
-            // Public registry is now { entryId: { content: {...} }, ... }
+            // Public registry is now { entryId: { content: {...}, dateAdded: "..." }, ... }
             foreach (JsonProperty entry in document.RootElement.EnumerateObject())
             {
                 if (entry.Value.ValueKind != JsonValueKind.Object)
@@ -323,9 +335,21 @@ namespace SimpleVsManager.Cloud
 
                 string json = contentElement.GetRawText();
 
+                DateTimeOffset? dateAdded = null;
+                if (entry.Value.TryGetProperty("dateAdded", out JsonElement dateElement)
+                    && dateElement.ValueKind == JsonValueKind.String)
+                {
+                    string? dateValue = dateElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(dateValue)
+                        && DateTimeOffset.TryParse(dateValue, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTimeOffset parsed))
+                    {
+                        dateAdded = parsed;
+                    }
+                }
+
                 // NOTE: we no longer have (ownerId, slotKey) here. If your UI expects those,
                 // you can pass entryId as "ownerId" and use "public" as a placeholder slotKey.
-                results.Add(new CloudModlistRegistryEntry(entry.Name, "public", json));
+                results.Add(new CloudModlistRegistryEntry(entry.Name, "public", json, dateAdded));
             }
 
             return results;

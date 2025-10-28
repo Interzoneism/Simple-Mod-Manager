@@ -69,6 +69,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _isErrorStatus;
     private int _totalMods;
     private int _activeMods;
+    private int _updatableModsCount;
     private string? _modsStateFingerprint;
     private ModListItemViewModel? _selectedMod;
     private bool _hasSelectedMods;
@@ -672,9 +673,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    public int UpdatableModsCount
+    {
+        get => _updatableModsCount;
+        private set
+        {
+            if (SetProperty(ref _updatableModsCount, value))
+            {
+                OnPropertyChanged(nameof(UpdateAllButtonLabel));
+                OnPropertyChanged(nameof(UpdateAllModsMenuHeader));
+            }
+        }
+    }
+
     public string SummaryText => TotalMods == 0
         ? "No mods found."
         : $"{ActiveMods} active of {TotalMods} mods";
+
+    public string UpdateAllButtonLabel => UpdatableModsCount == 0
+        ? "Update All"
+        : $"Update All ({UpdatableModsCount})";
+
+    public string UpdateAllModsMenuHeader => UpdatableModsCount == 0
+        ? "_Update All Mods"
+        : $"_Update All Mods ({UpdatableModsCount})";
 
     public string NoModsFoundMessage =>
         $"No mods found. If this is unexpected, verify that your VintageStoryData folder is correctly set: {DataDirectory}. You can change it in the File Menu.";
@@ -1399,6 +1421,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void UpdateActiveCount()
     {
         ActiveMods = _mods.Count(item => item.IsActive);
+        UpdateUpdatableCount();
+    }
+
+    private void UpdateUpdatableCount()
+    {
+        UpdatableModsCount = _mods.Count(item => item.CanUpdate);
     }
 
     private void ClearSearchResults()
@@ -1461,6 +1489,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         ScheduleInstalledTagFilterRefresh();
+        UpdateActiveCount();
     }
 
     private void OnSearchResultsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -1598,12 +1627,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void OnInstalledModPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (!string.Equals(e.PropertyName, nameof(ModListItemViewModel.DatabaseTags), StringComparison.Ordinal))
+        if (string.Equals(e.PropertyName, nameof(ModListItemViewModel.DatabaseTags), StringComparison.Ordinal))
         {
+            ScheduleInstalledTagFilterRefresh();
             return;
         }
 
-        ScheduleInstalledTagFilterRefresh();
+        if (string.Equals(e.PropertyName, nameof(ModListItemViewModel.IsActive), StringComparison.Ordinal))
+        {
+            UpdateActiveCount();
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(ModListItemViewModel.CanUpdate), StringComparison.Ordinal))
+        {
+            UpdateUpdatableCount();
+        }
     }
 
     private void OnSearchResultPropertyChanged(object? sender, PropertyChangedEventArgs e)

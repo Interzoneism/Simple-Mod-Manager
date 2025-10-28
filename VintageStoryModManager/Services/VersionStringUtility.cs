@@ -14,40 +14,49 @@ internal static class VersionStringUtility
             return null;
         }
 
-        var builder = new StringBuilder();
+        const int MaxNormalizedParts = 4;
+
+        var parts = new List<string>(MaxNormalizedParts);
+        var currentPart = new StringBuilder();
+        bool hasCapturedDigits = false;
+
         foreach (char c in version)
         {
-            if (char.IsDigit(c) || c == '.')
+            if (char.IsDigit(c))
             {
-                builder.Append(c);
+                currentPart.Append(c);
+                hasCapturedDigits = true;
+                continue;
             }
-            else if (builder.Length > 0)
+
+            if (currentPart.Length > 0)
+            {
+                parts.Add(currentPart.ToString());
+                currentPart.Clear();
+
+                if (parts.Count >= MaxNormalizedParts)
+                {
+                    break;
+                }
+            }
+
+            if (char.IsWhiteSpace(c) && hasCapturedDigits)
             {
                 break;
             }
         }
 
-        if (builder.Length == 0)
+        if (currentPart.Length > 0 && parts.Count < MaxNormalizedParts)
+        {
+            parts.Add(currentPart.ToString());
+        }
+
+        if (parts.Count == 0)
         {
             return null;
         }
 
-        string trimmed = builder.ToString().Trim('.');
-        if (string.IsNullOrWhiteSpace(trimmed))
-        {
-            return null;
-        }
-
-        string[] parts = trimmed
-            .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length == 0)
-        {
-            return null;
-        }
-
-        IEnumerable<string> normalized = parts.Length > 3 ? parts.Take(3) : parts;
-        string candidate = string.Join('.', normalized);
-        return string.IsNullOrWhiteSpace(candidate) ? null : candidate;
+        return string.Join('.', parts);
     }
 
     public static bool IsCandidateVersionNewer(string? candidateVersion, string? currentVersion)

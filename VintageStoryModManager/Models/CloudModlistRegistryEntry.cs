@@ -7,11 +7,12 @@ namespace VintageStoryModManager.Models;
 /// </summary>
 public sealed class CloudModlistRegistryEntry
 {
-    public CloudModlistRegistryEntry(string ownerId, string slotKey, string contentJson)
+    public CloudModlistRegistryEntry(string ownerId, string slotKey, string contentJson, DateTimeOffset? dateAdded)
     {
         OwnerId = ownerId ?? throw new ArgumentNullException(nameof(ownerId));
         SlotKey = slotKey ?? throw new ArgumentNullException(nameof(slotKey));
         ContentJson = contentJson ?? throw new ArgumentNullException(nameof(contentJson));
+        DateAdded = dateAdded;
     }
 
     public string OwnerId { get; }
@@ -19,6 +20,8 @@ public sealed class CloudModlistRegistryEntry
     public string SlotKey { get; }
 
     public string ContentJson { get; }
+
+    public DateTimeOffset? DateAdded { get; }
 
     public string RegistryKey => $"{OwnerId}/{SlotKey}";
 }

@@ -364,10 +364,12 @@
 
                             <Trigger Property="IsCheckable" Value="True">
                                 <Setter TargetName="CheckMark" Property="Visibility" Value="Visible" />
+                                <Setter Property="StaysOpenOnClick" Value="True" />
                             </Trigger>
 
                             <Trigger Property="IsCheckable" Value="False">
                                 <Setter TargetName="CheckMark" Property="Visibility" Value="Collapsed" />
+                                <Setter Property="StaysOpenOnClick" Value="False" />
                             </Trigger>
 
                             <Trigger Property="IsChecked" Value="True">
@@ -447,7 +449,10 @@
                     <MenuItem Header="_Refresh Mods"
                               Height="35"
                               Command="{Binding RefreshModsUiCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
-                    <MenuItem Header="_Update All Mods" Height="35" Click="UpdateAllModsMenuItem_OnClick" />
+                    <MenuItem x:Name="UpdateAllModsMenuItem"
+                              Header="{Binding DataContext.UpdateAllModsMenuHeader, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=_Update All Mods}"
+                              Height="35"
+                              Click="UpdateAllModsMenuItem_OnClick" />
                     <MenuItem Header="Check mods compatibility" Height="35" Click="CheckModsCompatibilityMenuItem_OnClick" />
                     <MenuItem x:Name="CacheAllVersionsMenuItem"
                               Header="Cache all versions locally"
@@ -460,7 +465,7 @@
                               Height="35"
                               Click="DeleteCachedModsMenuItem_OnClick" />
                 </MenuItem>
-                <MenuItem Header="_Presets and Modlists" Height="35">
+                <MenuItem x:Name="PresetsAndModlistsMenuItem" Header="_Presets and Modlists" Height="35">
                     <MenuItem Header="_Save Preset..." Height="35" Click="SavePresetMenuItem_OnClick" />
                     <MenuItem x:Name="LoadPresetMenuItem"
                               Header="_Load Preset"
@@ -536,6 +541,74 @@
                                   Tag="{x:Static services:ColorTheme.SurpriseMe}"
                                   Click="ThemeMenuItem_OnClick" />
                     </MenuItem>
+                    <MenuItem x:Name="ColumnsMenuItem"
+                              Header="_Columns"
+                              Height="35"
+                              Visibility="{Binding IsViewingInstalledMods, Converter={StaticResource IMM.VisibleWhenTrueConverter}}">
+                        <MenuItem x:Name="ActiveColumnMenuItem"
+                                  Header="_Active"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Style="{StaticResource ToggleMenuItemStyle}"
+                                  Checked="InstalledModsColumnMenuItem_OnChecked"
+                                  Unchecked="InstalledModsColumnMenuItem_OnChecked" />
+                        <MenuItem x:Name="IconColumnMenuItem"
+                                  Header="_Icon"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Style="{StaticResource ToggleMenuItemStyle}"
+                                  Checked="InstalledModsColumnMenuItem_OnChecked"
+                                  Unchecked="InstalledModsColumnMenuItem_OnChecked" />
+                        <MenuItem x:Name="NameColumnMenuItem"
+                                  Header="_Name"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Style="{StaticResource ToggleMenuItemStyle}"
+                                  Checked="InstalledModsColumnMenuItem_OnChecked"
+                                  Unchecked="InstalledModsColumnMenuItem_OnChecked" />
+                        <MenuItem x:Name="VersionColumnMenuItem"
+                                  Header="_Version"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Style="{StaticResource ToggleMenuItemStyle}"
+                                  Checked="InstalledModsColumnMenuItem_OnChecked"
+                                  Unchecked="InstalledModsColumnMenuItem_OnChecked" />
+                        <MenuItem x:Name="LatestVersionColumnMenuItem"
+                                  Header="Latest _Version"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Style="{StaticResource ToggleMenuItemStyle}"
+                                  Checked="InstalledModsColumnMenuItem_OnChecked"
+                                  Unchecked="InstalledModsColumnMenuItem_OnChecked" />
+                        <MenuItem x:Name="AuthorsColumnMenuItem"
+                                  Header="_Authors"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Style="{StaticResource ToggleMenuItemStyle}"
+                                  Checked="InstalledModsColumnMenuItem_OnChecked"
+                                  Unchecked="InstalledModsColumnMenuItem_OnChecked" />
+                        <MenuItem x:Name="TagsColumnMenuItem"
+                                  Header="_Tags"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Style="{StaticResource ToggleMenuItemStyle}"
+                                  Checked="InstalledModsColumnMenuItem_OnChecked"
+                                  Unchecked="InstalledModsColumnMenuItem_OnChecked" />
+                        <MenuItem x:Name="StatusColumnMenuItem"
+                                  Header="_Status"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Style="{StaticResource ToggleMenuItemStyle}"
+                                  Checked="InstalledModsColumnMenuItem_OnChecked"
+                                  Unchecked="InstalledModsColumnMenuItem_OnChecked" />
+                        <MenuItem x:Name="SideColumnMenuItem"
+                                  Header="S_ide"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Style="{StaticResource ToggleMenuItemStyle}"
+                                  Checked="InstalledModsColumnMenuItem_OnChecked"
+                                  Unchecked="InstalledModsColumnMenuItem_OnChecked" />
+                    </MenuItem>
                 </MenuItem>
                 <MenuItem Header="_Help / Advanced" Height="35">
                     <MenuItem x:Name="ManagerVersionMenuItem"
@@ -581,7 +654,7 @@
                 <Hyperlink NavigateUri="https://mods.vintagestory.at/simplevsmanager"
                            Foreground="{DynamicResource Brush.Text.Emphasis}"
                            RequestNavigate="ManagerUpdateLink_OnRequestNavigate">
-                    Update available!
+                    Manager update available!
                 </Hyperlink>
             </TextBlock>
 
@@ -609,13 +682,15 @@
                             Height="40"
                             FontSize="16"
                             Style="{StaticResource IMM.InstalledTabButtonStyle}" />
-                    <Button Content="Mod DB"
+                    <Button x:Name="ModDatabaseTabButton"
+                            Content="Mod DB"
                             Command="{Binding ShowModDatabaseCommand}"
                             Width="138"
                             Height="40"
                             FontSize="16"
                             Style="{StaticResource IMM.ModDatabaseTabButtonStyle}" Margin="5,0,0,0" />
-                    <Button Content="Modlists"
+                    <Button x:Name="ModlistsTabButton"
+                            Content="Modlists"
                             Command="{Binding ShowCloudModlistsCommand}"
                             Width="138"
                             Height="40"
@@ -784,7 +859,8 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
-                            <Button Content="Rebuild"
+                            <Button x:Name="RebuildButton"
+                                Content="Rebuild"
                                 Width="65"
                                 Height="32"
                                 ToolTip="Deletes all mod info cache and fetches fresh data online. Slower but ensures everything is reindexed."
@@ -1081,7 +1157,7 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Header="Name" Binding="{Binding DisplayName, Mode=OneWay}" Width="220" SortMemberPath="DisplayName" IsReadOnly="True">
+                                <DataGridTextColumn x:Name="NameColumn" Header="Name" Binding="{Binding DisplayName, Mode=OneWay}" Width="220" SortMemberPath="DisplayName" IsReadOnly="True">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="{x:Type TextBlock}">
                                             <Setter Property="FontFamily" Value="Segoe UI" />
@@ -1160,7 +1236,7 @@
                                         </Style>
                                     </DataGridTextColumn.CellStyle>
                                 </DataGridTextColumn>
-                                <DataGridTextColumn Header="Latest Version" Binding="{Binding LatestDatabaseVersionDisplay, Mode=OneWay}" SortMemberPath="LatestVersionSortKey" Width="140" MinWidth="139" IsReadOnly="True">
+                                <DataGridTextColumn x:Name="LatestVersionColumn" Header="Latest Version" Binding="{Binding LatestDatabaseVersionDisplay, Mode=OneWay}" SortMemberPath="LatestVersionSortKey" Width="140" MinWidth="139" IsReadOnly="True">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="{x:Type TextBlock}">
                                             <Setter Property="HorizontalAlignment" Value="Center" />
@@ -1247,7 +1323,7 @@
 
 
 
-                                <DataGridTextColumn Header="Authors" Binding="{Binding AuthorsDisplay, Mode=OneWay}" Width="150" IsReadOnly="True">
+                                <DataGridTextColumn x:Name="AuthorsColumn" Header="Authors" Binding="{Binding AuthorsDisplay, Mode=OneWay}" Width="150" IsReadOnly="True">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="{x:Type TextBlock}">
                                             <Setter Property="TextWrapping" Value="NoWrap" />
@@ -1424,7 +1500,7 @@
                                         </Style>
                                     </DataGridTemplateColumn.CellStyle>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Header="Side"
+                                <DataGridTextColumn x:Name="SideColumn" Header="Side"
                                     Binding="{Binding SideDisplay, Mode=OneWay}"
                                     SortMemberPath="Side"
                                     Width="90"
@@ -1690,6 +1766,27 @@
                                                 <Setter Property="HorizontalAlignment" Value="Center" />
                                                 <Setter Property="VerticalAlignment" Value="Center" />
                                                 <Setter Property="TextAlignment" Value="Center" />
+                                            </Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                        <DataGridTextColumn.CellStyle>
+                                            <Style TargetType="{x:Type DataGridCell}" BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                <Setter Property="VerticalContentAlignment" Value="Center" />
+                                            </Style>
+                                        </DataGridTextColumn.CellStyle>
+                                    </DataGridTextColumn>
+                                    <DataGridTextColumn Header="Date Added"
+                                                Width="180"
+                                                Binding="{Binding DateAddedDisplay}"
+                                                SortMemberPath="DateAdded"
+                                                IsReadOnly="True">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                                <Setter Property="VerticalAlignment" Value="Center" />
+                                                <Setter Property="TextAlignment" Value="Center" />
+                                                <Setter Property="ToolTipService.ShowDuration" Value="60000" />
+                                                <Setter Property="ToolTip" Value="{Binding DateAddedDisplay}" />
                                             </Style>
                                         </DataGridTextColumn.ElementStyle>
                                         <DataGridTextColumn.CellStyle>
@@ -2247,10 +2344,11 @@
                             Orientation="Horizontal"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Top" Margin="0,18,0,0">
-                <Button Content="Update All"
-                            Margin="0,0,4,0"
-                            Width="125"
-                            Background="{DynamicResource Brush.Button.Primary.Background.Normal}"
+                <Button x:Name="UpdateAllButton"
+                        Content="{Binding DataContext.UpdateAllButtonLabel, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=Update All}"
+                        Margin="0,0,4,0"
+                        Width="125"
+                        Background="{DynamicResource Brush.Button.Primary.Background.Normal}"
                             BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
                             Click="UpdateAllModsMenuItem_OnClick"
                             Height="32" Padding="6,6,6,6" />
@@ -2275,10 +2373,11 @@
                             BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
                             Click="OpenModFolderButton_OnClick"
                             Height="32" Padding="6,6,6,6" />
-                <Button Content="Launch Vintage Story"
-                            Width="150"
-                            Background="{DynamicResource Brush.Button.Primary.Background.Normal}"
-                            BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                <Button x:Name="LaunchGameButton"
+                        Content="Launch Vintage Story"
+                        Width="150"
+                        Background="{DynamicResource Brush.Button.Primary.Background.Normal}"
+                        BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
                             Click="LaunchGameButton_OnClick"
                             Height="32"
                             FontWeight="Bold" />
