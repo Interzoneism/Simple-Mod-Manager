@@ -15,7 +15,7 @@ namespace VintageStoryModManager;
 
 public partial class App : System.Windows.Application
 {
-    private const string SingleInstanceMutexName = "VintageStoryModManager.SingleInstance";
+    private static readonly string SingleInstanceMutexName = DevConfig.SingleInstanceMutexName;
     private static readonly Uri DarkVsThemeUri = new("Resources/Themes/DarkVsTheme.xaml", UriKind.Relative);
     private Mutex? _instanceMutex;
     private bool _ownsMutex;

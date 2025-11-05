@@ -49,18 +49,31 @@
                                 Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
                                 BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}">
                             <StackPanel>
-                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}">
-                                    <CheckBox.Content>
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding DisplayName}"
-                                                       FontSize="14"
-                                                       FontWeight="SemiBold" />
-                                            <TextBlock Text="{Binding VersionSummary}"
-                                                       Margin="0,4,0,0"
-                                                       Foreground="{DynamicResource Brush.Text.Secondary}" />
-                                        </StackPanel>
-                                    </CheckBox.Content>
-                                </CheckBox>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                                        <CheckBox.Content>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           FontSize="14"
+                                                           FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding VersionSummary}"
+                                                           Margin="8,2,0,0"
+                                                           Foreground="{DynamicResource Brush.Text.Secondary}" />
+                                            </StackPanel>
+                                        </CheckBox.Content>
+                                    </CheckBox>
+                                    <Button Grid.Column="1"
+                                            Content="Skip"
+                                            Margin="12,0,0,0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            IsEnabled="{Binding CanSkip}"
+                                            Click="SkipVersionButton_OnClick" />
+                                </Grid>
 
                                 <Expander Header="{Binding ChangelogHeader}"
                                           FontWeight="Bold"

@@ -6,6 +6,7 @@ using System.Windows;
 using VintageStoryModManager.Models;
 using VintageStoryModManager.Services;
 using VintageStoryModManager.ViewModels;
+using WpfMessageBox = VintageStoryModManager.Services.ModManagerMessageBox;
 
 namespace VintageStoryModManager.Views.Dialogs;
 
@@ -56,6 +57,39 @@ public partial class UpdateModsDialog : Window
         DialogResult = true;
     }
 
+    private void SkipVersionButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button { DataContext: UpdateModSelectionViewModel selection })
+        {
+            return;
+        }
+
+        string? versionToSkip = selection.TargetUpdateVersion;
+        if (string.IsNullOrWhiteSpace(versionToSkip))
+        {
+            return;
+        }
+
+        string message = $"This will permanently skip version {versionToSkip} and prevent any further update prompts for it.";
+        MessageBoxResult confirmation = WpfMessageBox.Show(
+            this,
+            message,
+            "Simple VS Manager",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        _configuration.SkipModVersion(selection.Mod.ModId, versionToSkip);
+        _configuration.SetModExcludedFromBulkUpdates(selection.Mod.ModId, isExcluded: false);
+
+        selection.Mod.RefreshSkippedUpdateState();
+        RemoveMod(selection);
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         foreach (UpdateModSelectionViewModel item in _viewModel.Mods)
@@ -64,6 +98,12 @@ public partial class UpdateModsDialog : Window
         }
 
         base.OnClosed(e);
+    }
+
+    private void RemoveMod(UpdateModSelectionViewModel selection)
+    {
+        selection.PropertyChanged -= OnSelectionPropertyChanged;
+        _viewModel.RemoveMod(selection);
     }
 
     private void OnSelectionPropertyChanged(object? sender, PropertyChangedEventArgs e)

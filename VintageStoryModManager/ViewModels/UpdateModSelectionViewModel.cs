@@ -36,6 +36,10 @@ public sealed partial class UpdateModSelectionViewModel : ObservableObject
         }
     }
 
+    public string? TargetUpdateVersion => _overrideRelease?.Version ?? Mod.LatestRelease?.Version;
+
+    public bool CanSkip => !string.IsNullOrWhiteSpace(TargetUpdateVersion);
+
     public string VersionSummary
     {
         get

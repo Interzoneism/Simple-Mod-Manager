@@ -73,6 +73,23 @@ public sealed class UpdateModsDialogViewModel : ObservableObject
         return Mods.Where(m => m.IsSelected).Select(m => m.Mod).ToList();
     }
 
+    public bool RemoveMod(UpdateModSelectionViewModel? mod)
+    {
+        if (mod is null)
+        {
+            return false;
+        }
+
+        if (!Mods.Remove(mod))
+        {
+            return false;
+        }
+
+        mod.PropertyChanged -= OnModPropertyChanged;
+        UpdateSelectAllState();
+        return true;
+    }
+
     private void OnModPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (!string.Equals(e.PropertyName, nameof(UpdateModSelectionViewModel.IsSelected), StringComparison.Ordinal))

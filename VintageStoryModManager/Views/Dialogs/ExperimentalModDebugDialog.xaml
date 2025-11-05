@@ -1,0 +1,166 @@
+<Window x:Class="VintageStoryModManager.Views.Dialogs.ExperimentalModDebugDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Experimental Mod Debugging"
+        Width="1200"
+        Height="600"
+        MinWidth="640"
+        MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        WindowStyle="SingleBorderWindow"
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}">
+    <Window.Resources>
+        <Style x:Key="ErrorRowStyle" TargetType="DataGridRow">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                    <Setter Property="Background" Value="Red" />
+                    <Setter Property="Foreground" Value="White" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Ensure cells also turn red; some themes paint cell backgrounds over the row -->
+        <Style x:Key="ErrorCellStyle" TargetType="{x:Type DataGridCell}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                    <Setter Property="Background" Value="Red" />
+                    <Setter Property="Foreground" Value="White" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24"
+          Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+          TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   FontSize="18"
+                   FontWeight="SemiBold"
+                   TextWrapping="Wrap"
+                   Text="{Binding HeaderText}" />
+
+        <CheckBox Grid.Row="1"
+                  Margin="0,12,0,0"
+                  Content="Show only highlighted errors"
+                  IsChecked="{Binding ShowOnlyHighlighted, Mode=TwoWay}" />
+
+        <Border Grid.Row="2"
+                Margin="0,16,0,16"
+                Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                BorderBrush="{DynamicResource Brush.Border.Default}"
+                BorderThickness="1">
+            <Grid>
+                <DataGrid ItemsSource="{Binding FilteredLogLines}"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"
+                          IsReadOnly="True"
+                          EnableRowVirtualization="True"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.CanContentScroll="True"
+                          GridLinesVisibility="None"
+                          SelectionUnit="FullRow"
+                          SelectionMode="Single"
+                          RowHeaderWidth="0"
+                          BorderThickness="0"
+                          MinColumnWidth="20"
+                          Foreground="{DynamicResource Brush.Text.Primary}"
+                          RowStyle="{StaticResource ErrorRowStyle}"
+                          CellStyle="{StaticResource ErrorCellStyle}"
+                          RowBackground="{DynamicResource Brush.Button.Primary.Background.Normal}"
+                          HorizontalGridLinesBrush="Transparent"
+                          VerticalGridLinesBrush="Transparent"
+                          HeadersVisibility="Column"
+                          FontSize="15"
+                          Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                          BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                          MouseDoubleClick="DataGrid_OnMouseDoubleClick">
+                    <DataGrid.Resources>
+                        <Style TargetType="{x:Type DataGridColumnHeader}">
+                            <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                            <Setter Property="BorderThickness" Value="1,0,0,1" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                            <Setter Property="Padding" Value="12,10" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                            <Setter Property="HorizontalContentAlignment" Value="Left" />
+                        </Style>
+                    </DataGrid.Resources>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Line" 
+                                            Binding="{Binding Text, Mode=OneWay}" 
+                                            SortMemberPath="Text"
+                                            Width="*"
+                                            MinWidth="200">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                    <Setter Property="FontFamily" Value="Consolas" />
+                                    <Setter Property="Padding" Value="8,6" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Mod" 
+                                            Binding="{Binding ModName, Mode=OneWay}" 
+                                            SortMemberPath="ModName"
+                                            Width="200"
+                                            MinWidth="100">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                    <Setter Property="Padding" Value="8,6" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                    </DataGrid.Columns>
+                    <DataGrid.Style>
+                        <Style TargetType="{x:Type DataGrid}">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasLogLines}" Value="False">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.Style>
+                </DataGrid>
+
+                <TextBlock HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Text="{Binding EmptyMessage}"
+                           TextWrapping="Wrap"
+                           FontSize="16"
+                           FontStyle="Italic">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasLogLines}" Value="False">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+        </Border>
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+            <Button Width="100"
+                    IsDefault="True"
+                    Content="Close"
+                    Click="CloseButton_OnClick" />
+        </StackPanel>
+    </Grid>
+</Window>

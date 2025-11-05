@@ -13,7 +13,7 @@ namespace VintageStoryModManager.Services;
 /// </summary>
 public static class VintageStoryGameVersionService
 {
-    private const string GameVersionsEndpoint = "https://mods.vintagestory.at/api/gameversions";
+    private static readonly string GameVersionsEndpoint = DevConfig.GameVersionsEndpoint;
 
     private static readonly HttpClient HttpClient = new();
 

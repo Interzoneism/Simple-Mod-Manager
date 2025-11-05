@@ -20,8 +20,15 @@ internal static class ModCacheService
             return;
         }
 
-        string? cachePath = ModCacheLocator.GetModCachePath(modId, version, Path.GetFileName(sourcePath));
+        string? cacheFileName = Path.GetFileName(sourcePath);
+        string? cachePath = ModCacheLocator.GetModCachePath(modId, version, cacheFileName);
         if (string.IsNullOrWhiteSpace(cachePath))
+        {
+            return;
+        }
+
+        if (ModCacheLocator.TryPromoteLegacyCacheFile(modId, version, cacheFileName, cachePath)
+            && File.Exists(cachePath))
         {
             return;
         }
@@ -34,6 +41,19 @@ internal static class ModCacheService
         if (File.Exists(cachePath))
         {
             return;
+        }
+
+        if (ModCacheLocator.TryLocateCachedModFile(modId, version, cacheFileName, out string? existingCacheFile)
+            && existingCacheFile is not null)
+        {
+            string? existingDirectory = Path.GetDirectoryName(existingCacheFile);
+            string? cacheDirectory = Path.GetDirectoryName(cachePath);
+            if (!string.IsNullOrWhiteSpace(existingDirectory)
+                && !string.IsNullOrWhiteSpace(cacheDirectory)
+                && string.Equals(existingDirectory, cacheDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
         }
 
         try

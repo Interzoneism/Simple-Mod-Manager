@@ -13,9 +13,9 @@ namespace VintageStoryModManager.Services;
 /// </summary>
 public static class StatusLogService
 {
-    private const string TimestampFormat = "yyyy-MM-dd HH:mm:ss.fff";
-    private const int MaxModNameLength = 10;
-    private const int MaxLogLines = 5000;
+    private static readonly string TimestampFormat = DevConfig.StatusTimestampFormat;
+    private static readonly int MaxModNameLength = DevConfig.StatusLogMaxModNameLength;
+    private static readonly int MaxLogLines = DevConfig.StatusLogMaxLines;
     private static readonly object SyncRoot = new();
     private static readonly string LogFilePath = InitializeLogFilePath();
     private static volatile bool _isLoggingEnabled;
@@ -30,6 +30,20 @@ public static class StatusLogService
     {
         try
         {
+            string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrEmpty(localAppDataPath))
+            {
+                string directory = Path.Combine(localAppDataPath, "Simple VS Manager");
+                return Path.Combine(directory, "SimpleVSManagerStatus.log");
+            }
+
+            string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (!string.IsNullOrEmpty(appDataPath))
+            {
+                string directory = Path.Combine(appDataPath, "Simple VS Manager");
+                return Path.Combine(directory, "SimpleVSManagerStatus.log");
+            }
+
             string documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             if (!string.IsNullOrEmpty(documentsPath))
             {
@@ -39,7 +53,7 @@ public static class StatusLogService
         }
         catch (Exception)
         {
-            // Ignore failures when determining the documents directory and fall back to the app directory.
+            // Ignore failures when determining the directory and fall back to the app directory.
         }
 
         return Path.Combine(AppContext.BaseDirectory, "SimpleVSManagerStatus.log");

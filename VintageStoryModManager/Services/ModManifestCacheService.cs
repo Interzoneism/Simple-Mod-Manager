@@ -10,8 +10,8 @@ namespace VintageStoryModManager.Services;
 /// </summary>
 internal static class ModManifestCacheService
 {
-    private const string MetadataFolderName = "Mod Metadata";
-    private const string IndexFileName = "metadata-index.json";
+    private static readonly string MetadataFolderName = DevConfig.MetadataFolderName;
+    private static readonly string IndexFileName = DevConfig.MetadataIndexFileName;
 
     private static readonly object IndexLock = new();
     private static Dictionary<string, CacheEntry>? _index;

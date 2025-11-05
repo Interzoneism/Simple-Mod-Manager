@@ -34,6 +34,8 @@ public sealed class ModListItemViewModel : ObservableObject
     private readonly IReadOnlyList<string> _contributors;
     private readonly string? _description;
     private readonly string? _metadataError;
+    private readonly Func<string?, string?, bool>? _shouldSkipVersion;
+    private readonly Func<bool>? _requireExactVersionMatch;
     private string? _loadError;
     private IReadOnlyList<ModDependencyInfo> _missingDependencies;
     private bool _dependencyHasErrors;
@@ -73,6 +75,15 @@ public sealed class ModListItemViewModel : ObservableObject
     private string? _updateMessage;
     private ModVersionOptionViewModel? _selectedVersionOption;
     private string? _modDatabaseSide;
+    private ModVersionVoteSummary? _userReportSummary;
+    private string _userReportDisplay = "—";
+    private string? _userReportTooltip;
+    private bool _isUserReportLoading;
+    private bool _userReportHasError;
+    private ModVersionVoteSummary? _latestReleaseUserReportSummary;
+    private string? _latestReleaseUserReportVersion;
+    private string? _latestReleaseUserReportDisplay;
+    private string? _latestReleaseUserReportTooltip;
 
     public sealed record ReleaseChangelog(string Version, string Changelog);
 
@@ -82,11 +93,15 @@ public sealed class ModListItemViewModel : ObservableObject
         string location,
         Func<ModListItemViewModel, bool, Task<ActivationResult>> activationHandler,
         string? installedGameVersion = null,
-        bool isInstalled = false)
+        bool isInstalled = false,
+        Func<string?, string?, bool>? shouldSkipVersion = null,
+        Func<bool>? requireExactVersionMatch = null)
     {
         ArgumentNullException.ThrowIfNull(entry);
         _activationHandler = activationHandler ?? throw new ArgumentNullException(nameof(activationHandler));
         _installedGameVersion = installedGameVersion;
+        _shouldSkipVersion = shouldSkipVersion;
+        _requireExactVersionMatch = requireExactVersionMatch;
 
         ModId = entry.ModId;
         DisplayName = string.IsNullOrWhiteSpace(entry.Name) ? entry.ModId : entry.Name;
@@ -173,6 +188,7 @@ public sealed class ModListItemViewModel : ObservableObject
         UpdateNewerReleaseChangelogs();
         UpdateStatusFromErrors();
         UpdateTooltip();
+        InitializeUserReportState(_installedGameVersion, Version);
         _searchIndex = BuildSearchIndex(entry, location);
     }
 
@@ -331,6 +347,30 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public bool HasNewerReleaseChangelogs => _newerReleaseChangelogs.Count > 0;
 
+    public ModVersionVoteSummary? LatestReleaseUserReportSummary => _latestReleaseUserReportSummary;
+
+    public string? LatestReleaseUserReportVersion => _latestReleaseUserReportVersion;
+
+    public string? LatestReleaseUserReportDisplay
+    {
+        get => _latestReleaseUserReportDisplay;
+        private set
+        {
+            if (SetProperty(ref _latestReleaseUserReportDisplay, value))
+            {
+                OnPropertyChanged(nameof(HasLatestReleaseUserReport));
+            }
+        }
+    }
+
+    public string? LatestReleaseUserReportTooltip
+    {
+        get => _latestReleaseUserReportTooltip;
+        private set => SetProperty(ref _latestReleaseUserReportTooltip, value);
+    }
+
+    public bool HasLatestReleaseUserReport => !string.IsNullOrWhiteSpace(_latestReleaseUserReportDisplay);
+
     public IReadOnlyList<ReleaseChangelog> GetChangelogEntriesForUpgrade(string? targetVersion)
     {
         if (_releases.Count == 0 || string.IsNullOrWhiteSpace(targetVersion))
@@ -373,6 +413,322 @@ public sealed class ModListItemViewModel : ObservableObject
         }
 
         return entries.Count == 0 ? Array.Empty<ReleaseChangelog>() : entries;
+    }
+
+    public ModVersionVoteSummary? UserReportSummary => _userReportSummary;
+
+    public ModVersionVoteCounts UserReportCounts => _userReportSummary?.Counts ?? ModVersionVoteCounts.Empty;
+
+    public ModVersionVoteOption? UserVoteOption => _userReportSummary?.UserVote;
+
+    public string UserReportDisplay
+    {
+        get => _userReportDisplay;
+        private set => SetProperty(ref _userReportDisplay, value);
+    }
+
+    public string? UserReportTooltip
+    {
+        get => _userReportTooltip;
+        private set => SetProperty(ref _userReportTooltip, value);
+    }
+
+    public bool IsUserReportLoading
+    {
+        get => _isUserReportLoading;
+        private set => SetProperty(ref _isUserReportLoading, value);
+    }
+
+    public bool UserReportHasError
+    {
+        get => _userReportHasError;
+        private set => SetProperty(ref _userReportHasError, value);
+    }
+
+    public bool CanSubmitUserReport => !string.IsNullOrWhiteSpace(_installedGameVersion) && !string.IsNullOrWhiteSpace(Version);
+
+    private void InitializeUserReportState(string? installedGameVersion, string? modVersion)
+    {
+        if (string.IsNullOrWhiteSpace(installedGameVersion) || string.IsNullOrWhiteSpace(modVersion))
+        {
+            SetUserReportUnavailable("User reports require a known Vintage Story and mod version.");
+            return;
+        }
+
+        SetUserReportLoading();
+    }
+
+    public void SetUserReportLoading()
+    {
+        ClearUserReportSummary();
+        UserReportHasError = false;
+        IsUserReportLoading = true;
+        UserReportDisplay = "Loading…";
+        UserReportTooltip = "Fetching user reports…";
+    }
+
+    public void SetUserReportOffline()
+    {
+        IsUserReportLoading = false;
+        UserReportHasError = false;
+        UserReportDisplay = "Offline";
+        UserReportTooltip = "Enable Internet Access in the File menu to load user reports.";
+    }
+
+    public void SetUserReportUnavailable(string message)
+    {
+        ClearUserReportSummary();
+        UserReportHasError = false;
+        IsUserReportLoading = false;
+        UserReportDisplay = "Unavailable";
+        UserReportTooltip = string.IsNullOrWhiteSpace(message) ? BuildUserReportTooltip(null) : message;
+    }
+
+    public void SetUserReportError(string message)
+    {
+        IsUserReportLoading = false;
+        UserReportHasError = true;
+        UserReportTooltip = string.IsNullOrWhiteSpace(message)
+            ? "Failed to load user reports. Try again later."
+            : message;
+
+        if (_userReportSummary is null)
+        {
+            UserReportDisplay = "Error";
+        }
+    }
+
+    public void ApplyUserReportSummary(ModVersionVoteSummary summary)
+    {
+        _userReportSummary = summary ?? throw new ArgumentNullException(nameof(summary));
+        IsUserReportLoading = false;
+        UserReportHasError = false;
+        UserReportDisplay = BuildUserReportDisplay(summary);
+        UserReportTooltip = BuildUserReportTooltip(summary);
+        OnPropertyChanged(nameof(UserReportSummary));
+        OnPropertyChanged(nameof(UserReportCounts));
+        OnPropertyChanged(nameof(UserVoteOption));
+    }
+
+    private void ClearUserReportSummary()
+    {
+        if (_userReportSummary is null)
+        {
+            OnPropertyChanged(nameof(UserReportSummary));
+            OnPropertyChanged(nameof(UserReportCounts));
+            OnPropertyChanged(nameof(UserVoteOption));
+            return;
+        }
+
+        _userReportSummary = null;
+        OnPropertyChanged(nameof(UserReportSummary));
+        OnPropertyChanged(nameof(UserReportCounts));
+        OnPropertyChanged(nameof(UserVoteOption));
+    }
+
+    private static string BuildUserReportDisplay(ModVersionVoteSummary? summary)
+    {
+        if (summary is null || summary.TotalVotes == 0)
+        {
+            return "No votes";
+        }
+
+        ModVersionVoteOption? majority = summary.GetMajorityOption();
+        if (majority is null)
+        {
+            return string.Create(
+                8 + summary.TotalVotes.ToString(CultureInfo.CurrentCulture).Length,
+                summary.TotalVotes,
+                static (span, total) =>
+                {
+                    const string prefix = "Mixed (";
+                    prefix.AsSpan().CopyTo(span);
+                    int offset = prefix.Length;
+                    string totalText = total.ToString(CultureInfo.CurrentCulture);
+                    totalText.AsSpan().CopyTo(span[offset..]);
+                    span[offset + totalText.Length] = ')';
+                });
+        }
+
+        int count = summary.Counts.GetCount(majority.Value);
+        string displayName = majority.Value.ToDisplayString();
+        string countText = count.ToString(CultureInfo.CurrentCulture);
+        return string.Concat(displayName, " (", countText, ")");
+    }
+
+    private string BuildUserReportTooltip(ModVersionVoteSummary? summary)
+    {
+        string versionText = string.IsNullOrWhiteSpace(_installedGameVersion)
+            ? "this VS version"
+            : string.Format(CultureInfo.CurrentCulture, "VS {0}", _installedGameVersion);
+
+        if (summary is null)
+        {
+            return string.Format(
+                CultureInfo.CurrentCulture,
+                "No votes recorded yet for {0}. Click to share your experience.",
+                versionText);
+        }
+
+        ModVersionVoteCounts counts = summary.Counts;
+        string countsLine = BuildCountsSummary(versionText, counts);
+
+        string commentsText = BuildNegativeCommentsText(summary, requireNegativeMajority: false);
+        return string.IsNullOrEmpty(commentsText)
+            ? countsLine
+            : string.Concat(countsLine, Environment.NewLine, Environment.NewLine, commentsText);
+    }
+
+    private static string BuildCountsSummary(string versionText, ModVersionVoteCounts counts)
+    {
+        var builder = new StringBuilder();
+        builder.AppendFormat(CultureInfo.CurrentCulture, "User reports for {0}:{1}", versionText, Environment.NewLine);
+        builder.AppendFormat(CultureInfo.CurrentCulture, "Fully functional ({0}){1}", counts.FullyFunctional, Environment.NewLine);
+        builder.AppendFormat(CultureInfo.CurrentCulture, "No issues noticed ({0}){1}", counts.NoIssuesSoFar, Environment.NewLine);
+        builder.AppendFormat(CultureInfo.CurrentCulture, "Some issues but works ({0}){1}", counts.SomeIssuesButWorks, Environment.NewLine);
+        builder.AppendFormat(CultureInfo.CurrentCulture, "Not functional ({0}){1}", counts.NotFunctional, Environment.NewLine);
+        builder.AppendFormat(CultureInfo.CurrentCulture, "Crashes/Freezes game ({0})", counts.CrashesOrFreezesGame);
+        return builder.ToString();
+    }
+
+    private static string BuildNegativeCommentsText(ModVersionVoteSummary summary, bool requireNegativeMajority)
+    {
+        if (summary is null)
+        {
+            return string.Empty;
+        }
+
+        if (requireNegativeMajority)
+        {
+            ModVersionVoteOption? majority = summary.GetMajorityOption();
+            if (majority is not ModVersionVoteOption.NotFunctional
+                && majority is not ModVersionVoteOption.CrashesOrFreezesGame)
+            {
+                return string.Empty;
+            }
+        }
+
+        var builder = new StringBuilder();
+        AppendCommentSection(builder, "Not functional reports", summary.Comments.NotFunctional);
+        AppendCommentSection(builder, "Crashes/Freezes game reports", summary.Comments.CrashesOrFreezesGame);
+        return builder.ToString();
+    }
+
+    private static void AppendCommentSection(StringBuilder builder, string heading, IReadOnlyList<string> comments)
+    {
+        if (comments is null || comments.Count == 0)
+        {
+            return;
+        }
+
+        var uniqueComments = new List<string>(comments.Count);
+        var countsByComment = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (string comment in comments)
+        {
+            if (string.IsNullOrWhiteSpace(comment))
+            {
+                continue;
+            }
+
+            string trimmedComment = comment.Trim();
+            if (countsByComment.TryGetValue(trimmedComment, out int count))
+            {
+                countsByComment[trimmedComment] = count + 1;
+            }
+            else
+            {
+                countsByComment.Add(trimmedComment, 1);
+                uniqueComments.Add(trimmedComment);
+            }
+        }
+
+        if (uniqueComments.Count == 0)
+        {
+            return;
+        }
+
+        if (builder.Length > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine();
+        }
+
+        builder.Append(heading);
+        builder.Append(':');
+
+        foreach (string comment in uniqueComments)
+        {
+            builder.AppendLine();
+            builder.Append(" • ");
+            builder.Append(comment);
+
+            if (countsByComment[comment] > 1)
+            {
+                builder.Append(' ');
+                builder.Append('(');
+                builder.Append(countsByComment[comment].ToString(CultureInfo.CurrentCulture));
+                builder.Append(')');
+            }
+        }
+    }
+
+    public void ApplyLatestReleaseUserReportSummary(ModVersionVoteSummary summary)
+    {
+        if (summary is null)
+        {
+            return;
+        }
+
+        _latestReleaseUserReportSummary = summary;
+        _latestReleaseUserReportVersion = summary.ModVersion;
+        LatestReleaseUserReportDisplay = BuildLatestReleaseUserReportDisplay(summary);
+        LatestReleaseUserReportTooltip = BuildLatestReleaseUserReportTooltip(summary);
+    }
+
+    public void ClearLatestReleaseUserReport()
+    {
+        if (_latestReleaseUserReportSummary is null
+            && _latestReleaseUserReportVersion is null
+            && _latestReleaseUserReportDisplay is null)
+        {
+            return;
+        }
+
+        _latestReleaseUserReportSummary = null;
+        _latestReleaseUserReportVersion = null;
+        LatestReleaseUserReportDisplay = null;
+        LatestReleaseUserReportTooltip = null;
+    }
+
+    private static string? BuildLatestReleaseUserReportDisplay(ModVersionVoteSummary? summary)
+    {
+        if (summary is null || summary.TotalVotes == 0)
+        {
+            return null;
+        }
+
+        string display = BuildUserReportDisplay(summary);
+        return string.Equals(display, "No votes", StringComparison.Ordinal) ? null : display;
+    }
+
+    private static string? BuildLatestReleaseUserReportTooltip(ModVersionVoteSummary? summary)
+    {
+        if (summary is null || summary.TotalVotes == 0)
+        {
+            return null;
+        }
+
+        string versionText = string.IsNullOrWhiteSpace(summary.VintageStoryVersion)
+            ? "this Vintage Story version"
+            : string.Format(CultureInfo.CurrentCulture, "Vintage Story {0}", summary.VintageStoryVersion);
+
+        string countsLine = BuildCountsSummary(versionText, summary.Counts);
+        string commentsText = BuildNegativeCommentsText(summary, requireNegativeMajority: true);
+
+        return string.IsNullOrEmpty(commentsText)
+            ? countsLine
+            : string.Concat(countsLine, Environment.NewLine, Environment.NewLine, commentsText);
     }
 
     public string InstallButtonToolTip
@@ -627,6 +983,12 @@ public sealed class ModListItemViewModel : ObservableObject
         ModReleaseInfo? latestCompatibleRelease = info.LatestCompatibleRelease;
         IReadOnlyList<ModReleaseInfo> releases = info.Releases ?? Array.Empty<ModReleaseInfo>();
 
+        string? latestReleaseVersion = latestRelease?.Version;
+        if (!string.Equals(_latestReleaseUserReportVersion, latestReleaseVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            ClearLatestReleaseUserReport();
+        }
+
         _latestRelease = latestRelease;
         _latestCompatibleRelease = latestCompatibleRelease;
         _releases = releases;
@@ -751,6 +1113,34 @@ public sealed class ModListItemViewModel : ObservableObject
 
         UpdateStatusFromErrors();
         UpdateTooltip();
+    }
+
+    public void RefreshSkippedUpdateState()
+    {
+        bool previousHasUpdate = _hasUpdate;
+        string? previousMessage = _updateMessage;
+
+        InitializeUpdateAvailability();
+
+        if (previousHasUpdate != _hasUpdate)
+        {
+            OnPropertyChanged(nameof(CanUpdate));
+            OnPropertyChanged(nameof(ShouldHighlightLatestVersion));
+            OnPropertyChanged(nameof(LatestVersionSortKey));
+            OnPropertyChanged(nameof(RequiresCompatibilitySelection));
+            OnPropertyChanged(nameof(HasCompatibleUpdate));
+            OnPropertyChanged(nameof(HasDownloadableRelease));
+            OnPropertyChanged(nameof(UpdateButtonToolTip));
+            UpdateStatusFromErrors();
+            UpdateTooltip();
+            return;
+        }
+
+        if (!string.Equals(previousMessage, _updateMessage, StringComparison.Ordinal))
+        {
+            UpdateStatusFromErrors();
+            UpdateTooltip();
+        }
     }
 
     public void EnsureModDatabaseLogoLoaded()
@@ -1047,6 +1437,13 @@ public sealed class ModListItemViewModel : ObservableObject
             return;
         }
 
+        if (_shouldSkipVersion?.Invoke(ModId, _latestRelease.Version) == true)
+        {
+            _hasUpdate = false;
+            _updateMessage = null;
+            return;
+        }
+
         _hasUpdate = true;
         _updateMessage = BuildUpdateMessage(_latestRelease);
     }
@@ -1235,7 +1632,8 @@ public sealed class ModListItemViewModel : ObservableObject
         string? normalizedInstalled = VersionStringUtility.Normalize(installedGameVersion);
         IReadOnlyList<(string Normalized, string Original)> requiredVersions = BuildRequiredVersionCandidates();
 
-        if (TryCreateVersionWarning(requiredVersions, normalizedInstalled, out string? message))
+        bool requireExact = _requireExactVersionMatch?.Invoke() ?? false;
+        if (TryCreateVersionWarning(requiredVersions, normalizedInstalled, requireExact, out string? message))
         {
             _versionWarningMessage = message;
         }
@@ -1295,7 +1693,7 @@ public sealed class ModListItemViewModel : ObservableObject
         return string.Concat(baseText, Environment.NewLine, Environment.NewLine, _versionWarningMessage);
     }
 
-    private static bool TryCreateVersionWarning(IReadOnlyCollection<(string Normalized, string Original)> requiredVersions, string? installedVersion, out string? message)
+    private static bool TryCreateVersionWarning(IReadOnlyCollection<(string Normalized, string Original)> requiredVersions, string? installedVersion, bool requireExact, out string? message)
     {
         message = null;
 
@@ -1318,9 +1716,24 @@ public sealed class ModListItemViewModel : ObservableObject
             }
 
             hasComparable = true;
-            if (requiredMajor == installedMajor && requiredMinor == installedMinor)
+
+            if (requireExact)
             {
-                return false;
+                // Exact mode: Strict - compare first three version parts (major.minor.patch)
+                // Return false (no warning) if first 3 parts match exactly
+                if (VersionStringUtility.MatchesFirstThreeDigits(normalized, installedVersion))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                // Relaxed mode (default): Lenient - only compare major.minor (first two parts)
+                // Return false (no warning) if major.minor match, ignoring patch version differences
+                if (requiredMajor == installedMajor && requiredMinor == installedMinor)
+                {
+                    return false;
+                }
             }
         }
 

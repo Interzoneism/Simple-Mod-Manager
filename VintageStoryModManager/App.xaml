@@ -168,6 +168,53 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+            <Style x:Key="IMM.UserReportButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0,0" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="ButtonBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter 
+                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                  RecognizesAccessKey="True">
+                                    <ContentPresenter.Resources>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextWrapping" Value="Wrap" />
+                                            <Setter Property="TextAlignment" Value="Center" />
+                                        </Style>
+                                    </ContentPresenter.Resources>
+                                </ContentPresenter>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Link}" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Placeholder}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
             <Style x:Key="IMM.DataGridScrollBarThumbStyle" TargetType="{x:Type Thumb}">
                 <Setter Property="MinHeight" Value="18" />
@@ -508,6 +555,66 @@
                 </Setter>
             </Style>
 
+            <Style x:Key="IMM.TextBoxStyle" TargetType="TextBox">
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Button.Primary.Border.Normal}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="6,4" />
+                <Setter Property="FontFamily" Value="Segoe UI" />
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                <Setter Property="VerticalContentAlignment" Value="Top" />
+                <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Selection.Background}" />
+                <Setter Property="SelectionTextBrush" Value="{DynamicResource Brush.Text.SelectionForeground}" />
+                <Setter Property="CaretBrush" Value="{DynamicResource Brush.Text.Caret}" />
+                <Setter Property="ui:ControlHelper.CornerRadius" Value="6" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TextBox">
+                            <Border x:Name="TopAndLeft"
+                                    Background="Transparent"
+                                    BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Light}"
+                                    BorderThickness="0,0,1,1"
+                                    CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                    SnapsToDevicePixels="True">
+                                <Border x:Name="BottomAndRight"
+                                        Background="Transparent"
+                                        BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Dark}"
+                                        BorderThickness="1,1,0,0"
+                                        CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                        SnapsToDevicePixels="True">
+                                    <Border x:Name="ChromeBorder"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ScrollViewer x:Name="PART_ContentHost"
+                                                      HorizontalAlignment="Stretch"
+                                                      VerticalAlignment="Stretch"
+                                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                    </Border>
+                                </Border>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Placeholder}" />
+                                    <Setter Property="Opacity" Value="0.6" />
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <Style TargetType="{x:Type Button}" BasedOn="{StaticResource IMM.ButtonBaseStyle}">
                 <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
                 <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
@@ -649,6 +756,8 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+
+            <Style x:Key="IMM.ComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}" />
 
             <Style TargetType="TextBox">
                 <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />

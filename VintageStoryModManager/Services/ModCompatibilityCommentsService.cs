@@ -15,8 +15,8 @@ namespace VintageStoryModManager.Services;
 
 public sealed class ModCompatibilityCommentsService
 {
-    private const string ModApiUrlTemplate = "https://mods.vintagestory.at/api/mod/{0}";
-    private const string ModPageUrlTemplate = "https://mods.vintagestory.at/{0}";
+    private static readonly string ModApiUrlTemplate = DevConfig.ModCompatibilityApiUrlTemplate;
+    private static readonly string ModPageUrlTemplate = DevConfig.ModCompatibilityPageUrlTemplate;
 
     private static readonly HttpClient HttpClient = new(new HttpClientHandler
     {

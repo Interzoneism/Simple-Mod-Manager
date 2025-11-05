@@ -1,0 +1,88 @@
+<Window x:Class="VintageStoryModManager.Views.Dialogs.HelpDialogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Simple VS Manager Help"
+        Width="739"
+        MinWidth="640"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        WindowStyle="SingleBorderWindow"
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}" Height="342">
+    <Grid Margin="24"
+          Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+          TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      MaxHeight="420"
+                      Background="{DynamicResource Brush.Dialog.TextBox.Background}">
+            <StackPanel>
+                <TextBlock FontSize="20"
+                           FontWeight="Bold"
+                           Text="Help" />
+
+                <TextBlock Margin="0,12,0,0"
+                           TextWrapping="Wrap"
+                           FontSize="15">
+                    <Run Text="If you are experiencing any errors or problems, start with running &quot;Clear all caches&quot; in the Help menu." />
+                </TextBlock>
+
+                <TextBlock Margin="0,12,0,0"
+                           TextWrapping="Wrap"
+                           FontSize="15">
+                    <Run Text="Another thing you can try is to save your installed mods as a local Modlist, delete all your mods, and load the Modlist to reinstall them." />
+                </TextBlock>
+
+                <TextBlock Margin="0,12,0,0"
+                           TextWrapping="Wrap"
+                           FontSize="15">
+                    <Run Text="If you are having issues with the online Modlists or the Voting function, make sure the firebase-auth.json file is inside the"/>
+                    <Hyperlink x:Name="FirebaseFileHyperlink"
+                       RequestNavigate="OnFirebaseHyperlinkRequestNavigate"
+                       Foreground="{DynamicResource Brush.Text.Emphasis}">
+                       <Run Text="Simple VS Manager folder"/>
+                    </Hyperlink>
+                    <Run Text="- if it's missing or if still not working you can copy the backup from" />
+                    <Hyperlink x:Name="BackupLink"
+                       RequestNavigate="OnBackupHyperlinkRequestNavigate"
+                       Foreground="{DynamicResource Brush.Text.Emphasis}">
+                       <Run Text="AppData/Local/SVSM Backup"/>
+                    </Hyperlink>
+                    <Run Text="and replace the firebase-auth.json file." />
+
+                </TextBlock>
+
+                <TextBlock Margin="0,12,0,0"
+                           TextWrapping="Wrap"
+                           FontSize="15">
+                    <Run Text="Always update to the latest manager version."/>
+                    <LineBreak/>
+                    <Run Text="Make sure to read the description and check out the latest comments on the"/>
+                    <Hyperlink x:Name="ModDBlink"
+                       RequestNavigate="OnModDBlinkNavigate"
+                       Foreground="{DynamicResource Brush.Text.Emphasis}">
+                       <Run Text="managers Mod DB page"/>
+                    </Hyperlink>
+                </TextBlock>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,24,0,0">
+            <Button Width="100"
+                    IsDefault="True"
+                    Content="Close"
+                    Click="OnHelpCloseButtonClick" />
+        </StackPanel>
+    </Grid>
+</Window>

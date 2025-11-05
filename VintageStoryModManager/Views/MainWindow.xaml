@@ -14,7 +14,7 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type={x:Type design:MainWindowDesignData}}"
         Title="Simple VS Manager"
-        Height="798" Width="1272"
+        Height="801" Width="1401"
         MinWidth="1200" MinHeight="775" WindowStartupLocation="CenterScreen"
         PreviewKeyDown="MainWindow_OnPreviewKeyDown" Background="{DynamicResource Brush.Window.Shell.Background.Solid}">
 
@@ -403,7 +403,7 @@
         </Style>
     </Window.Resources>
 
-    <Grid Margin="0,0,0,8" Background="{DynamicResource Brush.Panel.Primary.Background.Solid}">
+    <Grid x:Name="RootGrid" Margin="0,0,0,8" Background="{DynamicResource Brush.Panel.Primary.Background.Solid}">
 
         <Grid.RowDefinitions>
             <RowDefinition Height="35" MinHeight="10" />
@@ -454,6 +454,12 @@
                               Height="35"
                               Click="UpdateAllModsMenuItem_OnClick" />
                     <MenuItem Header="Check mods compatibility" Height="35" Click="CheckModsCompatibilityMenuItem_OnClick" />
+                    <MenuItem x:Name="RequireExactVsVersionMenuItem"
+                              Header="Require exact VS version for compatibility checks"
+                              Height="35"
+                              IsCheckable="True"
+                              Style="{StaticResource ToggleMenuItemStyle}"
+                              Click="RequireExactVsVersionMenuItem_OnClick" />
                     <MenuItem x:Name="CacheAllVersionsMenuItem"
                               Header="Cache all versions locally"
                               Height="35"
@@ -601,6 +607,13 @@
                                   Style="{StaticResource ToggleMenuItemStyle}"
                                   Checked="InstalledModsColumnMenuItem_OnChecked"
                                   Unchecked="InstalledModsColumnMenuItem_OnChecked" />
+                        <MenuItem x:Name="UserReportsColumnMenuItem"
+                                  Header="User _Reports"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Style="{StaticResource ToggleMenuItemStyle}"
+                                  Checked="InstalledModsColumnMenuItem_OnChecked"
+                                  Unchecked="InstalledModsColumnMenuItem_OnChecked" />
                         <MenuItem x:Name="SideColumnMenuItem"
                                   Header="S_ide"
                                   IsCheckable="True"
@@ -610,18 +623,20 @@
                                   Unchecked="InstalledModsColumnMenuItem_OnChecked" />
                     </MenuItem>
                 </MenuItem>
-                <MenuItem Header="_Help / Advanced" Height="35">
+                <MenuItem Header="_Help &amp; Advanced" Height="35">
                     <MenuItem x:Name="ManagerVersionMenuItem"
                               Header="Version: --"
                               Padding="12,6"
                               IsEnabled="False"
-                              Focusable="False" />
+                              Focusable="False"
+                              Opacity="0.75"/>
                     <MenuItem x:Name="GameVersionMenuItem"
                               Header="Vintage Story: --"
                               Padding="12,6"
                               IsEnabled="False"
                               Focusable="False"
-                              Visibility="Collapsed" />
+                              Visibility="Collapsed"
+                              Opacity="0.75"/>
                     <MenuItem Header="Open manager config folder"
                               Padding="12,6"
                               Click="ManagerDataFolderMenuItem_OnClick" />
@@ -631,32 +646,55 @@
                     <MenuItem Header="_Additonal Info"
                               Padding="12,6"
                               Click="GuideMenuItem_OnClick" />
-                    <MenuItem Header="_Advanced" Height="35">
-                        <MenuItem x:Name="EnableDebugLoggingMenuItem"
-                                  Header="Enable debug logging"
-                                  Height="35"
-                                  IsCheckable="True"
-                                  Style="{StaticResource ToggleMenuItemStyle}"
-                                  Click="EnableDebugLoggingMenuItem_OnClick" />
-                        <MenuItem Header="Delete all Simple VS Manager files (Uninstall)"
-                                  Padding="12,6"
-                                  Click="DeleteAllManagerFilesMenuItem_OnClick" />
-                    </MenuItem>
+                    <MenuItem Header="Help!"
+                              Padding="12,6"
+                              Click="HelpMenuItem_OnClick" />
+                    <MenuItem x:Name="DeveloperProfilesMenuItem"
+                              Header="Developer Profiles"
+                              Padding="12,6"
+                              Visibility="Collapsed" />
+                    <Separator />
+                    <MenuItem Header="Debug: Show all game log lines referencing the selected mod."
+                              Padding="12,6"
+                              Click="ExperimentalModDebuggingMenuItem_OnClick" />
+                    <MenuItem Header="Debug: Show all game log lines found referencing any installed mod"
+                              Padding="12,6"
+                              Click="ExperimentalAllModsDebuggingMenuItem_OnClick" />
+                    <MenuItem Header="Clear all caches"
+                              Padding="12,6"
+                              Click="ClearAllCachesMenuItem_OnClick" />
+                    <MenuItem Header="Delete all Simple VS Manager files (Uninstall)"
+                              Padding="12,6"
+                              Click="DeleteAllManagerFilesMenuItem_OnClick" />
+
                 </MenuItem>
             </Menu>
 
-            <TextBlock x:Name="ManagerUpdateLinkTextBlock"
-                       Grid.Column="1"
-                       Visibility="Collapsed"
-                       Margin="4,0,4,0"
-                       VerticalAlignment="Center"
-                       HorizontalAlignment="Left">
-                <Hyperlink NavigateUri="https://mods.vintagestory.at/simplevsmanager"
-                           Foreground="{DynamicResource Brush.Text.Emphasis}"
-                           RequestNavigate="ManagerUpdateLink_OnRequestNavigate">
-                    Manager update available!
-                </Hyperlink>
-            </TextBlock>
+            <StackPanel Grid.Column="1"
+                        Margin="4,0,4,0"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Left">
+                <TextBlock x:Name="ManagerUpdateLinkTextBlock"
+                           Visibility="Collapsed"
+                           Margin="0,0,12,0"
+                           VerticalAlignment="Center">
+                    <Hyperlink NavigateUri="https://mods.vintagestory.at/simplevsmanager"
+                               Foreground="{DynamicResource Brush.Text.Emphasis}"
+                               RequestNavigate="ManagerUpdateLink_OnRequestNavigate">
+                        Manager update available!
+                    </Hyperlink>
+                </TextBlock>
+
+                <TextBlock x:Name="ModUsagePromptTextBlock"
+                           Visibility="Collapsed"
+                           VerticalAlignment="Center">
+                    <Hyperlink Foreground="{DynamicResource Brush.Text.Emphasis}"
+                               Click="ModUsagePromptLink_OnClick">
+                        Confirm working mods!
+                    </Hyperlink>
+                </TextBlock>
+            </StackPanel>
 
 
         </Grid>
@@ -692,6 +730,7 @@
                     <Button x:Name="ModlistsTabButton"
                             Content="Modlists"
                             Command="{Binding ShowCloudModlistsCommand}"
+                            Click="ModlistsTabButton_OnClick"
                             Width="138"
                             Height="40"
                             FontSize="16"
@@ -890,14 +929,14 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="1"
+                <Border x:Name="Installed_and_ModDB" Grid.Row="1"
                         Margin="0,0,-29,0"
                         Background="Transparent"
                         BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Light}"
                         BorderThickness="0,0,2,2"
                         CornerRadius="{Binding Path=(ui:ControlHelper.CornerRadius), ElementName=ModsDataGrid}"
                         SnapsToDevicePixels="True"
-                        Visibility="{Binding IsViewingCloudModlists, Converter={StaticResource IMM.VisibleWhenFalseConverter}}">
+                        Visibility="{Binding IsViewingCloudModlists, Converter={StaticResource IMM.VisibleWhenFalseConverter}}" d:IsHidden="True">
                     <Border Background="{DynamicResource Brush.SunkenSurface.Background}"
                             BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Dark}"
                             BorderThickness="2,2,0,0"
@@ -1500,6 +1539,40 @@
                                         </Style>
                                     </DataGridTemplateColumn.CellStyle>
                                 </DataGridTemplateColumn>
+                                <DataGridTemplateColumn x:Name="UserReportsColumn" Header="User Reports" Width="150" IsReadOnly="True">
+                                    <DataGridTemplateColumn.CellStyle>
+                                        <Style TargetType="{x:Type DataGridCell}" BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                        </Style>
+                                    </DataGridTemplateColumn.CellStyle>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button 
+                                                    Content="{Binding UserReportDisplay}"
+                                                    ToolTip="{Binding UserReportTooltip}"
+                                                    Click="UserReportsButton_OnClick"
+                                                    IsEnabled="{Binding CanSubmitUserReport}"
+                                                    HorizontalAlignment="Stretch" ClipToBounds="True">
+                                                <Button.Style>
+                                                    <Style TargetType="{x:Type Button}" BasedOn="{StaticResource IMM.UserReportButtonStyle}">
+                                                        <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                                        <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                        <Setter Property="Padding" Value="4,0" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsUserReportLoading}" Value="True">
+                                                                <Setter Property="Cursor" Value="Wait" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding UserReportHasError}" Value="True">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Emphasis}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn x:Name="SideColumn" Header="Side"
                                     Binding="{Binding SideDisplay, Mode=OneWay}"
                                     SortMemberPath="Side"
@@ -1551,7 +1624,7 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <Grid Grid.RowSpan="2" Margin="0,0,-29,0">
+                <Grid x:Name="Modlists" Grid.RowSpan="2" Margin="0,0,-29,0">
                     <Grid.Style>
                         <Style TargetType="{x:Type Grid}">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -1567,6 +1640,8 @@
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
+
+                    <Rectangle Grid.RowSpan="2" Margin="0,0,0,166" Fill="{DynamicResource Brush.DataGrid.Background}"/>
 
                     <Border Margin="0,0,0,166"
                             Grid.RowSpan="2"
@@ -1600,7 +1675,7 @@
                                       Foreground="{DynamicResource Brush.Text.Primary}"
                                       SelectionChanged="CloudModlistsDataGrid_OnSelectionChanged"
                                       Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
-                                      BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}">
+                                      BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}" RowBackground="{DynamicResource Brush.Panel.Primary.Background.Solid}">
                                 <DataGrid.Resources>
                                     <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource IMM.DataGridScrollBarStyle}" />
                                     <Style TargetType="{x:Type Thumb}" BasedOn="{StaticResource IMM.DataGridScrollBarThumbStyle}" />
@@ -1609,9 +1684,6 @@
                                     </Style>
                                     <Style TargetType="{x:Type DataGridColumnHeader}" BasedOn="{StaticResource IMM.PrimaryDataGridColumnHeaderStyle}" />
                                 </DataGrid.Resources>
-                                <DataGrid.RowBackground>
-                                    <DynamicResource ResourceKey="Brush.Panel.Primary.Background.Solid"/>
-                                </DataGrid.RowBackground>
                                 <DataGrid.CellStyle>
                                     <StaticResource ResourceKey="IMM.DataGridCellBaseStyle" />
                                 </DataGrid.CellStyle>
@@ -2068,27 +2140,47 @@
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
-                                        <Border HorizontalAlignment="Right"
-                                                VerticalAlignment="Top"
-                                                Margin="0,8,8,0"
-                                                Background="{DynamicResource Brush.DataGrid.Background}"
-                                                CornerRadius="4"
-                                                Padding="3">
-                                            <Border.Style>
-                                                <Style TargetType="{x:Type Border}">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding LatestReleaseIsCompatible}" Value="True">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <TextBlock Text="Compatible"
-                                                       
-                                                       Foreground="{DynamicResource Brush.Text.Body}"
-                                                       FontSize="16" />
-                                        </Border>
+                                        <StackPanel HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Margin="0,8,8,0"
+                                                    Orientation="Vertical">
+                                            <Border Background="{DynamicResource Brush.DataGrid.Background}"
+                                                    CornerRadius="4"
+                                                    Padding="3">
+                                                <Border.Style>
+                                                    <Style TargetType="{x:Type Border}">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding LatestReleaseIsCompatible}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="Compatible"
+                                                           Foreground="{DynamicResource Brush.Text.Body}"
+                                                           FontSize="16" />
+                                            </Border>
+                                            <Border Background="{DynamicResource Brush.DataGrid.Background}"
+                                                    CornerRadius="4"
+                                                    Padding="3"
+                                                    Margin="0,4,0,0">
+                                                <Border.Style>
+                                                    <Style TargetType="{x:Type Border}">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasLatestReleaseUserReport}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding LatestReleaseUserReportDisplay}"
+                                                           Foreground="{DynamicResource Brush.Text.Body}"
+                                                           FontSize="14"
+                                                           ToolTip="{Binding LatestReleaseUserReportTooltip}" />
+                                            </Border>
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
 
@@ -2254,8 +2346,7 @@
             <Button Grid.Row="1"
                     Content="Load more pages"
                     Command="{Binding LoadMoreModDatabaseResultsCommand}"
-                    HorizontalAlignment="Left"
-                    Margin="518,0,0,10"
+                    Margin="546,0,570,10"
                     Background="Transparent"
                     BorderBrush="Transparent"
                     BorderThickness="0"
@@ -2263,7 +2354,7 @@
                     Foreground="{DynamicResource Brush.Accent.Primary}"
                     Cursor="Hand"
                     FontSize="14"
-                    FontWeight="SemiBold" Width="124" Height="25" VerticalAlignment="Bottom">
+                    FontWeight="SemiBold" Height="25" VerticalAlignment="Bottom">
                 <Button.Style>
                     <Style TargetType="{x:Type Button}">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -2388,54 +2479,62 @@
                         Visibility="{Binding IsBusy, Converter={StaticResource IMM.VisibleWhenTrueConverter}}"
                         Foreground="{DynamicResource Brush.Accent.Primary}" Margin="388,0,0,0" VerticalAlignment="Stretch" Width="40" Height="40" />
         </Grid>
-        <Border Background="{DynamicResource Brush.ModCard.Background.Active}" x:Name="MODINFO_border"
-                BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
-                BorderThickness="0"
-                CornerRadius="15,15,15,15" Margin="0,255,40,185" Grid.Row="1" Height="201" HorizontalAlignment="Right" Width="326" Panel.ZIndex="400">
-            <Border.Style>
-                <Style TargetType="{x:Type Border}">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Setter Property="IsHitTestVisible" Value="False" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding HasSelectedMods}" Value="True">
-                            <Setter Property="Visibility" Value="Visible" />
-                            <Setter Property="IsHitTestVisible" Value="True" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding IsViewingCloudModlists}" Value="True">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Setter Property="IsHitTestVisible" Value="False" />
-                        </DataTrigger>
-                        <MultiDataTrigger>
-                            <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding SearchModDatabase}" Value="True" />
-                                <Condition Binding="{Binding UseModDbDesignView}" Value="True" />
-                            </MultiDataTrigger.Conditions>
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Setter Property="IsHitTestVisible" Value="False" />
-                        </MultiDataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
-            <Border.Effect>
-                <DropShadowEffect Color="{DynamicResource Palette.BaseSurface.Shadowed}"
+        <Canvas x:Name="ModInfoOverlay" Grid.RowSpan="3" Panel.ZIndex="400">
+            <Border Background="{DynamicResource Brush.ModCard.Background.Active}" x:Name="MODINFO_border"
+                    BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                    BorderThickness="0"
+                    CornerRadius="15,15,15,15" Height="201" Width="326"
+                    Canvas.Left="1060"
+                    Canvas.Top="350"
+                    Panel.ZIndex="400"
+                    MouseLeftButtonDown="ModInfoBorder_OnMouseLeftButtonDown"
+                    MouseLeftButtonUp="ModInfoBorder_OnMouseLeftButtonUp"
+                    MouseMove="ModInfoBorder_OnMouseMove"
+                    LostMouseCapture="ModInfoBorder_OnLostMouseCapture">
+                <Border.Style>
+                    <Style TargetType="{x:Type Border}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Setter Property="IsHitTestVisible" Value="False" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasSelectedMods}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Setter Property="IsHitTestVisible" Value="True" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsViewingCloudModlists}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Setter Property="IsHitTestVisible" Value="False" />
+                            </DataTrigger>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding SearchModDatabase}" Value="True" />
+                                    <Condition Binding="{Binding UseModDbDesignView}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Setter Property="IsHitTestVisible" Value="False" />
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Border.Effect>
+                    <DropShadowEffect Color="{DynamicResource Palette.BaseSurface.Shadowed}"
                                   BlurRadius="20"
                                   Direction="270"
                                   ShadowDepth="8"
                                   Opacity="0.2" />
-            </Border.Effect>
-            <Grid x:Name="MODINFO_grid" Height="223" Width="324" Background="Transparent">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="53*" />
-                    <ColumnDefinition Width="28*" />
-                </Grid.ColumnDefinitions>
-                <Grid.Effect>
-                    <DropShadowEffect BlurRadius="6"
+                </Border.Effect>
+                <Grid x:Name="MODINFO_grid" Height="223" Width="324" Background="Transparent">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="53*" />
+                        <ColumnDefinition Width="28*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.Effect>
+                        <DropShadowEffect BlurRadius="6"
                                       Direction="270"
                                       ShadowDepth="4"
                                       Opacity="0.1"
                                       Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
-                </Grid.Effect>
-                <Button x:Name="SelectedModDatabasePageButton"
+                    </Grid.Effect>
+                    <Button x:Name="SelectedModDatabasePageButton"
                 Padding="12,6"
                 Background="{DynamicResource Brush.Button.Primary.Background.Normal}"
                 BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
@@ -2445,7 +2544,7 @@
                 ToolTip="{Binding ModDatabasePageUrlDisplay}"
                 VerticalContentAlignment="Center"
                 Content="Mod Page" Height="30" Width="92" HorizontalAlignment="Center" VerticalAlignment="Top" Grid.Column="1" Margin="0,45,0,0" />
-                <Button x:Name="SelectedModEditConfigButton"
+                    <Button x:Name="SelectedModEditConfigButton"
                 Padding="12,6"
                 Background="{DynamicResource Brush.Button.Primary.Background.Normal}"
                 BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
@@ -2454,29 +2553,29 @@
                 Click="EditConfigButton_OnClick"
                 VerticalContentAlignment="Stretch"
                 Content="Edit Config" Height="30" Width="92" HorizontalContentAlignment="Stretch" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0" Grid.Column="1" />
-                <Button x:Name="SelectedModDeleteButton"
+                    <Button x:Name="SelectedModDeleteButton"
                 Padding="12,6"
                 Background="{DynamicResource Brush.Status.Error}"
                 BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
                 Visibility="Visible"
                 IsEnabled="False"
                 Click="DeleteModButton_OnClick" Height="30" Width="92" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,80,0,0" Grid.Column="1">
-                    <Button.Style>
-                        <Style TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
-                            <Setter Property="ToolTip" Value="{Binding DisplayName, StringFormat=Delete \{0\}}"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding DataContext.HasMultipleSelectedMods, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
-                                    <Setter Property="ToolTip" Value="Delete selected mods" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button.Style>
+                            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+                                <Setter Property="ToolTip" Value="{Binding DisplayName, StringFormat=Delete \{0\}}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.HasMultipleSelectedMods, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
+                                        <Setter Property="ToolTip" Value="Delete selected mods" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-                        <TextBlock Text="Delete" VerticalAlignment="Center" Foreground="{DynamicResource Brush.Text.Primary}" />
-                    </StackPanel>
-                </Button>
-                <Button x:Name="SelectedModFixButton"
+                            <TextBlock Text="Delete" VerticalAlignment="Center" Foreground="{DynamicResource Brush.Text.Primary}" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SelectedModFixButton"
                         Padding="12,6"
                         Background="{DynamicResource Brush.Status.Error}"
                         BorderBrush="{DynamicResource Brush.Text.Primary}"
@@ -2484,48 +2583,48 @@
                         IsEnabled="False"
                         Click="FixModButton_OnClick"
                         ToolTip="Resolve dependency issues" Height="30" Width="92" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,115,0,0" Grid.Column="1">
-                    <Button.Style>
-                        <Style TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
-                            <Setter Property="Background" Value="{DynamicResource Brush.Status.Error}" />
-                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Text.Primary}" />
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="Root"
+                        <Button.Style>
+                            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+                                <Setter Property="Background" Value="{DynamicResource Brush.Status.Error}" />
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Text.Primary}" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="Root"
                                                 Background="{TemplateBinding Background}"
                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                 BorderThickness="{TemplateBinding BorderThickness}"
                                                 CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
                                                 Padding="{TemplateBinding Padding}"
                                                 SnapsToDevicePixels="True">
-                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                                               RecognizesAccessKey="True" />
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsEnabled" Value="False">
-                                                <Setter TargetName="Root" Property="Opacity" Value="0.6" />
-                                            </Trigger>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.Status.Error}" />
-                                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brush.Text.Primary}" />
-                                            </Trigger>
-                                            <Trigger Property="IsPressed" Value="True">
-                                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.Status.Error}" />
-                                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brush.Text.Primary}" />
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </Button.Style>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter TargetName="Root" Property="Opacity" Value="0.6" />
+                                                </Trigger>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.Status.Error}" />
+                                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brush.Text.Primary}" />
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.Status.Error}" />
+                                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brush.Text.Primary}" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-                        <TextBlock Text="Fix" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
-                <Button x:Name="SelectedModInstallButton"
+                            <TextBlock Text="Fix" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SelectedModInstallButton"
                 Padding="12,6"
                 Background="{DynamicResource Brush.Button.Primary.Background.Normal}"
                 BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
@@ -2533,11 +2632,11 @@
                 IsEnabled="False"
                 Click="InstallModButton_OnClick"
                 ToolTip="{Binding InstallButtonToolTip}" Height="30" Width="90" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0" Grid.Column="1">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="Install" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
-                <ComboBox x:Name="SelectedModVersionComboBox"
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Install" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <ComboBox x:Name="SelectedModVersionComboBox"
                 Width="166"
                 Height="30"
                 Padding="12,6"
@@ -2551,51 +2650,51 @@
                 SelectionChanged="SelectedModVersionComboBox_OnSelectionChanged"
                 DropDownOpened="SelectedModVersionComboBox_OnDropDownOpened"
                 VerticalAlignment="Top" HorizontalAlignment="Left" Margin="17,155,0,0">
-                    <ComboBox.Resources>
-                        <DataTemplate x:Key="SelectedModVersionTemplate" DataType="{x:Type viewModels:ModVersionOptionViewModel}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding SelectionDisplay}" />
-                                <TextBlock Text="✓" Foreground="{DynamicResource Brush.Accent.Primary}" Margin="6,0,0,0">
-                                    <TextBlock.Style>
-                                        <Style TargetType="{x:Type TextBlock}">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsCompatible}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ComboBox.Resources>
-                    <ComboBox.Style>
-                        <Style TargetType="{x:Type ComboBox}" BasedOn="{StaticResource {x:Type ComboBox}}">
-                            <Setter Property="Visibility" Value="Visible" />
-                            <Setter Property="IsEnabled" Value="False" />
-                            <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Normal}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding SelectedMod.HasVersionOptions}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="IsEnabled" Value="True" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding DataContext.SearchModDatabase, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Setter Property="IsEnabled" Value="False" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding HasMultipleSelectedMods}" Value="True">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Setter Property="IsEnabled" Value="False" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ComboBox.Style>
-                    <ComboBox.ItemTemplate>
-                        <StaticResource ResourceKey="SelectedModVersionTemplate" />
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
-                <Button x:Name="SelectedModUpdateButton"
+                        <ComboBox.Resources>
+                            <DataTemplate x:Key="SelectedModVersionTemplate" DataType="{x:Type viewModels:ModVersionOptionViewModel}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding SelectionDisplay}" />
+                                    <TextBlock Text="✓" Foreground="{DynamicResource Brush.Accent.Primary}" Margin="6,0,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsCompatible}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.Resources>
+                        <ComboBox.Style>
+                            <Style TargetType="{x:Type ComboBox}" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Setter Property="IsEnabled" Value="False" />
+                                <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Normal}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedMod.HasVersionOptions}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="IsEnabled" Value="True" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding DataContext.SearchModDatabase, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Setter Property="IsEnabled" Value="False" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding HasMultipleSelectedMods}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Setter Property="IsEnabled" Value="False" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ComboBox.Style>
+                        <ComboBox.ItemTemplate>
+                            <StaticResource ResourceKey="SelectedModVersionTemplate" />
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button x:Name="SelectedModUpdateButton"
                 Padding="12,6"
                 Background="{DynamicResource Brush.Button.Primary.Background.Normal}"
                 BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
@@ -2603,46 +2702,46 @@
                 IsEnabled="False"
                 Click="UpdateModButton_OnClick"
                 ToolTip="{Binding UpdateButtonToolTip}" HorizontalAlignment="Left" VerticalAlignment="Top" Width="116" Margin="198,155,0,0" Height="30" Grid.ColumnSpan="2">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Width="90" ><Run Text="Update to latest"/><LineBreak/><Run/></TextBlock>
-                    </StackPanel>
-                </Button>
-                <TextBlock
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Width="90" ><Run Text="Update to latest"/><LineBreak/><Run/></TextBlock>
+                        </StackPanel>
+                    </Button>
+                    <TextBlock
                 FontWeight="SemiBold"
                 Foreground="{DynamicResource Brush.Text.Primary}"
                 TextAlignment="Left" VerticalAlignment="Top" HorizontalAlignment="Left" Width="189" Margin="23,15,0,0" Height="25" FontSize="14">
-                    <TextBlock.Style>
-                        <Style TargetType="{x:Type TextBlock}">
-                            <Setter Property="Text" Value="{Binding SelectedMod.DisplayName}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding HasMultipleSelectedMods}" Value="True">
-                                    <Setter Property="Text" Value="Multiple mods selected" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-                <TextBlock
+                        <TextBlock.Style>
+                            <Style TargetType="{x:Type TextBlock}">
+                                <Setter Property="Text" Value="{Binding SelectedMod.DisplayName}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasMultipleSelectedMods}" Value="True">
+                                        <Setter Property="Text" Value="Multiple mods selected" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock
                 Text="{Binding SelectedMod.DescriptionDisplay}"
                 Foreground="{DynamicResource Brush.Text.Primary}"
                 MaxWidth="420"
                 TextWrapping="Wrap"
                 TextTrimming="CharacterEllipsis"
                 TextAlignment="Left" HorizontalAlignment="Left" VerticalAlignment="Top" Width="189" Height="105" MaxHeight="143" Margin="23,45,0,0" FontSize="14">
-                    <TextBlock.Style>
-                        <Style TargetType="{x:Type TextBlock}">
-                            <Setter Property="Visibility" Value="Visible" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding HasMultipleSelectedMods}" Value="True">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-            </Grid>
-
-        </Border>
+                        <TextBlock.Style>
+                            <Style TargetType="{x:Type TextBlock}">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasMultipleSelectedMods}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
+            </Border>
+        </Canvas>
 
     </Grid>
 </Window>

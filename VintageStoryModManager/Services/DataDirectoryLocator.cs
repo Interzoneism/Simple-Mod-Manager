@@ -9,7 +9,7 @@ namespace VintageStoryModManager.Services;
 /// </summary>
 public static class DataDirectoryLocator
 {
-    private const string DataFolderName = "VintagestoryData";
+    private static readonly string DataFolderName = DevConfig.DataFolderName;
 
     /// <summary>
     /// Returns the absolute path to the Vintage Story data directory.

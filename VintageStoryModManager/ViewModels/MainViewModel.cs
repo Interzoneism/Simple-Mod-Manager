@@ -18,6 +18,7 @@ using System.Windows.Data;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SimpleVsManager.Cloud;
 using VintageStoryModManager.Models;
 using VintageStoryModManager.Services;
 
@@ -32,10 +33,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static readonly TimeSpan BusyStateReleaseDelay = TimeSpan.FromMilliseconds(600);
     private const string InternetAccessDisabledStatusMessage = "Enable Internet Access in the File menu to use.";
     private const string NoCompatibleModDatabaseResultsStatusMessage = "No compatible mods found in the mod database.";
-    private const int MaxConcurrentDatabaseRefreshes = 4;
-    private const int MaxNewModsRecentMonths = 24;
-    private const int InstalledModsIncrementalBatchSize = 32;
-    private const int MaxModDatabaseResultLimit = int.MaxValue;
+    private static readonly int MaxConcurrentDatabaseRefreshes = DevConfig.MaxConcurrentDatabaseRefreshes;
+    private static readonly int MaxNewModsRecentMonths = DevConfig.MaxNewModsRecentMonths;
+    private static readonly int InstalledModsIncrementalBatchSize = DevConfig.InstalledModsIncrementalBatchSize;
+    private static readonly int MaxModDatabaseResultLimit = DevConfig.MaxModDatabaseResultLimit;
 
     private enum ViewSection
     {
@@ -52,6 +53,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly ClientSettingsStore _settingsStore;
     private readonly ModDiscoveryService _discoveryService;
     private readonly ModDatabaseService _databaseService;
+    private readonly ModVersionVoteService _voteService = new();
+    private readonly UserConfigurationService _configuration;
     private readonly int _modDatabaseSearchResultLimit;
     private int _modDatabaseCurrentResultLimit;
     private readonly ObservableCollection<SortOption> _sortOptions;
@@ -115,9 +118,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _hasSelectedTags;
     private bool _disposed;
     private bool _onlyShowCompatibleModDatabaseResults;
+    private bool _hasEnabledUserReportFetching;
 
     public MainViewModel(
         string dataDirectory,
+        UserConfigurationService configuration,
         int modDatabaseSearchResultLimit,
         int newModsRecentMonths,
         ModDatabaseAutoLoadMode initialModDatabaseAutoLoadMode = ModDatabaseAutoLoadMode.TotalDownloads,
@@ -126,8 +131,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         bool onlyShowCompatibleModDatabaseResults = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
+        ArgumentNullException.ThrowIfNull(configuration);
 
         DataDirectory = Path.GetFullPath(dataDirectory);
+        _configuration = configuration;
 
         _settingsStore = new ClientSettingsStore(DataDirectory);
         _discoveryService = new ModDiscoveryService(_settingsStore);
@@ -154,6 +161,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _excludeInstalledModDatabaseResults = excludeInstalledModDatabaseResults;
         _onlyShowCompatibleModDatabaseResults = onlyShowCompatibleModDatabaseResults;
+        _hasEnabledUserReportFetching = FirebaseAnonymousAuthenticator.HasPersistedState();
 
         _clearSearchCommand = new RelayCommand(() => SearchText = string.Empty, () => HasSearchText);
         ClearSearchCommand = _clearSearchCommand;
@@ -743,6 +751,77 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return _mods.ToList();
     }
 
+    public IReadOnlyList<ModUsageTrackingEntry> GetActiveModUsageSnapshot()
+    {
+        var result = new List<ModUsageTrackingEntry>();
+
+        if (string.IsNullOrWhiteSpace(_installedGameVersion))
+        {
+            return result;
+        }
+
+        string gameVersion = _installedGameVersion.Trim();
+        var distinct = new HashSet<ModUsageTrackingKey>();
+
+        foreach (ModListItemViewModel mod in _mods)
+        {
+            if (mod is null || !mod.IsActive)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(mod.ModId) || string.IsNullOrWhiteSpace(mod.Version))
+            {
+                continue;
+            }
+
+            string modId = mod.ModId.Trim();
+            string modVersion = mod.Version.Trim();
+
+            var key = new ModUsageTrackingKey(modId, modVersion, gameVersion);
+            if (!distinct.Add(key))
+            {
+                continue;
+            }
+
+            result.Add(new ModUsageTrackingEntry(
+                modId,
+                modVersion,
+                gameVersion,
+                mod.CanSubmitUserReport,
+                mod.UserVoteOption.HasValue));
+        }
+
+        return result;
+    }
+
+    public IReadOnlyList<string> GetActiveModIdsSnapshot()
+    {
+        var distinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<string>();
+
+        foreach (ModListItemViewModel mod in _mods)
+        {
+            if (mod is null || !mod.IsActive || string.IsNullOrWhiteSpace(mod.ModId))
+            {
+                continue;
+            }
+
+            string trimmed = mod.ModId.Trim();
+            if (trimmed.Length == 0)
+            {
+                continue;
+            }
+
+            if (distinct.Add(trimmed))
+            {
+                result.Add(trimmed);
+            }
+        }
+
+        return result;
+    }
+
     public bool TryGetInstalledModDisplayName(string? modId, out string? displayName)
     {
         displayName = null;
@@ -935,16 +1014,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    internal ModListItemViewModel? FindInstalledModById(string modId)
+    public ModListItemViewModel? FindInstalledModById(string? modId)
     {
         if (string.IsNullOrWhiteSpace(modId))
         {
             return null;
         }
 
-        foreach (var mod in _mods)
+        string trimmed = modId.Trim();
+
+        foreach (ModListItemViewModel mod in _mods)
         {
-            if (string.Equals(mod.ModId, modId, StringComparison.OrdinalIgnoreCase))
+            if (mod is null || string.IsNullOrWhiteSpace(mod.ModId))
+            {
+                continue;
+            }
+
+            if (string.Equals(mod.ModId.Trim(), trimmed, StringComparison.OrdinalIgnoreCase))
             {
                 return mod;
             }
@@ -965,7 +1051,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             : null;
     }
 
-    internal string? InstalledGameVersion => _installedGameVersion;
+    public string? InstalledGameVersion => _installedGameVersion;
 
     internal async Task<bool> PreserveActivationStateAsync(string modId, string? previousVersion, string? newVersion, bool wasActive)
     {
@@ -1376,7 +1462,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         bool isActive = !_settingsStore.IsDisabled(entry.ModId, entry.Version);
         string location = GetDisplayPath(entry.SourcePath);
-        return new ModListItemViewModel(entry, isActive, location, ApplyActivationChangeAsync, _installedGameVersion, true);
+        return new ModListItemViewModel(
+            entry,
+            isActive,
+            location,
+            ApplyActivationChangeAsync,
+            _installedGameVersion,
+            true,
+            _configuration.ShouldSkipModVersion,
+            () => _configuration.RequireExactVsVersionMatch);
     }
 
     private async Task UpdateModsStateSnapshotAsync()
@@ -1569,6 +1663,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             mod.PropertyChanged += OnInstalledModPropertyChanged;
         }
+
+        QueueUserReportRefresh(mod);
     }
 
     private void DetachInstalledMod(ModListItemViewModel mod)
@@ -1600,6 +1696,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             mod.PropertyChanged += OnSearchResultPropertyChanged;
         }
+
+        QueueLatestReleaseUserReportRefresh(mod);
     }
 
     private void DetachSearchResult(ModListItemViewModel mod)
@@ -1653,6 +1751,274 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         ScheduleModDatabaseTagRefresh();
+    }
+
+    private void QueueLatestReleaseUserReportRefresh(ModListItemViewModel mod)
+    {
+        if (mod is null)
+        {
+            return;
+        }
+
+        _ = RefreshLatestReleaseUserReportAsync(mod, suppressErrors: true, CancellationToken.None);
+    }
+
+    public Task<ModVersionVoteSummary?> RefreshLatestReleaseUserReportAsync(
+        ModListItemViewModel mod,
+        CancellationToken cancellationToken = default)
+    {
+        return RefreshLatestReleaseUserReportAsync(mod, suppressErrors: false, cancellationToken);
+    }
+
+    private async Task<ModVersionVoteSummary?> RefreshLatestReleaseUserReportAsync(
+        ModListItemViewModel mod,
+        bool suppressErrors,
+        CancellationToken cancellationToken)
+    {
+        if (mod is null)
+        {
+            return null;
+        }
+
+        string? latestReleaseVersion = mod.LatestRelease?.Version;
+        if (string.IsNullOrWhiteSpace(latestReleaseVersion))
+        {
+            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken, DispatcherPriority.Background)
+                .ConfigureAwait(false);
+            return null;
+        }
+
+        if (string.Equals(mod.LatestReleaseUserReportVersion, latestReleaseVersion, StringComparison.OrdinalIgnoreCase)
+            && mod.LatestReleaseUserReportSummary is not null)
+        {
+            return mod.LatestReleaseUserReportSummary;
+        }
+
+        if (string.IsNullOrWhiteSpace(_installedGameVersion))
+        {
+            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken, DispatcherPriority.Background)
+                .ConfigureAwait(false);
+            return null;
+        }
+
+        if (InternetAccessManager.IsInternetAccessDisabled)
+        {
+            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken, DispatcherPriority.Background)
+                .ConfigureAwait(false);
+            return null;
+        }
+
+        try
+        {
+            ModVersionVoteSummary summary = await _voteService
+                .GetVoteSummaryAsync(mod.ModId, latestReleaseVersion, _installedGameVersion!, cancellationToken)
+                .ConfigureAwait(false);
+
+            await InvokeOnDispatcherAsync(
+                    () => mod.ApplyLatestReleaseUserReportSummary(summary),
+                    cancellationToken,
+                    DispatcherPriority.Background)
+                .ConfigureAwait(false);
+
+            return summary;
+        }
+        catch (InternetAccessDisabledException)
+        {
+            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken, DispatcherPriority.Background)
+                .ConfigureAwait(false);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            if (!suppressErrors)
+            {
+                StatusLogService.AppendStatus(
+                    string.Format(
+                        CultureInfo.CurrentCulture,
+                        "Failed to refresh user reports for the latest release of {0}: {1}",
+                        mod.DisplayName,
+                        ex.Message),
+                    true);
+            }
+
+            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken, DispatcherPriority.Background)
+                .ConfigureAwait(false);
+            return null;
+        }
+    }
+
+    private void QueueUserReportRefresh(ModListItemViewModel mod)
+    {
+        if (mod is null)
+        {
+            return;
+        }
+
+        _ = RefreshUserReportAsync(mod, suppressErrors: true, CancellationToken.None);
+    }
+
+    public void EnableUserReportFetching()
+    {
+        if (_hasEnabledUserReportFetching)
+        {
+            return;
+        }
+
+        _hasEnabledUserReportFetching = true;
+
+        foreach (ModListItemViewModel mod in _installedModSubscriptions)
+        {
+            QueueUserReportRefresh(mod);
+        }
+
+        foreach (ModListItemViewModel mod in _searchResultSubscriptions)
+        {
+            QueueLatestReleaseUserReportRefresh(mod);
+        }
+    }
+
+    public Task<ModVersionVoteSummary?> RefreshUserReportAsync(
+        ModListItemViewModel mod,
+        CancellationToken cancellationToken = default)
+    {
+        return RefreshUserReportAsync(mod, suppressErrors: false, cancellationToken);
+    }
+
+    public async Task<ModVersionVoteSummary?> SubmitUserReportVoteAsync(
+        ModListItemViewModel mod,
+        ModVersionVoteOption? option,
+        string? comment,
+        CancellationToken cancellationToken = default)
+    {
+        if (mod is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(_installedGameVersion) || string.IsNullOrWhiteSpace(mod.Version))
+        {
+            await InvokeOnDispatcherAsync(
+                    () => mod.SetUserReportUnavailable("User reports require a known Vintage Story and mod version."),
+                    cancellationToken,
+                    DispatcherPriority.Background)
+                .ConfigureAwait(false);
+            return null;
+        }
+
+        if (InternetAccessManager.IsInternetAccessDisabled)
+        {
+            throw new InternetAccessDisabledException(
+                "Internet access is disabled. Enable it in the File menu to submit your vote.");
+        }
+
+        await InvokeOnDispatcherAsync(mod.SetUserReportLoading, cancellationToken, DispatcherPriority.Background)
+            .ConfigureAwait(false);
+
+        try
+        {
+            ModVersionVoteSummary summary = option.HasValue
+                ? await _voteService
+                    .SubmitVoteAsync(mod.ModId, mod.Version!, _installedGameVersion!, option.Value, comment, cancellationToken)
+                    .ConfigureAwait(false)
+                : await _voteService
+                    .RemoveVoteAsync(mod.ModId, mod.Version!, _installedGameVersion!, cancellationToken)
+                    .ConfigureAwait(false);
+
+            await InvokeOnDispatcherAsync(
+                    () => mod.ApplyUserReportSummary(summary),
+                    cancellationToken,
+                    DispatcherPriority.Background)
+                .ConfigureAwait(false);
+
+            return summary;
+        }
+        catch (InternetAccessDisabledException)
+        {
+            await InvokeOnDispatcherAsync(mod.SetUserReportOffline, cancellationToken, DispatcherPriority.Background)
+                .ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            StatusLogService.AppendStatus(
+                string.Format(CultureInfo.CurrentCulture, "Failed to submit user report for {0}: {1}", mod.DisplayName, ex.Message),
+                true);
+            throw;
+        }
+    }
+
+    private async Task<ModVersionVoteSummary?> RefreshUserReportAsync(
+        ModListItemViewModel mod,
+        bool suppressErrors,
+        CancellationToken cancellationToken)
+    {
+        if (mod is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(_installedGameVersion) || string.IsNullOrWhiteSpace(mod.Version))
+        {
+            await InvokeOnDispatcherAsync(
+                    () => mod.SetUserReportUnavailable("User reports require a known Vintage Story and mod version."),
+                    cancellationToken,
+                    DispatcherPriority.Background)
+                .ConfigureAwait(false);
+            return null;
+        }
+
+        if (InternetAccessManager.IsInternetAccessDisabled)
+        {
+            await InvokeOnDispatcherAsync(mod.SetUserReportOffline, cancellationToken, DispatcherPriority.Background)
+                .ConfigureAwait(false);
+            return null;
+        }
+
+        await InvokeOnDispatcherAsync(mod.SetUserReportLoading, cancellationToken, DispatcherPriority.Background)
+            .ConfigureAwait(false);
+
+        try
+        {
+            ModVersionVoteSummary summary = await _voteService
+                .GetVoteSummaryAsync(mod.ModId, mod.Version!, _installedGameVersion!, cancellationToken)
+                .ConfigureAwait(false);
+
+            await InvokeOnDispatcherAsync(
+                    () => mod.ApplyUserReportSummary(summary),
+                    cancellationToken,
+                    DispatcherPriority.Background)
+                .ConfigureAwait(false);
+
+            return summary;
+        }
+        catch (InternetAccessDisabledException)
+        {
+            await InvokeOnDispatcherAsync(mod.SetUserReportOffline, cancellationToken, DispatcherPriority.Background)
+                .ConfigureAwait(false);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            if (!suppressErrors)
+            {
+                StatusLogService.AppendStatus(
+                    string.Format(CultureInfo.CurrentCulture, "Failed to refresh user reports for {0}: {1}", mod.DisplayName, ex.Message),
+                    true);
+            }
+
+            await InvokeOnDispatcherAsync(
+                    () => mod.SetUserReportError(ex.Message),
+                    cancellationToken,
+                    DispatcherPriority.Background)
+                .ConfigureAwait(false);
+
+            if (suppressErrors)
+            {
+                return null;
+            }
+
+            throw;
+        }
     }
 
     private void ScheduleInstalledTagFilterRefresh()
@@ -2342,7 +2708,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
                 ModEntry entry = entries[i].Entry;
                 ModDatabaseInfo? cachedInfo = await _databaseService
-                    .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion, cancellationToken)
+                    .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion, _configuration.RequireExactVsVersionMatch, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (cachedInfo is null)
@@ -2359,6 +2725,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                         () => viewModel.UpdateDatabaseInfo(capturedInfo, loadLogoImmediately: false),
                         cancellationToken)
                     .ConfigureAwait(false);
+
+                QueueLatestReleaseUserReportRefresh(viewModel);
             }
 
             if (cancellationToken.IsCancellationRequested)
@@ -2371,7 +2739,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            await _databaseService.PopulateModDatabaseInfoAsync(entries.Select(item => item.Entry), _installedGameVersion, cancellationToken)
+            await _databaseService.PopulateModDatabaseInfoAsync(entries.Select(item => item.Entry), _installedGameVersion, _configuration.RequireExactVsVersionMatch, cancellationToken)
                 .ConfigureAwait(false);
 
             if (cancellationToken.IsCancellationRequested)
@@ -2387,7 +2755,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                         ModDatabaseInfo? info = entries[i].Entry.DatabaseInfo;
                         if (info != null)
                         {
-                            viewModels[i].UpdateDatabaseInfo(info, loadLogoImmediately: false);
+                            ModListItemViewModel viewModel = viewModels[i];
+                            viewModel.UpdateDatabaseInfo(info, loadLogoImmediately: false);
+                            QueueLatestReleaseUserReportRefresh(viewModel);
                         }
                     }
                 },
@@ -3032,7 +3402,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private ModListItemViewModel CreateSearchResultViewModel(ModEntry entry, bool isInstalled)
     {
-        return new ModListItemViewModel(entry, false, "Mod Database", RejectActivationChangeAsync, _installedGameVersion, isInstalled);
+        return new ModListItemViewModel(entry, false, "Mod Database", RejectActivationChangeAsync, _installedGameVersion, isInstalled, null, () => _configuration.RequireExactVsVersionMatch);
     }
 
     private static string? BuildSearchResultDescription(ModDatabaseSearchResult result)
@@ -3459,7 +3829,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try
         {
             ModDatabaseInfo? cachedInfo = await _databaseService
-                .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion)
+                .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion, _configuration.RequireExactVsVersionMatch)
                 .ConfigureAwait(false);
 
             cacheHit = cachedInfo != null;
@@ -3489,7 +3859,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             try
             {
                 info = await _databaseService
-                    .TryLoadDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion)
+                    .TryLoadDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion, _configuration.RequireExactVsVersionMatch)
                     .ConfigureAwait(false);
             }
             catch (Exception)
@@ -3570,7 +3940,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (cachedInfo is null)
         {
             cachedInfo = await _databaseService
-                .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion)
+                .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion, _configuration.RequireExactVsVersionMatch)
                 .ConfigureAwait(false);
         }
 
@@ -3608,6 +3978,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                         if (_modViewModelsBySourcePath.TryGetValue(entry.SourcePath, out var viewModel))
                         {
                             viewModel.UpdateDatabaseInfo(info, loadLogoImmediately);
+                            QueueLatestReleaseUserReportRefresh(viewModel);
                         }
                     },
                     CancellationToken.None,
@@ -3843,17 +4214,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             yield break;
         }
 
-        IEnumerable<string> files;
-        try
-        {
-            files = Directory.EnumerateFiles(cacheDirectory, "*", SearchOption.TopDirectoryOnly);
-        }
-        catch (Exception)
-        {
-            yield break;
-        }
-
-        foreach (string file in files)
+        foreach (string file in ModCacheLocator.EnumerateCachedFiles(modId))
         {
             ModReleaseInfo? release = TryCreateCachedRelease(file, modId);
             if (release != null)
@@ -4165,9 +4526,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void RefreshInternetAccessDependentState()
     {
+        bool isOffline = InternetAccessManager.IsInternetAccessDisabled;
+
         foreach (ModListItemViewModel mod in _mods)
         {
             mod.RefreshInternetAccessDependentState();
+            if (isOffline)
+            {
+                mod.SetUserReportOffline();
+            }
+            else
+            {
+                QueueUserReportRefresh(mod);
+            }
         }
 
         foreach (ModListItemViewModel mod in _searchResults)
@@ -4301,9 +4672,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 continue;
             }
 
+            // Check if the installed game version satisfies the dependency's minimum version requirement
+            // (e.g., if mod requires 1.21.0 and user has 1.21.4, that's OK as 1.21.4 >= 1.21.0)
             if (!VersionStringUtility.SatisfiesMinimumVersion(dependency.Version, _installedGameVersion))
             {
                 return false;
+            }
+
+            // When exact version match is required, also verify first 3 version parts match
+            // (e.g., with exact mode, 1.21.3 won't be compatible with 1.21.4 even though 1.21.4 >= 1.21.3)
+            if (_configuration.RequireExactVsVersionMatch)
+            {
+                if (!VersionStringUtility.MatchesFirstThreeDigits(dependency.Version, _installedGameVersion))
+                {
+                    return false;
+                }
             }
         }
 

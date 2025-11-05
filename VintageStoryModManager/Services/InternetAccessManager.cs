@@ -34,8 +34,15 @@ public static class InternetAccessManager
 
 public sealed class InternetAccessDisabledException : InvalidOperationException
 {
+    private static readonly string DefaultMessage = DevConfig.InternetAccessDisabledMessage;
+
     public InternetAccessDisabledException()
-        : base("Internet access is disabled. Enable Internet Access in the File menu to continue.")
+        : base(DefaultMessage)
+    {
+    }
+
+    public InternetAccessDisabledException(string? message)
+        : base(string.IsNullOrWhiteSpace(message) ? DefaultMessage : message)
     {
     }
 }

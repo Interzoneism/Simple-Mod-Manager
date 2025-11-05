@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using VintageStoryModManager;
 using VintageStoryModManager.Services;
 
 namespace SimpleVsManager.Cloud;
@@ -18,10 +19,10 @@ namespace SimpleVsManager.Cloud;
 /// </summary>
 public sealed class FirebaseAnonymousAuthenticator
 {
-    private const string SignInEndpoint = "https://identitytoolkit.googleapis.com/v1/accounts:signUp";
-    private const string RefreshEndpoint = "https://securetoken.googleapis.com/v1/token";
-    private const string DeleteEndpoint = "https://identitytoolkit.googleapis.com/v1/accounts:delete";
-    private const string StateFileName = "firebase-auth.json";
+    private static readonly string SignInEndpoint = DevConfig.FirebaseSignInEndpoint;
+    private static readonly string RefreshEndpoint = DevConfig.FirebaseRefreshEndpoint;
+    private static readonly string DeleteEndpoint = DevConfig.FirebaseDeleteEndpoint;
+    private static readonly string StateFileName = DevConfig.FirebaseAuthStateFileName;
     private static readonly HttpClient HttpClient = new();
     private static readonly TimeSpan ExpirationSkew = TimeSpan.FromMinutes(2);
 
@@ -31,7 +32,7 @@ public sealed class FirebaseAnonymousAuthenticator
 
     private FirebaseAuthState? _cachedState;
 
-    private const string DefaultApiKey = "AIzaSyCmDJ9yC1ccUEUf41fC-SI8fuXFJzWWlHY";
+    private static readonly string DefaultApiKey = DevConfig.FirebaseDefaultApiKey;
 
     public FirebaseAnonymousAuthenticator() : this(DefaultApiKey) { }
 
@@ -101,6 +102,69 @@ public sealed class FirebaseAnonymousAuthenticator
         }
     }
 
+    public async Task<FirebaseAuthSession?> TryGetExistingSessionAsync(CancellationToken ct)
+    {
+        if (InternetAccessManager.IsInternetAccessDisabled)
+        {
+            return null;
+        }
+
+        await _stateLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            _cachedState ??= LoadStateFromDisk();
+
+            if (_cachedState is null)
+            {
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(_cachedState.UserId))
+            {
+                _cachedState = null;
+                DeleteStateFile();
+                return null;
+            }
+
+            FirebaseAuthState currentState = _cachedState!;
+
+            if (!currentState.IsExpired)
+            {
+                return new FirebaseAuthSession(currentState.IdToken, currentState.UserId);
+            }
+
+            if (string.IsNullOrWhiteSpace(currentState.RefreshToken))
+            {
+                return null;
+            }
+
+            FirebaseAuthState? refreshed;
+            try
+            {
+                refreshed = await TryRefreshAsync(currentState, ct).ConfigureAwait(false);
+            }
+            catch (InternetAccessDisabledException)
+            {
+                return null;
+            }
+
+            if (refreshed is null || string.IsNullOrWhiteSpace(refreshed.UserId))
+            {
+                _cachedState = null;
+                DeleteStateFile();
+                return null;
+            }
+
+            _cachedState = refreshed;
+            SaveStateToDisk(refreshed);
+            return new FirebaseAuthSession(refreshed.IdToken, refreshed.UserId);
+        }
+        finally
+        {
+            _stateLock.Release();
+        }
+    }
+
     /// <summary>
     /// Marks the current token as expired so the next call will refresh it.
     /// </summary>
@@ -163,8 +227,59 @@ public sealed class FirebaseAnonymousAuthenticator
         }
     }
 
+    internal static bool HasPersistedState()
+    {
+        string stateFilePath = GetStateFilePath();
+        if (string.IsNullOrWhiteSpace(stateFilePath) || !File.Exists(stateFilePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            string json = File.ReadAllText(stateFilePath);
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return false;
+            }
+
+            AuthStateModel? model = JsonSerializer.Deserialize<AuthStateModel>(json, JsonOptions);
+            if (model is null
+                || string.IsNullOrWhiteSpace(model.IdToken)
+                || string.IsNullOrWhiteSpace(model.RefreshToken)
+                || string.IsNullOrWhiteSpace(model.UserId))
+            {
+                return false;
+            }
+
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (SecurityException)
+        {
+            return false;
+        }
+    }
+
     internal static string GetStateFilePath()
     {
+        string? developerOverride = DeveloperProfileManager.GetFirebaseStateFilePathOverride();
+        if (!string.IsNullOrWhiteSpace(developerOverride))
+        {
+            return developerOverride!;
+        }
+
         string? secureDirectory = TryGetSecureBaseDirectory();
 
         if (!string.IsNullOrWhiteSpace(secureDirectory))
@@ -339,6 +454,9 @@ public sealed class FirebaseAnonymousAuthenticator
 
             string json = JsonSerializer.Serialize(model, JsonOptions);
             File.WriteAllText(_stateFilePath, json);
+
+            // Try to create a backup after successfully saving the auth file
+            TryCreateBackup();
         }
         catch (IOException)
         {
@@ -348,6 +466,111 @@ public sealed class FirebaseAnonymousAuthenticator
         }
         catch (SecurityException)
         {
+        }
+    }
+
+    private void TryCreateBackup()
+    {
+        try
+        {
+            // Check if the original auth file exists
+            if (!File.Exists(_stateFilePath))
+            {
+                return;
+            }
+
+            // Try to get user configuration to check if backup has been created
+            UserConfigurationService? config = TryGetUserConfiguration();
+            if (config is not null && config.FirebaseAuthBackupCreated)
+            {
+                // Backup flag is already set, no need to check further
+                return;
+            }
+
+            // Determine backup path: AppData/Local/SVSM Backup/firebase-auth.json
+            string? backupPath = GetBackupFilePath();
+            if (string.IsNullOrWhiteSpace(backupPath))
+            {
+                return;
+            }
+
+            // If backup file already exists, don't overwrite it
+            if (File.Exists(backupPath))
+            {
+                // Backup exists, just update the config flag
+                MarkBackupCreated(config);
+                return;
+            }
+
+            // Create backup directory if it doesn't exist
+            string? backupDirectory = Path.GetDirectoryName(backupPath);
+            if (!string.IsNullOrWhiteSpace(backupDirectory))
+            {
+                Directory.CreateDirectory(backupDirectory);
+            }
+
+            // Copy the auth file to backup location
+            File.Copy(_stateFilePath, backupPath, overwrite: false);
+
+            // Mark backup as created in configuration
+            MarkBackupCreated(config);
+        }
+        catch (IOException)
+        {
+            // Silently ignore backup failures
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Silently ignore backup failures
+        }
+        catch (SecurityException)
+        {
+            // Silently ignore backup failures
+        }
+        catch (NotSupportedException)
+        {
+            // Silently ignore backup failures
+        }
+    }
+
+    private static void MarkBackupCreated(UserConfigurationService? config)
+    {
+        if (config is not null)
+        {
+            config.EnablePersistence();
+            config.SetFirebaseAuthBackupCreated();
+        }
+    }
+
+    private static UserConfigurationService? TryGetUserConfiguration()
+    {
+        try
+        {
+            // Create a new instance to read the current configuration
+            return new UserConfigurationService();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? GetBackupFilePath()
+    {
+        try
+        {
+            string? localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localAppData))
+            {
+                return null;
+            }
+
+            string backupDirectory = Path.Combine(localAppData, DevConfig.FirebaseAuthBackupDirectoryName);
+            return Path.Combine(backupDirectory, StateFileName);
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -490,6 +713,75 @@ public sealed class FirebaseAnonymousAuthenticator
         }
 
         return value.Substring(0, length) + "...";
+    }
+
+    /// <summary>
+    /// Checks if Firebase auth backup should be created and attempts to create it on app startup.
+    /// This ensures the firebase-auth.json file is backed up to AppData/Local/SVSM Backup/ if it exists
+    /// and hasn't been backed up yet.
+    /// </summary>
+    /// <param name="config">User configuration service to check and update backup status.</param>
+    public static void EnsureStartupBackup(UserConfigurationService? config)
+    {
+        try
+        {
+            // If config is null or backup already created, nothing to do
+            if (config is null || config.FirebaseAuthBackupCreated)
+            {
+                return;
+            }
+
+            // Get the path to the main firebase-auth.json file
+            string stateFilePath = GetStateFilePath();
+            if (string.IsNullOrWhiteSpace(stateFilePath) || !File.Exists(stateFilePath))
+            {
+                // No auth file exists, nothing to backup
+                return;
+            }
+
+            // Get the backup file path
+            string? backupPath = GetBackupFilePath();
+            if (string.IsNullOrWhiteSpace(backupPath))
+            {
+                return;
+            }
+
+            // If backup file already exists, just mark it as created
+            if (File.Exists(backupPath))
+            {
+                MarkBackupCreated(config);
+                return;
+            }
+
+            // Create backup directory if it doesn't exist
+            string? backupDirectory = Path.GetDirectoryName(backupPath);
+            if (!string.IsNullOrWhiteSpace(backupDirectory))
+            {
+                Directory.CreateDirectory(backupDirectory);
+            }
+
+            // Copy the auth file to backup location
+            File.Copy(stateFilePath, backupPath, overwrite: false);
+
+            // Mark backup as created in configuration
+            MarkBackupCreated(config);
+        }
+        catch (IOException)
+        {
+            // Silently ignore backup failures
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Silently ignore backup failures
+        }
+        catch (SecurityException)
+        {
+            // Silently ignore backup failures
+        }
+        catch (NotSupportedException)
+        {
+            // Silently ignore backup failures
+        }
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()

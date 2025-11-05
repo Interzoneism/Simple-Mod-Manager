@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using VintageStoryModManager;
 using VintageStoryModManager.Models;
 using VintageStoryModManager.Services;
 
@@ -25,12 +26,12 @@ namespace SimpleVsManager.Cloud
         private readonly FirebaseAnonymousAuthenticator _authenticator;
         private readonly SemaphoreSlim _ownershipClaimLock = new(1, 1);
 
-        private string? _playerUid;
+        private string? _playerUid; // Original player UID from Vintage Story
+        private string? _sanitizedPlayerUid; // Firebase-compatible version of the player UID
         private string? _playerName;
         private string? _ownershipClaimedForUid;
 
-        private const string DefaultDbUrl =
-            "https://simple-vs-manager-default-rtdb.europe-west1.firebasedatabase.app";
+        private static readonly string DefaultDbUrl = DevConfig.FirebaseModlistDefaultDbUrl;
 
         public FirebaseModlistStore()
             : this(DefaultDbUrl, new FirebaseAnonymousAuthenticator()) { }
@@ -100,6 +101,49 @@ namespace SimpleVsManager.Cloud
             }
         }
 
+        /// <summary>
+        /// Registers the player identity in the admin registry for troubleshooting purposes.
+        /// This is called automatically during save operations.
+        /// Stores both the original and sanitized UIDs for reference.
+        /// </summary>
+        private async Task RegisterPlayerIdentityAsync(PlayerIdentity identity, string firebaseUid, CancellationToken ct)
+        {
+            try
+            {
+                var sendResult = await SendWithAuthRetryAsync(session =>
+                {
+                    string adminUrl = BuildAuthenticatedUrl(session.IdToken, null, "adminRegistry", session.UserId);
+
+                    var registryEntry = new
+                    {
+                        playerUid = identity.OriginalUid,
+                        sanitizedPlayerUid = identity.SanitizedUid,
+                        playerName = identity.Name,
+                        lastUpdated = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture)
+                    };
+
+                    string payload = JsonSerializer.Serialize(registryEntry, JsonOpts);
+                    var request = new HttpRequestMessage(HttpMethod.Put, adminUrl)
+                    {
+                        Content = new StringContent(payload, Encoding.UTF8, "application/json")
+                    };
+                    return HttpClient.SendAsync(request, ct);
+                }, ct).ConfigureAwait(false);
+
+                using (sendResult.Response)
+                {
+                    // Silently ignore failures - this is a best-effort logging mechanism
+                    if (!sendResult.Response.IsSuccessStatusCode)
+                    {
+                        // Don't throw - we don't want to block saves if admin registry fails
+                    }
+                }
+            }
+            catch
+            {
+                // Silently ignore - admin registry is optional
+            }
+        }
         private static string GenerateEntryId() => Guid.NewGuid().ToString("n");
 
         // Ensure uploader fields are present and correct
@@ -123,8 +167,13 @@ namespace SimpleVsManager.Cloud
         {
             _playerUid = Normalize(playerUid);
             _playerName = Normalize(playerName);
+            
+            // Sanitize the player UID for Firebase compatibility
+            _sanitizedPlayerUid = string.IsNullOrWhiteSpace(_playerUid) 
+                ? null 
+                : SanitizePlayerUidForFirebase(_playerUid);
 
-            if (!string.Equals(_ownershipClaimedForUid, _playerUid, StringComparison.Ordinal))
+            if (!string.Equals(_ownershipClaimedForUid, _sanitizedPlayerUid, StringComparison.Ordinal))
             {
                 _ownershipClaimedForUid = null;
             }
@@ -146,7 +195,7 @@ namespace SimpleVsManager.Cloud
             string normalizedContent = ReplaceUploader(document.RootElement, identity);
 
             // 1) Read existing slot to see if it already has a registryId
-            SlotNode? existing = await TryReadSlotNodeAsync(identity.Uid, slotKey, ct).ConfigureAwait(false);
+            SlotNode? existing = await TryReadSlotNodeAsync(identity.SanitizedUid, slotKey, ct).ConfigureAwait(false);
             string registryId = existing.HasValue && !string.IsNullOrWhiteSpace(existing.Value.RegistryId)
                 ? existing.Value.RegistryId!
                 : GenerateEntryId();
@@ -171,7 +220,7 @@ namespace SimpleVsManager.Cloud
 
                 string patchJson =
                     $"{{" +
-                        $"\"/users/{identity.Uid}/{slotKey}\":{userSlotJson}," +
+                        $"\"/users/{identity.SanitizedUid}/{slotKey}\":{userSlotJson}," +
                         $"\"/registryOwners/{registryId}\":{registryOwnerJson}," +
                         $"\"/registry/{registryId}\":{registryNodeJson}" +
                     $"}}";
@@ -187,6 +236,9 @@ namespace SimpleVsManager.Cloud
             {
                 await EnsureOk(saveResult.Response, "Save (user + registry)").ConfigureAwait(false);
             }
+
+            // Register player identity in admin registry (best-effort, non-blocking)
+            await RegisterPlayerIdentityAsync(identity, saveResult.Session.UserId, ct).ConfigureAwait(false);
         }
 
 
@@ -201,7 +253,7 @@ namespace SimpleVsManager.Cloud
 
             var sendResult = await SendWithAuthRetryAsync(session =>
                 {
-                    string userUrl = BuildAuthenticatedUrl(session.IdToken, null, "users", identity.Uid, slotKey);
+                    string userUrl = BuildAuthenticatedUrl(session.IdToken, null, "users", identity.SanitizedUid, slotKey);
                     return HttpClient.GetAsync(userUrl, ct);
                 }, ct).ConfigureAwait(false);
 
@@ -247,7 +299,7 @@ namespace SimpleVsManager.Cloud
             await EnsureOwnershipAsync(identity, ct).ConfigureAwait(false);
 
             // Read the slot to discover its registryId (if any)
-            SlotNode? node = await TryReadSlotNodeAsync(identity.Uid, slotKey, ct).ConfigureAwait(false);
+            SlotNode? node = await TryReadSlotNodeAsync(identity.SanitizedUid, slotKey, ct).ConfigureAwait(false);
             string? registryId = node?.RegistryId;
 
             var result = await SendWithAuthRetryAsync(session =>
@@ -256,7 +308,7 @@ namespace SimpleVsManager.Cloud
 
                 var sb = new StringBuilder();
                 sb.Append('{');
-                sb.Append($"\"/users/{identity.Uid}/{slotKey}\":null");
+                sb.Append($"\"/users/{identity.SanitizedUid}/{slotKey}\":null");
 
                 if (!string.IsNullOrWhiteSpace(registryId))
                 {
@@ -371,13 +423,13 @@ namespace SimpleVsManager.Cloud
 
             return null;
         }
-        private async Task<IReadOnlyList<string>> ListSlotsAsync((string Uid, string Name) identity, CancellationToken ct)
+        private async Task<IReadOnlyList<string>> ListSlotsAsync(PlayerIdentity identity, CancellationToken ct)
         {
             await EnsureOwnershipAsync(identity, ct).ConfigureAwait(false);
 
             var sendResult = await SendWithAuthRetryAsync(session =>
                 {
-                    string url = BuildAuthenticatedUrl(session.IdToken, "shallow=true", "users", identity.Uid);
+                    string url = BuildAuthenticatedUrl(session.IdToken, "shallow=true", "users", identity.SanitizedUid);
                     return HttpClient.GetAsync(url, ct);
                 }, ct).ConfigureAwait(false);
 
@@ -414,9 +466,10 @@ namespace SimpleVsManager.Cloud
             return list;
         }
 
-        private (string Uid, string Name) GetIdentityComponents()
+        private PlayerIdentity GetIdentityComponents()
         {
             string? uid = _playerUid;
+            string? sanitizedUid = _sanitizedPlayerUid;
             string? name = _playerName;
 
             if (string.IsNullOrWhiteSpace(uid))
@@ -431,8 +484,13 @@ namespace SimpleVsManager.Cloud
 
             uid = uid.Trim();
             name = name.Trim();
+            
+            // Sanitized UID should already be set by SetPlayerIdentity, but create it here as a fallback
+            sanitizedUid = string.IsNullOrWhiteSpace(sanitizedUid) 
+                ? SanitizePlayerUidForFirebase(uid) 
+                : sanitizedUid;
 
-            return (uid, name);
+            return new PlayerIdentity(uid, sanitizedUid, name);
         }
 
         private static async Task EnsureOk(HttpResponseMessage response, string operation)
@@ -486,10 +544,10 @@ namespace SimpleVsManager.Cloud
             }
         }
 
-        private async Task EnsureOwnershipAsync((string Uid, string Name) identity, CancellationToken ct)
+        private async Task EnsureOwnershipAsync(PlayerIdentity identity, CancellationToken ct)
         {
             InternetAccessManager.ThrowIfInternetAccessDisabled();
-            if (string.Equals(_ownershipClaimedForUid, identity.Uid, StringComparison.Ordinal))
+            if (string.Equals(_ownershipClaimedForUid, identity.SanitizedUid, StringComparison.Ordinal))
             {
                 return;
             }
@@ -497,14 +555,14 @@ namespace SimpleVsManager.Cloud
             await _ownershipClaimLock.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                if (string.Equals(_ownershipClaimedForUid, identity.Uid, StringComparison.Ordinal))
+                if (string.Equals(_ownershipClaimedForUid, identity.SanitizedUid, StringComparison.Ordinal))
                 {
                     return;
                 }
 
                 var readResult = await SendWithAuthRetryAsync(session =>
                     {
-                        string ownersUrl = BuildAuthenticatedUrl(session.IdToken, null, "owners", identity.Uid);
+                        string ownersUrl = BuildAuthenticatedUrl(session.IdToken, null, "owners", identity.SanitizedUid);
                         return HttpClient.GetAsync(ownersUrl, ct);
                     }, ct).ConfigureAwait(false);
 
@@ -521,7 +579,7 @@ namespace SimpleVsManager.Cloud
                         }
                         else if (string.Equals(ownerId, readResult.Session.UserId, StringComparison.Ordinal))
                         {
-                            _ownershipClaimedForUid = identity.Uid;
+                            _ownershipClaimedForUid = identity.SanitizedUid;
                             return;
                         }
                         else
@@ -537,7 +595,7 @@ namespace SimpleVsManager.Cloud
 
                 var claimResult = await SendWithAuthRetryAsync(session =>
                     {
-                        string ownersUrl = BuildAuthenticatedUrl(session.IdToken, null, "owners", identity.Uid);
+                        string ownersUrl = BuildAuthenticatedUrl(session.IdToken, null, "owners", identity.SanitizedUid);
                         string payload = JsonSerializer.Serialize(session.UserId);
                         var request = new HttpRequestMessage(HttpMethod.Put, ownersUrl)
                         {
@@ -550,7 +608,7 @@ namespace SimpleVsManager.Cloud
                 {
                     if (claimResult.Response.IsSuccessStatusCode)
                     {
-                        _ownershipClaimedForUid = identity.Uid;
+                        _ownershipClaimedForUid = identity.SanitizedUid;
                         return;
                     }
 
@@ -568,11 +626,11 @@ namespace SimpleVsManager.Cloud
             }
         }
 
-        private async Task DeleteOwnershipAsync((string Uid, string Name) identity, CancellationToken ct)
+        private async Task DeleteOwnershipAsync(PlayerIdentity identity, CancellationToken ct)
         {
             var deleteResult = await SendWithAuthRetryAsync(session =>
             {
-                string ownersUrl = BuildAuthenticatedUrl(session.IdToken, null, "owners", identity.Uid);
+                string ownersUrl = BuildAuthenticatedUrl(session.IdToken, null, "owners", identity.SanitizedUid);
                 return HttpClient.DeleteAsync(ownersUrl, ct);
             }, ct).ConfigureAwait(false);
 
@@ -584,7 +642,7 @@ namespace SimpleVsManager.Cloud
                 }
             }
 
-            if (string.Equals(_ownershipClaimedForUid, identity.Uid, StringComparison.Ordinal))
+            if (string.Equals(_ownershipClaimedForUid, identity.SanitizedUid, StringComparison.Ordinal))
             {
                 _ownershipClaimedForUid = null;
             }
@@ -639,7 +697,7 @@ namespace SimpleVsManager.Cloud
         private static bool IsAuthError(HttpStatusCode statusCode)
             => statusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
 
-        private static string ReplaceUploader(JsonElement root, (string Uid, string Name) identity)
+        private static string ReplaceUploader(JsonElement root, PlayerIdentity identity)
         {
             var buffer = new ArrayBufferWriter<byte>();
             using (var writer = new Utf8JsonWriter(buffer))
@@ -663,7 +721,9 @@ namespace SimpleVsManager.Cloud
                     }
                     else if (property.NameEquals("uploaderId"))
                     {
-                        writer.WriteString("uploaderId", identity.Uid);
+                        // Use the sanitized UID for uploaderId to match the /owners/{sanitizedUid} path
+                        // The Firebase security rules validate uploaderId against the owners path
+                        writer.WriteString("uploaderId", identity.SanitizedUid);
                         hasUploaderId = true;
                     }
                     else
@@ -684,7 +744,9 @@ namespace SimpleVsManager.Cloud
 
                 if (!hasUploaderId)
                 {
-                    writer.WriteString("uploaderId", identity.Uid);
+                    // Use the sanitized UID for uploaderId to match the /owners/{sanitizedUid} path
+                    // The Firebase security rules validate uploaderId against the owners path
+                    writer.WriteString("uploaderId", identity.SanitizedUid);
                 }
 
                 writer.WriteEndObject();
@@ -711,6 +773,36 @@ namespace SimpleVsManager.Cloud
         private static string? Normalize(string? value)
             => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+        /// <summary>
+        /// Sanitizes a player UID to be compatible with Firebase Realtime Database path restrictions.
+        /// Firebase keys cannot contain: . $ # [ ] / and ASCII control characters (0-31 and 127).
+        /// We replace these with underscores to maintain readability while ensuring compatibility.
+        /// </summary>
+        private static string SanitizePlayerUidForFirebase(string playerUid)
+        {
+            if (string.IsNullOrWhiteSpace(playerUid))
+            {
+                throw new ArgumentException("Player UID cannot be null or whitespace.", nameof(playerUid));
+            }
+
+            var sb = new StringBuilder(playerUid.Length);
+            foreach (char c in playerUid)
+            {
+                // Replace Firebase-incompatible characters with underscore
+                // Forbidden: . $ # [ ] / and control characters (0-31, 127)
+                if (c == '.' || c == '$' || c == '#' || c == '[' || c == ']' || c == '/' || c < 32 || c == 127)
+                {
+                    sb.Append('_');
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+            
+            return sb.ToString();
+        }
+
         private static string Truncate(string value, int max)
             => value.Length <= max ? value : value.Substring(0, max) + "...";
 
@@ -724,6 +816,28 @@ namespace SimpleVsManager.Cloud
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
+
+        /// <summary>
+        /// Holds player identity information with both original and Firebase-sanitized UIDs.
+        /// </summary>
+        private readonly struct PlayerIdentity
+        {
+            public PlayerIdentity(string originalUid, string sanitizedUid, string name)
+            {
+                OriginalUid = originalUid;
+                SanitizedUid = sanitizedUid;
+                Name = name;
+            }
+
+            /// <summary>The original player UID from Vintage Story (may contain Firebase-incompatible characters)</summary>
+            public string OriginalUid { get; }
+            
+            /// <summary>The Firebase-compatible version of the player UID (used in Firebase paths)</summary>
+            public string SanitizedUid { get; }
+            
+            /// <summary>The player name</summary>
+            public string Name { get; }
+        }
 
         private struct ModlistNode
         {

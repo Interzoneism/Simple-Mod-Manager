@@ -22,7 +22,7 @@ namespace VintageStoryModManager.Services;
 /// </summary>
 public sealed class ModDiscoveryService
 {
-    private const int DiscoveryBatchSize = 16;
+    private static readonly int DiscoveryBatchSize = DevConfig.ModDiscoveryBatchSize;
     private static readonly JsonDocumentOptions DocumentOptions = new()
     {
         AllowTrailingCommas = true,
@@ -201,29 +201,32 @@ public sealed class ModDiscoveryService
             return null;
         }
 
+        ModEntry? modEntry = null;
+
         if (Directory.Exists(fullPath))
         {
-            return TryLoadFromDirectory(new DirectoryInfo(fullPath));
+            modEntry = TryLoadFromDirectory(new DirectoryInfo(fullPath));
+        }
+        else if (File.Exists(fullPath))
+        {
+            var fileInfo = new FileInfo(fullPath);
+            if (string.Equals(fileInfo.Extension, ".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                modEntry = TryLoadFromZip(fileInfo);
+            }
+            else if (string.Equals(fileInfo.Extension, ".cs", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(fileInfo.Extension, ".dll", StringComparison.OrdinalIgnoreCase))
+            {
+                modEntry = CreateUnsupportedCodeModEntry(fileInfo);
+            }
         }
 
-        if (!File.Exists(fullPath))
+        if (modEntry != null && IsBaseGameMod(modEntry.ModId))
         {
             return null;
         }
 
-        var fileInfo = new FileInfo(fullPath);
-        if (string.Equals(fileInfo.Extension, ".zip", StringComparison.OrdinalIgnoreCase))
-        {
-            return TryLoadFromZip(fileInfo);
-        }
-
-        if (string.Equals(fileInfo.Extension, ".cs", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(fileInfo.Extension, ".dll", StringComparison.OrdinalIgnoreCase))
-        {
-            return CreateUnsupportedCodeModEntry(fileInfo);
-        }
-
-        return null;
+        return modEntry;
     }
 
     private List<(int Order, FileSystemInfo Entry)> CollectModSources()
@@ -270,18 +273,35 @@ public sealed class ModDiscoveryService
 
     private ModEntry? ProcessEntry(FileSystemInfo entry)
     {
-        switch (entry)
+        ModEntry? modEntry = entry switch
         {
-            case DirectoryInfo directory:
-                return TryLoadFromDirectory(directory);
-            case FileInfo file when string.Equals(file.Extension, ".zip", StringComparison.OrdinalIgnoreCase):
-                return TryLoadFromZip(file);
-            case FileInfo file when string.Equals(file.Extension, ".cs", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(file.Extension, ".dll", StringComparison.OrdinalIgnoreCase):
-                return CreateUnsupportedCodeModEntry(file);
-            default:
-                return null;
+            DirectoryInfo directory => TryLoadFromDirectory(directory),
+            FileInfo file when string.Equals(file.Extension, ".zip", StringComparison.OrdinalIgnoreCase) 
+                => TryLoadFromZip(file),
+            FileInfo file when string.Equals(file.Extension, ".cs", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(file.Extension, ".dll", StringComparison.OrdinalIgnoreCase) 
+                => CreateUnsupportedCodeModEntry(file),
+            _ => null
+        };
+
+        if (modEntry != null && IsBaseGameMod(modEntry.ModId))
+        {
+            return null;
         }
+
+        return modEntry;
+    }
+
+    private static bool IsBaseGameMod(string modId)
+    {
+        if (string.IsNullOrWhiteSpace(modId))
+        {
+            return false;
+        }
+
+        return string.Equals(modId, "VSCreativeMod", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(modId, "VSEssentials", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(modId, "VSSurvivalMod", StringComparison.OrdinalIgnoreCase);
     }
 
     public void ApplyLoadStatuses(IList<ModEntry> mods)
@@ -391,8 +411,8 @@ public sealed class ModDiscoveryService
         return $"Unable to load mod. Requires dependencies {string.Join(", ", dependencies.Select(Format))}";
     }
 
-    private const string GeneralLoadErrorMessage = "Unable to load mod. Check log files.";
-    private const string DependencyErrorMessage = "Unable to load mod. A dependency has an error. Make sure they all load correctly.";
+    private static readonly string GeneralLoadErrorMessage = DevConfig.ModDiscoveryGeneralLoadErrorMessage;
+    private static readonly string DependencyErrorMessage = DevConfig.ModDiscoveryDependencyErrorMessage;
 
     public string GetModsStateFingerprint()
     {
