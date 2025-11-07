@@ -187,6 +187,54 @@ public sealed class ModDatabaseService
             cancellationToken);
     }
 
+    public async Task<string?> TryFetchLatestReleaseVersionAsync(string modId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(modId) || InternetAccessManager.IsInternetAccessDisabled)
+        {
+            return null;
+        }
+
+        try
+        {
+            string requestUri = string.Format(CultureInfo.InvariantCulture, ApiEndpointFormat, Uri.EscapeDataString(modId));
+            using HttpRequestMessage request = new(HttpMethod.Get, requestUri);
+            using HttpResponseMessage response = await HttpClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using JsonDocument document = await JsonDocument
+                .ParseAsync(contentStream, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!document.RootElement.TryGetProperty("mod", out JsonElement modElement)
+                || modElement.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            if (TryGetLatestReleaseVersion(modElement, out string? version) && !string.IsNullOrWhiteSpace(version))
+            {
+                return version;
+            }
+
+            return GetString(modElement, "latestversion");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     private async Task<ModDatabaseInfo?> TryLoadDatabaseInfoAsyncCore(
         string modId,
         string? modVersion,
@@ -1110,6 +1158,34 @@ public sealed class ModDatabaseService
         };
 
         return true;
+    }
+
+    private static bool TryGetLatestReleaseVersion(JsonElement modElement, out string? version)
+    {
+        version = null;
+
+        if (!modElement.TryGetProperty("releases", out JsonElement releasesElement)
+            || releasesElement.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (JsonElement releaseElement in releasesElement.EnumerateArray())
+        {
+            if (releaseElement.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            string? releaseVersion = ExtractReleaseVersion(releaseElement);
+            if (!string.IsNullOrWhiteSpace(releaseVersion))
+            {
+                version = releaseVersion;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string? GetString(JsonElement element, string propertyName)

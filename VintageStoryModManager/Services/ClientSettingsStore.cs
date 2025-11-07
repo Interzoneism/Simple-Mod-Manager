@@ -17,13 +17,13 @@ public sealed class ClientSettingsStore
     private readonly string _settingsPath;
     private readonly string _tempPath;
     private readonly string _backupPath;
-    private readonly JsonObject _root;
-    private readonly JsonObject _stringListSettings;
-    private readonly JsonObject _stringSettings;
+    private JsonObject _root = null!;
+    private JsonObject _stringListSettings = null!;
+    private JsonObject _stringSettings = null!;
     private readonly JsonSerializerOptions _serializerOptions = new() { WriteIndented = true };
-    private readonly List<string> _disabledMods;
-    private readonly HashSet<string> _disabledLookup;
-    private readonly List<string> _modPaths;
+    private List<string> _disabledMods = null!;
+    private HashSet<string> _disabledLookup = null!;
+    private List<string> _modPaths = null!;
     private readonly IReadOnlyList<string> _searchBases;
     private readonly object _syncRoot = new();
 
@@ -41,24 +41,15 @@ public sealed class ClientSettingsStore
         _tempPath = Path.Combine(DataDirectory, "clientsettings.tmp");
         _backupPath = Path.Combine(DataDirectory, "clientsettings.bkp");
 
-        _root = LoadOrCreateRoot();
-        _stringListSettings = GetOrCreateObject(_root, "stringListSettings");
-        _stringSettings = GetOrCreateObject(_root, "stringSettings");
-        _disabledMods = ExtractStringList(_stringListSettings, "disabledMods");
-        _disabledLookup = new HashSet<string>(_disabledMods, StringComparer.OrdinalIgnoreCase);
-        _modPaths = ExtractStringList(_stringListSettings, "modPaths");
-
-        if (_modPaths.Count == 0)
-        {
-            _modPaths.Add("Mods");
-            _modPaths.Add(Path.Combine(DataDirectory, "Mods"));
-            Persist();
-        }
+        InitializeFromRoot(LoadOrCreateRoot());
+        EnsureDefaultModPaths();
 
         _searchBases = BuildSearchBases().ToList();
     }
 
     public string DataDirectory { get; }
+
+    public string SettingsPath => _settingsPath;
 
     public ReadOnlyCollection<string> DisabledEntries
     {
@@ -93,6 +84,25 @@ public sealed class ClientSettingsStore
     public string? PlayerUid => TryGetStringSettingValue("playeruid");
 
     public string? PlayerName => TryGetStringSettingValue("playername");
+
+    public bool TryReload(out string? error)
+    {
+        lock (_syncRoot)
+        {
+            try
+            {
+                InitializeFromRoot(LoadOrCreateRoot());
+                EnsureDefaultModPaths();
+                error = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+    }
 
     /// <summary>
     /// Directories that are used as bases for resolving relative mod paths.
@@ -407,6 +417,32 @@ public sealed class ClientSettingsStore
         var list = new List<string>();
         container[propertyName] = new JsonArray();
         return list;
+    }
+
+    private void InitializeFromRoot(JsonObject root)
+    {
+        _root = root;
+        _stringListSettings = GetOrCreateObject(_root, "stringListSettings");
+        _stringSettings = GetOrCreateObject(_root, "stringSettings");
+
+        _disabledMods = ExtractStringList(_stringListSettings, "disabledMods");
+        _disabledLookup = new HashSet<string>(_disabledMods, StringComparer.OrdinalIgnoreCase);
+        _modPaths = ExtractStringList(_stringListSettings, "modPaths");
+    }
+
+    private void EnsureDefaultModPaths()
+    {
+        lock (_syncRoot)
+        {
+            if (_modPaths.Count > 0)
+            {
+                return;
+            }
+
+            _modPaths.Add("Mods");
+            _modPaths.Add(Path.Combine(DataDirectory, "Mods"));
+            Persist();
+        }
     }
 
     private IEnumerable<string> BuildSearchBases()

@@ -193,6 +193,7 @@ public partial class MainWindow : Window
     private string? _customShortcutPath;
     private bool _isInitializing;
     private bool _isApplyingPreset;
+    private bool _isWindowActive;
 
     private DispatcherTimer? _modsWatcherTimer;
     private bool _isAutomaticRefreshRunning;
@@ -12635,6 +12636,25 @@ public partial class MainWindow : Window
     private void Button_Click(object sender, RoutedEventArgs e)
     {
 
+    }
+
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+
+        if (_isWindowActive)
+        {
+            return;
+        }
+
+        _isWindowActive = true;
+        _viewModel?.TriggerLightweightModUpdateCheck();
+    }
+
+    protected override void OnDeactivated(EventArgs e)
+    {
+        base.OnDeactivated(e);
+        _isWindowActive = false;
     }
 
     protected override void OnClosed(EventArgs e)

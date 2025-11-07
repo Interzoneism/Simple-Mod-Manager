@@ -63,7 +63,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly string? _installedGameVersion;
     private readonly object _modsStateLock = new();
     private readonly ModDirectoryWatcher _modsWatcher;
+    private readonly ClientSettingsWatcher _clientSettingsWatcher;
     private readonly int _newModsRecentMonths;
+    private volatile bool _hasPendingLightweightModUpdateCheck;
+    private int _isLightweightModUpdateCheckRunning;
 
     private SortOption? _selectedSortOption;
     private bool _isBusy;
@@ -154,6 +157,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateLastSelectedSortModes(_modDatabaseAutoLoadMode);
         _installedGameVersion = VintageStoryVersionLocator.GetInstalledVersion(gameDirectory);
         _modsWatcher = new ModDirectoryWatcher(_discoveryService);
+        _clientSettingsWatcher = new ClientSettingsWatcher(_settingsStore.SettingsPath);
 
         ModsView = CollectionViewSource.GetDefaultView(_mods);
         ModsView.Filter = FilterMod;
@@ -698,11 +702,141 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(DownloadsColumnHeader));
 
         NotifyLoadMoreCommandCanExecuteChanged();
+
+        TriggerLightweightModUpdateCheck();
     }
 
     private void NotifyLoadMoreCommandCanExecuteChanged()
     {
         _loadMoreModDatabaseResultsCommand?.NotifyCanExecuteChanged();
+    }
+
+    public void TriggerLightweightModUpdateCheck()
+    {
+        if (InternetAccessManager.IsInternetAccessDisabled)
+        {
+            return;
+        }
+
+        _hasPendingLightweightModUpdateCheck = true;
+
+        if (Interlocked.CompareExchange(ref _isLightweightModUpdateCheckRunning, 1, 0) == 0)
+        {
+            _ = Task.Run(RunLightweightModUpdateCheckAsync);
+        }
+    }
+
+    private async Task RunLightweightModUpdateCheckAsync()
+    {
+        try
+        {
+            while (_hasPendingLightweightModUpdateCheck)
+            {
+                _hasPendingLightweightModUpdateCheck = false;
+
+                if (InternetAccessManager.IsInternetAccessDisabled)
+                {
+                    break;
+                }
+
+                bool hasUpdates = await CheckForNewModReleasesAsync(CancellationToken.None).ConfigureAwait(false);
+                if (hasUpdates)
+                {
+                    await InvokeOnDispatcherAsync(() => RefreshCommand.Execute(null), CancellationToken.None)
+                        .ConfigureAwait(false);
+                    break;
+                }
+            }
+        }
+        catch
+        {
+            // Swallow failures to ensure subsequent checks can continue.
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isLightweightModUpdateCheckRunning, 0);
+
+            if (_hasPendingLightweightModUpdateCheck && !InternetAccessManager.IsInternetAccessDisabled)
+            {
+                TriggerLightweightModUpdateCheck();
+            }
+        }
+    }
+
+    private async Task<bool> CheckForNewModReleasesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            List<(string ModId, string? InstalledVersion)> mods = await InvokeOnDispatcherAsync(
+                () =>
+                {
+                    var snapshot = new List<(string, string?)>(_modEntriesBySourcePath.Count);
+                    foreach (ModEntry entry in _modEntriesBySourcePath.Values)
+                    {
+                        if (entry is null || string.IsNullOrWhiteSpace(entry.ModId))
+                        {
+                            continue;
+                        }
+
+                        snapshot.Add((entry.ModId, entry.Version));
+                    }
+
+                    return snapshot;
+                },
+                cancellationToken).ConfigureAwait(false);
+
+            if (mods.Count == 0)
+            {
+                return false;
+            }
+
+            foreach ((string ModId, string? InstalledVersion) mod in mods)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string? latestVersion = await _databaseService
+                    .TryFetchLatestReleaseVersionAsync(mod.ModId, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (string.IsNullOrWhiteSpace(latestVersion))
+                {
+                    continue;
+                }
+
+                if (IsDifferentVersion(mod.InstalledVersion, latestVersion))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsDifferentVersion(string? installedVersion, string? latestVersion)
+    {
+        if (string.IsNullOrWhiteSpace(latestVersion) || string.IsNullOrWhiteSpace(installedVersion))
+        {
+            return false;
+        }
+
+        string? normalizedInstalled = VersionStringUtility.Normalize(installedVersion);
+        string? normalizedLatest = VersionStringUtility.Normalize(latestVersion);
+
+        if (!string.IsNullOrWhiteSpace(normalizedInstalled) && !string.IsNullOrWhiteSpace(normalizedLatest))
+        {
+            return !string.Equals(normalizedInstalled, normalizedLatest, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return !string.Equals(installedVersion.Trim(), latestVersion.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     private void SetAutoLoadMode(ModDatabaseAutoLoadMode mode)
@@ -1594,7 +1728,27 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public async Task<bool> CheckForModStateChangesAsync()
     {
+        _clientSettingsWatcher.EnsureWatcher();
+        bool clientSettingsTriggeredRefresh = false;
+        if (_clientSettingsWatcher.TryConsumePendingChanges())
+        {
+            var result = await ApplyClientSettingsChangesAsync().ConfigureAwait(true);
+            if (!result.success)
+            {
+                _clientSettingsWatcher.SignalPendingChange();
+            }
+            else if (result.modStatesChanged)
+            {
+                clientSettingsTriggeredRefresh = true;
+            }
+        }
+
         _modsWatcher.EnsureWatchers();
+
+        if (clientSettingsTriggeredRefresh)
+        {
+            return true;
+        }
 
         if (_modsWatcher.HasPendingChanges)
         {
@@ -1628,6 +1782,46 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         return false;
+    }
+
+    private async Task<(bool success, bool modStatesChanged)> ApplyClientSettingsChangesAsync()
+    {
+        string? localError = null;
+        bool reloadSuccess = await Task.Run(() => _settingsStore.TryReload(out localError)).ConfigureAwait(true);
+
+        if (!reloadSuccess)
+        {
+            if (!string.IsNullOrWhiteSpace(localError))
+            {
+                await InvokeOnDispatcherAsync(
+                    () => SetStatus($"Failed to reload client settings: {localError}", true),
+                    CancellationToken.None).ConfigureAwait(true);
+            }
+
+            return (false, false);
+        }
+
+        bool modStatesChanged = false;
+        await InvokeOnDispatcherAsync(() =>
+        {
+            foreach (var mod in _mods)
+            {
+                bool shouldBeActive = !_settingsStore.IsDisabled(mod.ModId, mod.Version);
+                if (mod.IsActive != shouldBeActive)
+                {
+                    mod.SetIsActiveSilently(shouldBeActive);
+                    modStatesChanged = true;
+                }
+            }
+
+            if (modStatesChanged)
+            {
+                UpdateActiveCount();
+                ReapplyActiveSortIfNeeded();
+            }
+        }, CancellationToken.None).ConfigureAwait(true);
+
+        return (true, modStatesChanged);
     }
 
     private ModListItemViewModel CreateModViewModel(ModEntry entry)
@@ -4851,6 +5045,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _installedTagFilters.Clear();
         _modDatabaseTagFilters.Clear();
 
+        _clientSettingsWatcher.Dispose();
         _modDetailsBusyScope?.Dispose();
         _modDetailsBusyScope = null;
     }
