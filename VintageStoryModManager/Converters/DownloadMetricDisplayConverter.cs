@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Windows.Data;
+using VintageStoryModManager.ViewModels;
 using Binding = System.Windows.Data.Binding;
 
 namespace VintageStoryModManager.Converters;
@@ -12,19 +13,43 @@ public sealed class DownloadMetricDisplayConverter : IMultiValueConverter
 {
     public object? Convert(object[] values, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (values is null || values.Length < 3)
+        if (values is null || values.Length < 5)
         {
             return Binding.DoNothing;
         }
 
         bool useRecent = values[0] is bool flag && flag;
         string? totalDisplay = values[1] as string;
-        string? recentDisplay = values[2] as string;
+        string? thirtyDayDisplay = values[2] as string;
+        string? tenDayDisplay = values[3] as string;
+        ModDatabaseAutoLoadMode? mode = values[4] as ModDatabaseAutoLoadMode?;
 
-        string? selected = useRecent ? recentDisplay : totalDisplay;
-        if (string.IsNullOrWhiteSpace(selected))
+        string? selected;
+        if (useRecent && mode.HasValue)
+        {
+            selected = mode.Value == ModDatabaseAutoLoadMode.DownloadsLastTenDays
+                ? tenDayDisplay
+                : thirtyDayDisplay;
+        }
+        else
+        {
+            selected = totalDisplay;
+        }
+
+        if (string.IsNullOrWhiteSpace(selected) || selected == "—")
         {
             return "—";
+        }
+
+        if (useRecent && mode.HasValue)
+        {
+            switch (mode.Value)
+            {
+                case ModDatabaseAutoLoadMode.DownloadsLastTenDays:
+                    return FormatRecentMetric(selected, " (10 days)");
+                case ModDatabaseAutoLoadMode.DownloadsLastThirtyDays:
+                    return FormatRecentMetric(selected, " (30 days)");
+            }
         }
 
         return selected;
@@ -33,5 +58,21 @@ public sealed class DownloadMetricDisplayConverter : IMultiValueConverter
     public object[] ConvertBack(object value, Type[] targetTypes, object? parameter, CultureInfo culture)
     {
         throw new NotSupportedException();
+    }
+
+    private static string FormatRecentMetric(string value, string suffix)
+    {
+        string trimmed = value.Trim();
+
+        string approxValue = trimmed.StartsWith("≈", StringComparison.Ordinal)
+            ? trimmed
+            : $"≈{trimmed}";
+
+        if (approxValue.EndsWith(suffix, StringComparison.Ordinal))
+        {
+            return approxValue;
+        }
+
+        return approxValue + suffix;
     }
 }

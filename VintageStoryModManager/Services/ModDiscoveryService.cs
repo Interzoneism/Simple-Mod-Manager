@@ -276,10 +276,10 @@ public sealed class ModDiscoveryService
         ModEntry? modEntry = entry switch
         {
             DirectoryInfo directory => TryLoadFromDirectory(directory),
-            FileInfo file when string.Equals(file.Extension, ".zip", StringComparison.OrdinalIgnoreCase) 
+            FileInfo file when string.Equals(file.Extension, ".zip", StringComparison.OrdinalIgnoreCase)
                 => TryLoadFromZip(file),
             FileInfo file when string.Equals(file.Extension, ".cs", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(file.Extension, ".dll", StringComparison.OrdinalIgnoreCase) 
+                || string.Equals(file.Extension, ".dll", StringComparison.OrdinalIgnoreCase)
                 => CreateUnsupportedCodeModEntry(file),
             _ => null
         };

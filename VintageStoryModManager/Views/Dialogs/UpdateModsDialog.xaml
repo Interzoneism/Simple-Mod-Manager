@@ -10,7 +10,7 @@
         ResizeMode="NoResize"
         WindowStyle="SingleBorderWindow"
         ShowInTaskbar="False"
-        Background="{DynamicResource Brush.Window.Shell.Background.Solid}">
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}" MaxWidth="650">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Window.Resources>
@@ -84,7 +84,8 @@
                                             <DataTemplate>
                                                 <StackPanel Margin="0,0,0,12">
                                                     <TextBlock Text="{Binding Version}"
-                                                               FontWeight="SemiBold" />
+                                                               FontWeight="SemiBold"
+                                                               TextWrapping="Wrap"/>
                                                     <TextBlock Text="{Binding Changelog}"
                                                                TextWrapping="Wrap"
                                                                Margin="0,4,0,0" />

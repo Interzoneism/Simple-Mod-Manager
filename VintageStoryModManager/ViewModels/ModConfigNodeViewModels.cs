@@ -176,52 +176,52 @@ public sealed class ModConfigValueNodeViewModel : ModConfigNodeViewModel
                 return JsonValue.Create(text ?? string.Empty);
             case JsonValueKind.True:
             case JsonValueKind.False:
-            {
-                if (string.IsNullOrWhiteSpace(text))
                 {
-                    throw new InvalidOperationException($"Value for '{propertyName}' cannot be empty.");
-                }
+                    if (string.IsNullOrWhiteSpace(text))
+                    {
+                        throw new InvalidOperationException($"Value for '{propertyName}' cannot be empty.");
+                    }
 
-                if (!bool.TryParse(text, out bool boolValue))
-                {
-                    throw new InvalidOperationException($"Value for '{propertyName}' must be a boolean (true/false).");
-                }
+                    if (!bool.TryParse(text, out bool boolValue))
+                    {
+                        throw new InvalidOperationException($"Value for '{propertyName}' must be a boolean (true/false).");
+                    }
 
-                return JsonValue.Create(boolValue);
-            }
+                    return JsonValue.Create(boolValue);
+                }
             case JsonValueKind.Number:
-            {
-                if (string.IsNullOrWhiteSpace(text))
                 {
-                    throw new InvalidOperationException($"Value for '{propertyName}' cannot be empty.");
-                }
+                    if (string.IsNullOrWhiteSpace(text))
+                    {
+                        throw new InvalidOperationException($"Value for '{propertyName}' cannot be empty.");
+                    }
 
-                if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long longValue))
-                {
-                    return JsonValue.Create(longValue);
-                }
+                    if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long longValue))
+                    {
+                        return JsonValue.Create(longValue);
+                    }
 
-                if (decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal decimalValue))
-                {
-                    return JsonValue.Create(decimalValue);
-                }
+                    if (decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal decimalValue))
+                    {
+                        return JsonValue.Create(decimalValue);
+                    }
 
-                throw new InvalidOperationException($"Value for '{propertyName}' must be a number.");
-            }
+                    throw new InvalidOperationException($"Value for '{propertyName}' must be a number.");
+                }
             case JsonValueKind.Null:
-            {
-                if (string.IsNullOrWhiteSpace(text))
                 {
-                    return null;
-                }
+                    if (string.IsNullOrWhiteSpace(text))
+                    {
+                        return null;
+                    }
 
-                if (string.Equals(text.Trim(), "null", StringComparison.OrdinalIgnoreCase))
-                {
-                    return null;
-                }
+                    if (string.Equals(text.Trim(), "null", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return null;
+                    }
 
-                return JsonValue.Create(text);
-            }
+                    return JsonValue.Create(text);
+                }
             default:
                 return JsonValue.Create(text);
         }

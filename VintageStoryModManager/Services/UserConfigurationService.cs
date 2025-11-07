@@ -732,6 +732,19 @@ public sealed class UserConfigurationService
         Save();
     }
 
+    public void SetModDatabaseSearchResultLimit(int limit)
+    {
+        int normalized = NormalizeModDatabaseSearchResultLimit(limit);
+
+        if (_modDatabaseSearchResultLimit == normalized)
+        {
+            return;
+        }
+
+        _modDatabaseSearchResultLimit = normalized;
+        Save();
+    }
+
     public void SetModListSortPreference(string? sortMemberPath, ListSortDirection direction)
     {
         string? normalized = string.IsNullOrWhiteSpace(sortMemberPath)

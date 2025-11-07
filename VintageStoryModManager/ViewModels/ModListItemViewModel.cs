@@ -48,6 +48,7 @@ public sealed class ModListItemViewModel : ObservableObject
     private int? _databaseDownloads;
     private int? _databaseComments;
     private int? _databaseRecentDownloads;
+    private int? _databaseTenDayDownloads;
     private string? _modDatabaseAssetId;
     private string? _modDatabasePageUrl;
     private Uri? _modDatabasePageUri;
@@ -77,6 +78,7 @@ public sealed class ModListItemViewModel : ObservableObject
     private string? _modDatabaseSide;
     private ModVersionVoteSummary? _userReportSummary;
     private string _userReportDisplay = "—";
+    private string? _userReportModVersion;
     private string? _userReportTooltip;
     private bool _isUserReportLoading;
     private bool _userReportHasError;
@@ -131,6 +133,7 @@ public sealed class ModListItemViewModel : ObservableObject
         _databaseDownloads = databaseInfo?.Downloads;
         _databaseComments = databaseInfo?.Comments;
         _databaseRecentDownloads = databaseInfo?.DownloadsLastThirtyDays;
+        _databaseTenDayDownloads = databaseInfo?.DownloadsLastTenDays;
         _modDatabaseLogoUrl = databaseInfo?.LogoUrl;
         _modDatabaseLogo = CreateModDatabaseLogoImage();
         LogDebug($"Initial database logo creation result: {_modDatabaseLogo is not null}. Source URL: '{FormatValue(_modDatabaseLogoUrl)}'.");
@@ -140,10 +143,18 @@ public sealed class ModListItemViewModel : ObservableObject
         {
             _databaseRecentDownloads = CalculateDownloadsLastThirtyDaysFromReleases(_releases);
         }
+        if (_databaseTenDayDownloads is null)
+        {
+            _databaseTenDayDownloads = CalculateDownloadsLastTenDaysFromReleases(_releases);
+        }
         _latestDatabaseVersion = _latestRelease?.Version
             ?? databaseInfo?.LatestVersion
             ?? _latestCompatibleRelease?.Version
             ?? databaseInfo?.LatestCompatibleVersion;
+        string? initialUserReportVersion = !string.IsNullOrWhiteSpace(entry.Version)
+            ? entry.Version
+            : SelectPreferredUserReportVersion(_latestRelease, _latestCompatibleRelease, databaseInfo);
+        SetUserReportVersion(initialUserReportVersion, reinitializeState: false);
         _loadError = entry.LoadError;
 
         IsInstalled = isInstalled;
@@ -188,7 +199,7 @@ public sealed class ModListItemViewModel : ObservableObject
         UpdateNewerReleaseChangelogs();
         UpdateStatusFromErrors();
         UpdateTooltip();
-        InitializeUserReportState(_installedGameVersion, Version);
+        InitializeUserReportState(_installedGameVersion, _userReportModVersion);
         _searchIndex = BuildSearchIndex(entry, location);
     }
 
@@ -259,6 +270,10 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public string RecentDownloadsDisplay => _databaseRecentDownloads.HasValue
         ? _databaseRecentDownloads.Value.ToString("N0", CultureInfo.CurrentCulture)
+        : "—";
+
+    public string TenDayDownloadsDisplay => _databaseTenDayDownloads.HasValue
+        ? _databaseTenDayDownloads.Value.ToString("N0", CultureInfo.CurrentCulture)
         : "—";
 
     public int ModDatabaseRecentDownloadsSortKey => _databaseRecentDownloads ?? 0;
@@ -417,6 +432,8 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public ModVersionVoteSummary? UserReportSummary => _userReportSummary;
 
+    public string? UserReportModVersion => _userReportModVersion;
+
     public ModVersionVoteCounts UserReportCounts => _userReportSummary?.Counts ?? ModVersionVoteCounts.Empty;
 
     public ModVersionVoteOption? UserVoteOption => _userReportSummary?.UserVote;
@@ -445,7 +462,45 @@ public sealed class ModListItemViewModel : ObservableObject
         private set => SetProperty(ref _userReportHasError, value);
     }
 
-    public bool CanSubmitUserReport => !string.IsNullOrWhiteSpace(_installedGameVersion) && !string.IsNullOrWhiteSpace(Version);
+    public bool CanSubmitUserReport => !string.IsNullOrWhiteSpace(_installedGameVersion)
+        && !string.IsNullOrWhiteSpace(_userReportModVersion);
+
+    private bool SetUserReportVersion(string? version, bool reinitializeState)
+    {
+        string? normalized = NormalizeVersion(version);
+        if (string.Equals(_userReportModVersion, normalized, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        _userReportModVersion = normalized;
+        OnPropertyChanged(nameof(UserReportModVersion));
+        OnPropertyChanged(nameof(CanSubmitUserReport));
+
+        if (reinitializeState)
+        {
+            InitializeUserReportState(_installedGameVersion, _userReportModVersion);
+        }
+
+        return true;
+    }
+
+    private static string? NormalizeVersion(string? value)
+    {
+        string? trimmed = value?.Trim();
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
+    private static string? SelectPreferredUserReportVersion(
+        ModReleaseInfo? latestRelease,
+        ModReleaseInfo? latestCompatibleRelease,
+        ModDatabaseInfo? databaseInfo)
+    {
+        return latestRelease?.Version
+            ?? databaseInfo?.LatestVersion
+            ?? latestCompatibleRelease?.Version
+            ?? databaseInfo?.LatestCompatibleVersion;
+    }
 
     private void InitializeUserReportState(string? installedGameVersion, string? modVersion)
     {
@@ -982,6 +1037,15 @@ public sealed class ModListItemViewModel : ObservableObject
         ModReleaseInfo? latestRelease = info.LatestRelease;
         ModReleaseInfo? latestCompatibleRelease = info.LatestCompatibleRelease;
         IReadOnlyList<ModReleaseInfo> releases = info.Releases ?? Array.Empty<ModReleaseInfo>();
+
+        if (string.IsNullOrWhiteSpace(Version))
+        {
+            string? preferredUserReportVersion = SelectPreferredUserReportVersion(
+                latestRelease,
+                latestCompatibleRelease,
+                info);
+            SetUserReportVersion(preferredUserReportVersion, reinitializeState: true);
+        }
 
         string? latestReleaseVersion = latestRelease?.Version;
         if (!string.Equals(_latestReleaseUserReportVersion, latestReleaseVersion, StringComparison.OrdinalIgnoreCase))
@@ -1784,6 +1848,13 @@ public sealed class ModListItemViewModel : ObservableObject
             OnPropertyChanged(nameof(ModDatabaseRecentDownloadsSortKey));
         }
 
+        int? tenDayDownloads = info?.DownloadsLastTenDays ?? CalculateDownloadsLastTenDaysFromReleases(releases);
+        if (_databaseTenDayDownloads != tenDayDownloads)
+        {
+            _databaseTenDayDownloads = tenDayDownloads;
+            OnPropertyChanged(nameof(TenDayDownloadsDisplay));
+        }
+
         DateTime? lastUpdated = DetermineLastUpdated(info, releases);
         if (_modDatabaseLastUpdatedUtc != lastUpdated)
         {
@@ -1794,12 +1865,22 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private static int? CalculateDownloadsLastThirtyDaysFromReleases(IReadOnlyList<ModReleaseInfo> releases)
     {
+        return CalculateRecentDownloadsFromReleases(releases, 30);
+    }
+
+    private static int? CalculateDownloadsLastTenDaysFromReleases(IReadOnlyList<ModReleaseInfo> releases)
+    {
+        return CalculateRecentDownloadsFromReleases(releases, 10);
+    }
+
+    private static int? CalculateRecentDownloadsFromReleases(IReadOnlyList<ModReleaseInfo> releases, int days)
+    {
         if (releases.Count == 0)
         {
             return null;
         }
 
-        DateTime threshold = DateTime.UtcNow.AddDays(-30);
+        DateTime threshold = DateTime.UtcNow.AddDays(-days);
         int total = 0;
         bool hasData = false;
 

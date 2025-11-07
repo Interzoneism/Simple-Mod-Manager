@@ -21,6 +21,7 @@ public sealed class ModDatabaseService
     private static readonly string SearchEndpointFormat = DevConfig.ModDatabaseSearchEndpointFormat;
     private static readonly string MostDownloadedEndpointFormat = DevConfig.ModDatabaseMostDownloadedEndpointFormat;
     private static readonly string RecentlyCreatedEndpointFormat = DevConfig.ModDatabaseRecentlyCreatedEndpointFormat;
+    private static readonly string RecentlyUpdatedEndpointFormat = DevConfig.ModDatabaseRecentlyUpdatedEndpointFormat;
     private static readonly string ModPageBaseUrl = DevConfig.ModDatabasePageBaseUrl;
     private static readonly int MaxConcurrentMetadataRequests = DevConfig.ModDatabaseMaxConcurrentMetadataRequests;
     private static readonly int MinimumTotalDownloadsForTrending = DevConfig.ModDatabaseMinimumTotalDownloadsForTrending;
@@ -337,6 +338,64 @@ public sealed class ModDatabaseService
             .ToArray();
     }
 
+    public async Task<IReadOnlyList<ModDatabaseSearchResult>> GetMostDownloadedModsLastTenDaysAsync(
+        int maxResults,
+        CancellationToken cancellationToken = default)
+    {
+        if (maxResults <= 0)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+
+        InternetAccessManager.ThrowIfInternetAccessDisabled();
+
+        int requestLimit = CalculateRequestLimit(maxResults);
+        string requestUri = string.Format(
+            CultureInfo.InvariantCulture,
+            MostDownloadedEndpointFormat,
+            requestLimit.ToString(CultureInfo.InvariantCulture));
+
+        IReadOnlyList<ModDatabaseSearchResult> candidates = await QueryModsAsync(
+                requestUri,
+                requestLimit,
+                Array.Empty<string>(),
+                requireTokenMatch: false,
+                results => results
+                    .OrderByDescending(candidate => candidate.Downloads)
+                    .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (candidates.Count == 0)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+
+        IReadOnlyList<ModDatabaseSearchResult> filtered = candidates
+            .Where(candidate => candidate.Downloads >= MinimumTotalDownloadsForTrending)
+            .ToArray();
+
+        if (filtered.Count == 0)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+
+        IReadOnlyList<ModDatabaseSearchResult> enriched = await EnrichWithLatestReleaseDownloadsAsync(filtered, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (enriched.Count == 0)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+
+        return enriched
+            .OrderByDescending(candidate => candidate.DetailedInfo?.DownloadsLastTenDays ?? 0)
+            .ThenByDescending(candidate => candidate.Downloads)
+            .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(maxResults)
+            .ToArray();
+    }
+
     public async Task<IReadOnlyList<ModDatabaseSearchResult>> GetMostDownloadedNewModsAsync(
         int months,
         int maxResults,
@@ -389,6 +448,166 @@ public sealed class ModDatabaseService
             .ToArray();
 
         return filtered.Length == 0 ? Array.Empty<ModDatabaseSearchResult>() : filtered;
+    }
+
+    public async Task<IReadOnlyList<ModDatabaseSearchResult>> GetRecentlyUpdatedModsAsync(
+        int maxResults,
+        CancellationToken cancellationToken = default)
+    {
+        if (maxResults <= 0)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+
+        InternetAccessManager.ThrowIfInternetAccessDisabled();
+
+        int requestLimit = CalculateRequestLimit(maxResults);
+        string requestUri = string.Format(
+            CultureInfo.InvariantCulture,
+            RecentlyUpdatedEndpointFormat,
+            requestLimit.ToString(CultureInfo.InvariantCulture));
+
+        return await QueryModsAsync(
+                requestUri,
+                maxResults,
+                Array.Empty<string>(),
+                requireTokenMatch: false,
+                candidates => candidates
+                    .Where(candidate => candidate.LastReleasedUtc.HasValue)
+                    .OrderByDescending(candidate => candidate.LastReleasedUtc!.Value)
+                    .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<ModDatabaseSearchResult>> GetRecentlyAddedModsAsync(
+        int maxResults,
+        CancellationToken cancellationToken = default)
+    {
+        if (maxResults <= 0)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+
+        InternetAccessManager.ThrowIfInternetAccessDisabled();
+
+        int requestLimit = CalculateRequestLimit(maxResults);
+        string requestUri = string.Format(
+            CultureInfo.InvariantCulture,
+            RecentlyCreatedEndpointFormat,
+            requestLimit.ToString(CultureInfo.InvariantCulture));
+
+        IReadOnlyList<ModDatabaseSearchResult> candidates = await QueryModsAsync(
+                requestUri,
+                requestLimit,
+                Array.Empty<string>(),
+                requireTokenMatch: false,
+                results => results,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (candidates.Count == 0)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+
+        IReadOnlyList<ModDatabaseSearchResult> enriched = await EnrichWithLatestReleaseDownloadsAsync(
+                candidates,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (enriched.Count == 0)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+
+        return enriched
+            .Select((candidate, index) => new
+            {
+                Candidate = candidate,
+                Index = index,
+                SortKey = candidate.CreatedUtc ?? candidate.LastReleasedUtc
+            })
+            .OrderByDescending(item => item.SortKey ?? DateTime.MinValue)
+            .ThenBy(item => item.Candidate.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.Index)
+            .Select(item => item.Candidate)
+            .Take(maxResults)
+            .ToArray();
+    }
+
+    public async Task<IReadOnlyList<ModDatabaseSearchResult>> GetMostTrendingModsAsync(
+        int maxResults,
+        CancellationToken cancellationToken = default)
+    {
+        if (maxResults <= 0)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+
+        InternetAccessManager.ThrowIfInternetAccessDisabled();
+
+        int requestLimit = CalculateRequestLimit(maxResults);
+        string requestUri = string.Format(
+            CultureInfo.InvariantCulture,
+            MostDownloadedEndpointFormat,
+            requestLimit.ToString(CultureInfo.InvariantCulture));
+
+        return await QueryModsAsync(
+                requestUri,
+                maxResults,
+                Array.Empty<string>(),
+                requireTokenMatch: false,
+                candidates => candidates
+                    .OrderByDescending(candidate => candidate.TrendingPoints)
+                    .ThenByDescending(candidate => candidate.Downloads)
+                    .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<ModDatabaseSearchResult>> GetRandomModsAsync(
+        int maxResults,
+        CancellationToken cancellationToken = default)
+    {
+        if (maxResults <= 0)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+
+        InternetAccessManager.ThrowIfInternetAccessDisabled();
+
+        // Fetch a larger pool to randomize from
+        int requestLimit = CalculateRequestLimit(maxResults * 10);
+        string requestUri = string.Format(
+            CultureInfo.InvariantCulture,
+            MostDownloadedEndpointFormat,
+            requestLimit.ToString(CultureInfo.InvariantCulture));
+
+        IReadOnlyList<ModDatabaseSearchResult> candidates = await QueryModsAsync(
+                requestUri,
+                requestLimit,
+                Array.Empty<string>(),
+                requireTokenMatch: false,
+                results => results,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (candidates.Count == 0)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+
+        // Shuffle the results using Fisher-Yates algorithm
+        var random = new Random(Guid.NewGuid().GetHashCode());
+        var shuffled = candidates.ToArray();
+        for (int i = shuffled.Length - 1; i > 0; i--)
+        {
+            int j = random.Next(i + 1);
+            (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
+        }
+
+        return shuffled.Take(maxResults).ToArray();
     }
 
     private static bool WasCreatedOnOrAfter(ModDatabaseSearchResult candidate, DateTime thresholdUtc)
@@ -656,6 +875,7 @@ public sealed class ModDatabaseService
             string? latestCompatibleVersion = latestCompatibleRelease?.Version;
             IReadOnlyList<string> requiredVersions = FindRequiredGameVersions(modElement, modVersion);
             int? recentDownloads = CalculateDownloadsLastThirtyDays(releases);
+            int? tenDayDownloads = CalculateDownloadsLastTenDays(releases);
 
             var info = new ModDatabaseInfo
             {
@@ -672,6 +892,7 @@ public sealed class ModDatabaseService
                 TrendingPoints = trendingPoints,
                 LogoUrl = logoUrl,
                 DownloadsLastThirtyDays = recentDownloads,
+                DownloadsLastTenDays = tenDayDownloads,
                 LastReleasedUtc = lastReleasedUtc,
                 CreatedUtc = createdUtc,
                 LatestRelease = latestRelease,
@@ -760,13 +981,23 @@ public sealed class ModDatabaseService
 
     private static int? CalculateDownloadsLastThirtyDays(IReadOnlyList<ModReleaseInfo> releases)
     {
+        return CalculateDownloadsForPeriod(releases, 30);
+    }
+
+    private static int? CalculateDownloadsLastTenDays(IReadOnlyList<ModReleaseInfo> releases)
+    {
+        return CalculateDownloadsForPeriod(releases, 10);
+    }
+
+    private static int? CalculateDownloadsForPeriod(IReadOnlyList<ModReleaseInfo> releases, int days)
+    {
         if (releases.Count == 0)
         {
             return null;
         }
 
         DateTime now = DateTime.UtcNow;
-        DateTime windowStart = now.AddDays(-30);
+        DateTime windowStart = now.AddDays(-days);
 
         ModReleaseInfo[] relevantReleases = releases
             .Where(release => release?.CreatedUtc.HasValue == true && release.Downloads.HasValue)

@@ -34,6 +34,8 @@ public sealed class ModDatabaseInfo
 
     public int? DownloadsLastThirtyDays { get; init; }
 
+    public int? DownloadsLastTenDays { get; init; }
+
     public DateTime? LastReleasedUtc { get; init; }
 
     public DateTime? CreatedUtc { get; init; }

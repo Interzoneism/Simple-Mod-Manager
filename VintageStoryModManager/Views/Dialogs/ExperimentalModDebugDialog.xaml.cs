@@ -152,7 +152,7 @@ public partial class ExperimentalModDebugDialog : Window, INotifyPropertyChanged
 
         // Try to open with common text editors that support line navigation
         // VS Code, Notepad++, Sublime Text, and others support similar command-line arguments
-        
+
         var editorAttempts = new List<(string executable, string arguments)>
         {
             // VS Code - most common modern editor
@@ -176,7 +176,7 @@ public partial class ExperimentalModDebugDialog : Window, INotifyPropertyChanged
             try
             {
                 var startInfo = new ProcessStartInfo();
-                
+
                 if (string.IsNullOrEmpty(executable))
                 {
                     // Use default application

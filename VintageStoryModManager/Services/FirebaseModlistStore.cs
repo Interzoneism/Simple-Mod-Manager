@@ -167,10 +167,10 @@ namespace SimpleVsManager.Cloud
         {
             _playerUid = Normalize(playerUid);
             _playerName = Normalize(playerName);
-            
+
             // Sanitize the player UID for Firebase compatibility
-            _sanitizedPlayerUid = string.IsNullOrWhiteSpace(_playerUid) 
-                ? null 
+            _sanitizedPlayerUid = string.IsNullOrWhiteSpace(_playerUid)
+                ? null
                 : SanitizePlayerUidForFirebase(_playerUid);
 
             if (!string.Equals(_ownershipClaimedForUid, _sanitizedPlayerUid, StringComparison.Ordinal))
@@ -484,10 +484,10 @@ namespace SimpleVsManager.Cloud
 
             uid = uid.Trim();
             name = name.Trim();
-            
+
             // Sanitized UID should already be set by SetPlayerIdentity, but create it here as a fallback
-            sanitizedUid = string.IsNullOrWhiteSpace(sanitizedUid) 
-                ? SanitizePlayerUidForFirebase(uid) 
+            sanitizedUid = string.IsNullOrWhiteSpace(sanitizedUid)
+                ? SanitizePlayerUidForFirebase(uid)
                 : sanitizedUid;
 
             return new PlayerIdentity(uid, sanitizedUid, name);
@@ -799,7 +799,7 @@ namespace SimpleVsManager.Cloud
                     sb.Append(c);
                 }
             }
-            
+
             return sb.ToString();
         }
 
@@ -831,10 +831,10 @@ namespace SimpleVsManager.Cloud
 
             /// <summary>The original player UID from Vintage Story (may contain Firebase-incompatible characters)</summary>
             public string OriginalUid { get; }
-            
+
             /// <summary>The Firebase-compatible version of the player UID (used in Firebase paths)</summary>
             public string SanitizedUid { get; }
-            
+
             /// <summary>The player name</summary>
             public string Name { get; }
         }

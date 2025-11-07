@@ -292,6 +292,7 @@ internal sealed class ModDatabaseCacheService
             TrendingPoints = info.TrendingPoints,
             LogoUrl = info.LogoUrl,
             DownloadsLastThirtyDays = info.DownloadsLastThirtyDays,
+            DownloadsLastTenDays = info.DownloadsLastTenDays,
             LastReleasedUtc = info.LastReleasedUtc,
             CreatedUtc = info.CreatedUtc,
             RequiredGameVersions = info.RequiredGameVersions?.ToArray() ?? Array.Empty<string>(),
@@ -337,6 +338,7 @@ internal sealed class ModDatabaseCacheService
             TrendingPoints = cached.TrendingPoints,
             LogoUrl = cached.LogoUrl,
             DownloadsLastThirtyDays = cached.DownloadsLastThirtyDays,
+            DownloadsLastTenDays = cached.DownloadsLastTenDays,
             LastReleasedUtc = cached.LastReleasedUtc,
             CreatedUtc = cached.CreatedUtc,
             LatestRelease = latestRelease,
@@ -567,6 +569,8 @@ internal sealed class ModDatabaseCacheService
         public string? LogoUrl { get; init; }
 
         public int? DownloadsLastThirtyDays { get; init; }
+
+        public int? DownloadsLastTenDays { get; init; }
 
         public DateTime? LastReleasedUtc { get; init; }
 

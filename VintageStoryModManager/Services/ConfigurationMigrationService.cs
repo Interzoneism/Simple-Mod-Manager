@@ -119,10 +119,10 @@ internal static class ConfigurationMigrationService
 
             return true;
         }
-        catch (Exception ex) when (ex is IOException 
-            or UnauthorizedAccessException 
-            or NotSupportedException 
-            or DirectoryNotFoundException 
+        catch (Exception ex) when (ex is IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or DirectoryNotFoundException
             or PathTooLongException)
         {
             return false;

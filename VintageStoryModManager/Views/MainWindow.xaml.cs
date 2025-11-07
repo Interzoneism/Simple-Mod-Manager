@@ -362,7 +362,7 @@ public partial class MainWindow : Window
         SetColumnVisibility(DownloadsColumn, InstalledModsColumn.Downloads, isSearching);
         SetColumnVisibility(AuthorsColumn, InstalledModsColumn.Authors, true);
         SetColumnVisibility(TagsColumn, InstalledModsColumn.Tags, true);
-        SetColumnVisibility(UserReportsColumn, InstalledModsColumn.UserReports, !isSearching);
+        SetColumnVisibility(UserReportsColumn, InstalledModsColumn.UserReports, true);
         SetColumnVisibility(StatusColumn, InstalledModsColumn.Status, !isSearching);
         SetColumnVisibility(SideColumn, InstalledModsColumn.Side, true);
     }
@@ -1817,7 +1817,7 @@ public partial class MainWindow : Window
         }
 
         logLines.Add(ExperimentalModDebugLogLine.FromPlainText($"**{fileName}**"));
-        
+
         foreach (var (line, lineNumber) in processedLines)
         {
             logLines.Add(ExperimentalModDebugLogLine.FromLogEntry(line, modId, filePath, lineNumber));
@@ -1842,7 +1842,7 @@ public partial class MainWindow : Window
         }
 
         logLines.Add(ExperimentalModDebugLogLine.FromPlainText($"**{fileName}**"));
-        
+
         foreach (var (line, modName, lineNumber) in processedLines)
         {
             logLines.Add(ExperimentalModDebugLogLine.FromLogEntry(line, modName, filePath, lineNumber));
@@ -2209,6 +2209,14 @@ public partial class MainWindow : Window
             {
                 _userConfiguration.SetOnlyShowCompatibleModDatabaseResults(
                     _viewModel.OnlyShowCompatibleModDatabaseResults);
+            }
+        }
+        else if (e.PropertyName == nameof(MainViewModel.SelectedModDatabaseFetchLimit))
+        {
+            if (_viewModel != null)
+            {
+                _userConfiguration.SetModDatabaseSearchResultLimit(
+                    _viewModel.SelectedModDatabaseFetchLimit);
             }
         }
         else if (e.PropertyName == nameof(MainViewModel.SearchModDatabase))
@@ -5486,7 +5494,7 @@ public partial class MainWindow : Window
 
         _isFullRefreshInProgress = true;
         bool cachesCleared = false;
-        
+
         try
         {
             if (!TrySaveAutomaticModlist(requestedModlistName, out savedModlistName, out savedModlistPath))
@@ -8855,6 +8863,34 @@ public partial class MainWindow : Window
         }
 
         return builder.ToString();
+    }
+
+    private void BrowseDownloadsButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        IRelayCommand command = viewModel.ShowDownloadsSortingOptionsCommand;
+        if (command.CanExecute(null))
+        {
+            command.Execute(null);
+        }
+    }
+
+    private void BrowseActivityButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        IRelayCommand command = viewModel.ShowActivitySortingOptionsCommand;
+        if (command.CanExecute(null))
+        {
+            command.Execute(null);
+        }
     }
 
     private void ModlistsTabButton_OnClick(object sender, RoutedEventArgs e)
