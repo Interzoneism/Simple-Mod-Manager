@@ -66,13 +66,23 @@
                                             </StackPanel>
                                         </CheckBox.Content>
                                     </CheckBox>
-                                    <Button Grid.Column="1"
-                                            Content="Skip"
-                                            Margin="12,0,0,0"
-                                            HorizontalAlignment="Right"
-                                            VerticalAlignment="Center"
-                                            IsEnabled="{Binding CanSkip}"
-                                            Click="SkipVersionButton_OnClick" />
+                                    <StackPanel Grid.Column="1"
+                                                Margin="12,0,0,0"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Width="140">
+                                        <Button Content="Exclude version"
+                                                HorizontalAlignment="Stretch"
+                                                IsEnabled="{Binding CanSkip}"
+                                                Visibility="{Binding ShowExcludeVersionButton, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                Click="SkipVersionButton_OnClick" />
+                                        <Button Content="Copy for Server"
+                                                Margin="0,8,0,0"
+                                                HorizontalAlignment="Stretch"
+                                                Click="CopyServerCommandButton_OnClick"
+                                                Visibility="{Binding ShowServerInstallCommand, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                IsEnabled="{Binding ShowServerInstallCommand}" />
+                                    </StackPanel>
                                 </Grid>
 
                                 <Expander Header="{Binding ChangelogHeader}"
@@ -85,7 +95,7 @@
                                                 <StackPanel Margin="0,0,0,12">
                                                     <TextBlock Text="{Binding Version}"
                                                                FontWeight="SemiBold"
-                                                               TextWrapping="Wrap"/>
+                                                               TextWrapping="Wrap" />
                                                     <TextBlock Text="{Binding Changelog}"
                                                                TextWrapping="Wrap"
                                                                Margin="0,4,0,0" />

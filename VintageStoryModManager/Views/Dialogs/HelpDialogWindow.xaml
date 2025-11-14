@@ -31,29 +31,32 @@
                 <TextBlock Margin="0,12,0,0"
                            TextWrapping="Wrap"
                            FontSize="15">
-                    <Run Text="If you are experiencing any errors or problems, start with running &quot;Clear all caches&quot; in the Help menu." />
+                    <Run
+                        Text="If you are experiencing any errors or problems, start with running &quot;Clear temporary cache&quot; in the Help menu." />
                 </TextBlock>
 
                 <TextBlock Margin="0,12,0,0"
                            TextWrapping="Wrap"
                            FontSize="15">
-                    <Run Text="Another thing you can try is to save your installed mods as a local Modlist, delete all your mods, and load the Modlist to reinstall them." />
+                    <Run
+                        Text="Another thing you can try is to save your installed mods as a local Modlist, delete all your mods, and load the Modlist to reinstall them." />
                 </TextBlock>
 
                 <TextBlock Margin="0,12,0,0"
                            TextWrapping="Wrap"
                            FontSize="15">
-                    <Run Text="If you are having issues with the online Modlists or the Voting function, make sure the firebase-auth.json file is inside the"/>
+                    <Run
+                        Text="If you are having issues with the online Modlists or the Voting function, make sure the firebase-auth.json file is inside the" />
                     <Hyperlink x:Name="FirebaseFileHyperlink"
-                       RequestNavigate="OnFirebaseHyperlinkRequestNavigate"
-                       Foreground="{DynamicResource Brush.Text.Emphasis}">
-                       <Run Text="Simple VS Manager folder"/>
+                               RequestNavigate="OnFirebaseHyperlinkRequestNavigate"
+                               Foreground="{DynamicResource Brush.Text.Emphasis}">
+                        <Run Text="Simple VS Manager folder" />
                     </Hyperlink>
                     <Run Text="- if it's missing or if still not working you can copy the backup from" />
                     <Hyperlink x:Name="BackupLink"
-                       RequestNavigate="OnBackupHyperlinkRequestNavigate"
-                       Foreground="{DynamicResource Brush.Text.Emphasis}">
-                       <Run Text="AppData/Local/SVSM Backup"/>
+                               RequestNavigate="OnBackupHyperlinkRequestNavigate"
+                               Foreground="{DynamicResource Brush.Text.Emphasis}">
+                        <Run Text="AppData/Local/SVSM Backup" />
                     </Hyperlink>
                     <Run Text="and replace the firebase-auth.json file." />
 
@@ -62,13 +65,13 @@
                 <TextBlock Margin="0,12,0,0"
                            TextWrapping="Wrap"
                            FontSize="15">
-                    <Run Text="Always update to the latest manager version."/>
-                    <LineBreak/>
-                    <Run Text="Make sure to read the description and check out the latest comments on the"/>
+                    <Run Text="Always update to the latest manager version." />
+                    <LineBreak />
+                    <Run Text="Make sure to read the description and check out the latest comments on the" />
                     <Hyperlink x:Name="ModDBlink"
-                       RequestNavigate="OnModDBlinkNavigate"
-                       Foreground="{DynamicResource Brush.Text.Emphasis}">
-                       <Run Text="managers Mod DB page"/>
+                               RequestNavigate="OnModDBlinkNavigate"
+                               Foreground="{DynamicResource Brush.Text.Emphasis}">
+                        <Run Text="managers Mod DB page" />
                     </Hyperlink>
                 </TextBlock>
 

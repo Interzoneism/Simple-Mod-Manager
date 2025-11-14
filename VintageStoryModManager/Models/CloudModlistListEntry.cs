@@ -1,12 +1,9 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 
 namespace VintageStoryModManager.Models;
 
 /// <summary>
-/// Represents a cloud modlist entry prepared for display in the UI.
+///     Represents a cloud modlist entry prepared for display in the UI.
 /// </summary>
 public sealed class CloudModlistListEntry
 {

@@ -1,10 +1,7 @@
-using System;
-using System.Collections.Generic;
-
 namespace VintageStoryModManager.Models;
 
 /// <summary>
-/// Represents metadata retrieved from the official Vintage Story mod database.
+///     Represents metadata retrieved from the official Vintage Story mod database.
 /// </summary>
 public sealed class ModDatabaseInfo
 {

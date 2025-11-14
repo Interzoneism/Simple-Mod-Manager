@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using VintageStoryModManager.Services;
 using Clipboard = System.Windows.Clipboard;
@@ -9,8 +6,8 @@ namespace VintageStoryModManager.Views.Dialogs;
 
 public partial class ExperimentalCompReviewDialog : Window
 {
-    private readonly ModCompatibilityCommentsService _service;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
+    private readonly ModCompatibilityCommentsService _service;
     private bool _isRunning;
     private string? _latestJson;
 
@@ -65,12 +62,9 @@ public partial class ExperimentalCompReviewDialog : Window
 
     private async Task RunReviewAsync()
     {
-        if (_isRunning)
-        {
-            return;
-        }
+        if (_isRunning) return;
 
-        string modSlug = ModSlugTextBox.Text.Trim();
+        var modSlug = ModSlugTextBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(modSlug))
         {
             StatusTextBlock.Text = "Enter a mod slug to continue.";
@@ -78,7 +72,7 @@ public partial class ExperimentalCompReviewDialog : Window
             return;
         }
 
-        string? latestVersion = string.IsNullOrWhiteSpace(LatestVersionTextBox.Text)
+        var latestVersion = string.IsNullOrWhiteSpace(LatestVersionTextBox.Text)
             ? null
             : LatestVersionTextBox.Text.Trim();
 
@@ -89,7 +83,8 @@ public partial class ExperimentalCompReviewDialog : Window
         catch (InternetAccessDisabledException ex)
         {
             StatusTextBlock.Text = ex.Message;
-            ModManagerMessageBox.Show(this, ex.Message, "Simple VS Manager", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ModManagerMessageBox.Show(this, ex.Message, "Simple VS Manager", MessageBoxButton.OK,
+                MessageBoxImage.Warning);
             return;
         }
 
@@ -101,7 +96,7 @@ public partial class ExperimentalCompReviewDialog : Window
             ResultsTextBox.Text = string.Empty;
             _latestJson = null;
 
-            ModCompatibilityCommentsService.ExperimentalCompReviewResult result = await _service
+            var result = await _service
                 .GetTop3CommentsAsync(modSlug, latestVersion, _cancellationTokenSource.Token)
                 .ConfigureAwait(true);
 
@@ -133,10 +128,7 @@ public partial class ExperimentalCompReviewDialog : Window
 
     private void CopyJsonButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrEmpty(_latestJson))
-        {
-            return;
-        }
+        if (string.IsNullOrEmpty(_latestJson)) return;
 
         try
         {
@@ -155,7 +147,7 @@ public partial class ExperimentalCompReviewDialog : Window
 
     private void UpdateUiState()
     {
-        bool isEnabled = !_isRunning;
+        var isEnabled = !_isRunning;
         ModSlugTextBox.IsEnabled = isEnabled;
         LatestVersionTextBox.IsEnabled = isEnabled;
         RunButton.IsEnabled = isEnabled;

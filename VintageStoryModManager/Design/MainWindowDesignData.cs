@@ -1,8 +1,5 @@
-using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.Input;
 using VintageStoryModManager.ViewModels;
@@ -10,7 +7,7 @@ using VintageStoryModManager.ViewModels;
 namespace VintageStoryModManager.Design;
 
 /// <summary>
-/// Provides design-time data for the <see cref="VintageStoryModManager.Views.MainWindow"/>.
+///     Provides design-time data for the <see cref="VintageStoryModManager.Views.MainWindow" />.
 /// </summary>
 public sealed class MainWindowDesignData
 {
@@ -27,9 +24,11 @@ public sealed class MainWindowDesignData
 
         _sortOptions = new ObservableCollection<SortOption>
         {
-            new SortOption("Active (Active → Inactive)", (nameof(ModListItemViewModel.ActiveSortOrder), ListSortDirection.Ascending), (nameof(ModListItemViewModel.DisplayName), ListSortDirection.Ascending)),
-            new SortOption("Name", (nameof(ModListItemViewModel.DisplayName), ListSortDirection.Ascending)),
-            new SortOption("Version", (nameof(ModListItemViewModel.VersionDisplay), ListSortDirection.Ascending))
+            new("Active (Active → Inactive)",
+                (nameof(ModListItemViewModel.ActiveSortOrder), ListSortDirection.Ascending),
+                (nameof(ModListItemViewModel.NameSortKey), ListSortDirection.Ascending)),
+            new("Name", (nameof(ModListItemViewModel.NameSortKey), ListSortDirection.Ascending)),
+            new("Version", (nameof(ModListItemViewModel.VersionDisplay), ListSortDirection.Ascending))
         };
         SortOptions = new ReadOnlyObservableCollection<SortOption>(_sortOptions);
 

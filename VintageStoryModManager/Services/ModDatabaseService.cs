@@ -1,19 +1,14 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using VintageStoryModManager.Models;
 
 namespace VintageStoryModManager.Services;
 
 /// <summary>
-/// Retrieves additional metadata for installed mods from the Vintage Story mod database.
+///     Retrieves additional metadata for installed mods from the Vintage Story mod database.
 /// </summary>
 public sealed class ModDatabaseService
 {
@@ -24,7 +19,10 @@ public sealed class ModDatabaseService
     private static readonly string RecentlyUpdatedEndpointFormat = DevConfig.ModDatabaseRecentlyUpdatedEndpointFormat;
     private static readonly string ModPageBaseUrl = DevConfig.ModDatabasePageBaseUrl;
     private static readonly int MaxConcurrentMetadataRequests = DevConfig.ModDatabaseMaxConcurrentMetadataRequests;
-    private static readonly int MinimumTotalDownloadsForTrending = DevConfig.ModDatabaseMinimumTotalDownloadsForTrending;
+
+    private static readonly int MinimumTotalDownloadsForTrending =
+        DevConfig.ModDatabaseMinimumTotalDownloadsForTrending;
+
     private static readonly int DefaultNewModsMonths = DevConfig.ModDatabaseDefaultNewModsMonths;
     private static readonly int MaxNewModsMonths = DevConfig.ModDatabaseMaxNewModsMonths;
 
@@ -61,30 +59,22 @@ public sealed class ModDatabaseService
 
     private static int CalculateRequestLimit(int maxResults)
     {
-        long scaledLimit = (long)maxResults * 4L;
-        if (scaledLimit < maxResults)
-        {
-            scaledLimit = maxResults;
-        }
+        var scaledLimit = maxResults * 4L;
+        if (scaledLimit < maxResults) scaledLimit = maxResults;
 
-        if (scaledLimit > int.MaxValue)
-        {
-            return int.MaxValue;
-        }
+        if (scaledLimit > int.MaxValue) return int.MaxValue;
 
         return (int)scaledLimit;
     }
 
-    public async Task PopulateModDatabaseInfoAsync(IEnumerable<ModEntry> mods, string? installedGameVersion, bool requireExactVersionMatch = false, CancellationToken cancellationToken = default)
+    public async Task PopulateModDatabaseInfoAsync(IEnumerable<ModEntry> mods, string? installedGameVersion,
+        bool requireExactVersionMatch = false, CancellationToken cancellationToken = default)
     {
-        if (mods is null)
-        {
-            throw new ArgumentNullException(nameof(mods));
-        }
+        if (mods is null) throw new ArgumentNullException(nameof(mods));
 
-        string? normalizedGameVersion = VersionStringUtility.Normalize(installedGameVersion);
+        var normalizedGameVersion = VersionStringUtility.Normalize(installedGameVersion);
 
-        bool internetDisabled = InternetAccessManager.IsInternetAccessDisabled;
+        var internetDisabled = InternetAccessManager.IsInternetAccessDisabled;
 
         using var semaphore = new SemaphoreSlim(MaxConcurrentMetadataRequests);
         var tasks = new List<Task>();
@@ -93,59 +83,44 @@ public sealed class ModDatabaseService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (mod is null || string.IsNullOrWhiteSpace(mod.ModId))
-            {
-                continue;
-            }
+            if (mod is null || string.IsNullOrWhiteSpace(mod.ModId)) continue;
 
             tasks.Add(ProcessModAsync(mod));
         }
 
-        if (tasks.Count == 0)
-        {
-            return;
-        }
+        if (tasks.Count == 0) return;
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
 
         async Task ProcessModAsync(ModEntry modEntry)
         {
-            string? installedModVersion = modEntry.Version;
+            var installedModVersion = modEntry.Version;
 
-            ModDatabaseInfo? cached = await CacheService
+            var cached = await CacheService
                 .TryLoadAsync(
                     modEntry.ModId,
                     normalizedGameVersion,
                     installedModVersion,
-                    allowExpiredEntryRefresh: !internetDisabled,
+                    !internetDisabled,
                     requireExactVersionMatch,
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            if (cached != null)
-            {
-                modEntry.DatabaseInfo = cached;
-            }
+            if (cached != null) modEntry.DatabaseInfo = cached;
 
-            if (internetDisabled)
-            {
-                return;
-            }
+            if (internetDisabled) return;
 
             await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                ModDatabaseInfo? info = await TryLoadDatabaseInfoInternalAsync(
+                var info = await TryLoadDatabaseInfoInternalAsync(
                         modEntry.ModId,
                         installedModVersion,
                         normalizedGameVersion,
                         requireExactVersionMatch,
                         cancellationToken)
                     .ConfigureAwait(false);
-                if (info != null)
-                {
-                    modEntry.DatabaseInfo = info;
-                }
+                if (info != null) modEntry.DatabaseInfo = info;
             }
             finally
             {
@@ -154,15 +129,15 @@ public sealed class ModDatabaseService
         }
     }
 
-    public Task<ModDatabaseInfo?> TryLoadDatabaseInfoAsync(string modId, string? modVersion, string? installedGameVersion, bool requireExactVersionMatch = false, CancellationToken cancellationToken = default)
+    public Task<ModDatabaseInfo?> TryLoadDatabaseInfoAsync(string modId, string? modVersion,
+        string? installedGameVersion, bool requireExactVersionMatch = false,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(modId))
-        {
-            return Task.FromResult<ModDatabaseInfo?>(null);
-        }
+        if (string.IsNullOrWhiteSpace(modId)) return Task.FromResult<ModDatabaseInfo?>(null);
 
-        string? normalizedGameVersion = VersionStringUtility.Normalize(installedGameVersion);
-        return TryLoadDatabaseInfoAsyncCore(modId, modVersion, normalizedGameVersion, requireExactVersionMatch, cancellationToken);
+        var normalizedGameVersion = VersionStringUtility.Normalize(installedGameVersion);
+        return TryLoadDatabaseInfoAsyncCore(modId, modVersion, normalizedGameVersion, requireExactVersionMatch,
+            cancellationToken);
     }
 
     public Task<ModDatabaseInfo?> TryLoadCachedDatabaseInfoAsync(
@@ -172,56 +147,45 @@ public sealed class ModDatabaseService
         bool requireExactVersionMatch = false,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(modId))
-        {
-            return Task.FromResult<ModDatabaseInfo?>(null);
-        }
+        if (string.IsNullOrWhiteSpace(modId)) return Task.FromResult<ModDatabaseInfo?>(null);
 
-        string? normalizedGameVersion = VersionStringUtility.Normalize(installedGameVersion);
+        var normalizedGameVersion = VersionStringUtility.Normalize(installedGameVersion);
         return CacheService.TryLoadAsync(
             modId,
             normalizedGameVersion,
             modVersion,
-            allowExpiredEntryRefresh: false,
+            false,
             requireExactVersionMatch,
             cancellationToken);
     }
 
     public async Task<string?> TryFetchLatestReleaseVersionAsync(string modId, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(modId) || InternetAccessManager.IsInternetAccessDisabled)
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(modId) || InternetAccessManager.IsInternetAccessDisabled) return null;
 
         try
         {
-            string requestUri = string.Format(CultureInfo.InvariantCulture, ApiEndpointFormat, Uri.EscapeDataString(modId));
+            var requestUri =
+                string.Format(CultureInfo.InvariantCulture, ApiEndpointFormat, Uri.EscapeDataString(modId));
             using HttpRequestMessage request = new(HttpMethod.Get, requestUri);
-            using HttpResponseMessage response = await HttpClient
+            using var response = await HttpClient
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                return null;
-            }
+            if (!response.IsSuccessStatusCode) return null;
 
-            await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using JsonDocument document = await JsonDocument
+            await using var contentStream =
+                await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var document = await JsonDocument
                 .ParseAsync(contentStream, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            if (!document.RootElement.TryGetProperty("mod", out JsonElement modElement)
+            if (!document.RootElement.TryGetProperty("mod", out var modElement)
                 || modElement.ValueKind != JsonValueKind.Object)
-            {
                 return null;
-            }
 
-            if (TryGetLatestReleaseVersion(modElement, out string? version) && !string.IsNullOrWhiteSpace(version))
-            {
+            if (TryGetLatestReleaseVersion(modElement, out var version) && !string.IsNullOrWhiteSpace(version))
                 return version;
-            }
 
             return GetString(modElement, "latestversion");
         }
@@ -242,47 +206,40 @@ public sealed class ModDatabaseService
         bool requireExactVersionMatch,
         CancellationToken cancellationToken)
     {
-        bool internetDisabled = InternetAccessManager.IsInternetAccessDisabled;
+        var internetDisabled = InternetAccessManager.IsInternetAccessDisabled;
 
-        ModDatabaseInfo? cached = await CacheService
+        var cached = await CacheService
             .TryLoadAsync(
                 modId,
                 normalizedGameVersion,
                 modVersion,
-                allowExpiredEntryRefresh: !internetDisabled,
+                !internetDisabled,
                 requireExactVersionMatch,
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (internetDisabled)
-        {
-            return cached;
-        }
+        if (internetDisabled) return cached;
 
-        ModDatabaseInfo? info = await TryLoadDatabaseInfoInternalAsync(modId, modVersion, normalizedGameVersion, requireExactVersionMatch, cancellationToken)
+        var info = await TryLoadDatabaseInfoInternalAsync(modId, modVersion, normalizedGameVersion,
+                requireExactVersionMatch, cancellationToken)
             .ConfigureAwait(false);
 
         return info ?? cached;
     }
 
-    public async Task<IReadOnlyList<ModDatabaseSearchResult>> SearchModsAsync(string query, int maxResults, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ModDatabaseSearchResult>> SearchModsAsync(string query, int maxResults,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(query) || maxResults <= 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (string.IsNullOrWhiteSpace(query) || maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
-        string trimmed = query.Trim();
-        IReadOnlyList<string> tokens = CreateSearchTokens(trimmed);
-        if (tokens.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        var trimmed = query.Trim();
+        var tokens = CreateSearchTokens(trimmed);
+        if (tokens.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
-        int requestLimit = CalculateRequestLimit(maxResults);
-        string requestUri = string.Format(
+        var requestLimit = CalculateRequestLimit(maxResults);
+        var requestUri = string.Format(
             CultureInfo.InvariantCulture,
             SearchEndpointFormat,
             Uri.EscapeDataString(trimmed),
@@ -292,7 +249,7 @@ public sealed class ModDatabaseService
                 requestUri,
                 maxResults,
                 tokens,
-                requireTokenMatch: true,
+                true,
                 candidates => candidates
                     .OrderByDescending(candidate => candidate.Score)
                     .ThenByDescending(candidate => candidate.Downloads)
@@ -301,17 +258,15 @@ public sealed class ModDatabaseService
             .ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<ModDatabaseSearchResult>> GetMostDownloadedModsAsync(int maxResults, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ModDatabaseSearchResult>> GetMostDownloadedModsAsync(int maxResults,
+        CancellationToken cancellationToken = default)
     {
-        if (maxResults <= 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
-        int requestLimit = CalculateRequestLimit(maxResults);
-        string requestUri = string.Format(
+        var requestLimit = CalculateRequestLimit(maxResults);
+        var requestUri = string.Format(
             CultureInfo.InvariantCulture,
             MostDownloadedEndpointFormat,
             requestLimit.ToString(CultureInfo.InvariantCulture));
@@ -320,7 +275,7 @@ public sealed class ModDatabaseService
                 requestUri,
                 maxResults,
                 Array.Empty<string>(),
-                requireTokenMatch: false,
+                false,
                 candidates => candidates
                     .OrderByDescending(candidate => candidate.Downloads)
                     .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase),
@@ -332,51 +287,39 @@ public sealed class ModDatabaseService
         int maxResults,
         CancellationToken cancellationToken = default)
     {
-        if (maxResults <= 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
-        int requestLimit = CalculateRequestLimit(maxResults);
-        string requestUri = string.Format(
+        var requestLimit = CalculateRequestLimit(maxResults);
+        var requestUri = string.Format(
             CultureInfo.InvariantCulture,
             MostDownloadedEndpointFormat,
             requestLimit.ToString(CultureInfo.InvariantCulture));
 
-        IReadOnlyList<ModDatabaseSearchResult> candidates = await QueryModsAsync(
+        var candidates = await QueryModsAsync(
                 requestUri,
                 requestLimit,
                 Array.Empty<string>(),
-                requireTokenMatch: false,
+                false,
                 results => results
                     .OrderByDescending(candidate => candidate.Downloads)
                     .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase),
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (candidates.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (candidates.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
         IReadOnlyList<ModDatabaseSearchResult> filtered = candidates
             .Where(candidate => candidate.Downloads >= MinimumTotalDownloadsForTrending)
             .ToArray();
 
-        if (filtered.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (filtered.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
-        IReadOnlyList<ModDatabaseSearchResult> enriched = await EnrichWithLatestReleaseDownloadsAsync(filtered, cancellationToken)
+        var enriched = await EnrichWithLatestReleaseDownloadsAsync(filtered, cancellationToken)
             .ConfigureAwait(false);
 
-        if (enriched.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (enriched.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
         return enriched
             .OrderByDescending(candidate => candidate.DetailedInfo?.DownloadsLastThirtyDays ?? 0)
@@ -390,51 +333,39 @@ public sealed class ModDatabaseService
         int maxResults,
         CancellationToken cancellationToken = default)
     {
-        if (maxResults <= 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
-        int requestLimit = CalculateRequestLimit(maxResults);
-        string requestUri = string.Format(
+        var requestLimit = CalculateRequestLimit(maxResults);
+        var requestUri = string.Format(
             CultureInfo.InvariantCulture,
             MostDownloadedEndpointFormat,
             requestLimit.ToString(CultureInfo.InvariantCulture));
 
-        IReadOnlyList<ModDatabaseSearchResult> candidates = await QueryModsAsync(
+        var candidates = await QueryModsAsync(
                 requestUri,
                 requestLimit,
                 Array.Empty<string>(),
-                requireTokenMatch: false,
+                false,
                 results => results
                     .OrderByDescending(candidate => candidate.Downloads)
                     .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase),
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (candidates.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (candidates.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
         IReadOnlyList<ModDatabaseSearchResult> filtered = candidates
             .Where(candidate => candidate.Downloads >= MinimumTotalDownloadsForTrending)
             .ToArray();
 
-        if (filtered.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (filtered.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
-        IReadOnlyList<ModDatabaseSearchResult> enriched = await EnrichWithLatestReleaseDownloadsAsync(filtered, cancellationToken)
+        var enriched = await EnrichWithLatestReleaseDownloadsAsync(filtered, cancellationToken)
             .ConfigureAwait(false);
 
-        if (enriched.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (enriched.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
         return enriched
             .OrderByDescending(candidate => candidate.DetailedInfo?.DownloadsLastTenDays ?? 0)
@@ -449,46 +380,37 @@ public sealed class ModDatabaseService
         int maxResults,
         CancellationToken cancellationToken = default)
     {
-        if (maxResults <= 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
-        int normalizedMonths = months <= 0 ? DefaultNewModsMonths : Math.Clamp(months, 1, MaxNewModsMonths);
+        var normalizedMonths = months <= 0 ? DefaultNewModsMonths : Math.Clamp(months, 1, MaxNewModsMonths);
 
-        int requestLimit = Math.Clamp(maxResults * 6, Math.Max(maxResults, 60), 150);
-        string requestUri = string.Format(
+        var requestLimit = Math.Clamp(maxResults * 6, Math.Max(maxResults, 60), 150);
+        var requestUri = string.Format(
             CultureInfo.InvariantCulture,
             RecentlyCreatedEndpointFormat,
             requestLimit.ToString(CultureInfo.InvariantCulture));
 
-        IReadOnlyList<ModDatabaseSearchResult> candidates = await QueryModsAsync(
+        var candidates = await QueryModsAsync(
                 requestUri,
                 requestLimit,
                 Array.Empty<string>(),
-                requireTokenMatch: false,
+                false,
                 results => results,
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (candidates.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (candidates.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
-        IReadOnlyList<ModDatabaseSearchResult> enriched = await EnrichWithLatestReleaseDownloadsAsync(candidates, cancellationToken)
+        var enriched = await EnrichWithLatestReleaseDownloadsAsync(candidates, cancellationToken)
             .ConfigureAwait(false);
 
-        if (enriched.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (enriched.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
-        DateTime threshold = DateTime.UtcNow.AddMonths(-normalizedMonths);
+        var threshold = DateTime.UtcNow.AddMonths(-normalizedMonths);
 
-        ModDatabaseSearchResult[] filtered = enriched
+        var filtered = enriched
             .Where(candidate => WasCreatedOnOrAfter(candidate, threshold))
             .OrderByDescending(candidate => candidate.Downloads)
             .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase)
@@ -502,15 +424,12 @@ public sealed class ModDatabaseService
         int maxResults,
         CancellationToken cancellationToken = default)
     {
-        if (maxResults <= 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
-        int requestLimit = CalculateRequestLimit(maxResults);
-        string requestUri = string.Format(
+        var requestLimit = CalculateRequestLimit(maxResults);
+        var requestUri = string.Format(
             CultureInfo.InvariantCulture,
             RecentlyUpdatedEndpointFormat,
             requestLimit.ToString(CultureInfo.InvariantCulture));
@@ -519,7 +438,7 @@ public sealed class ModDatabaseService
                 requestUri,
                 maxResults,
                 Array.Empty<string>(),
-                requireTokenMatch: false,
+                false,
                 candidates => candidates
                     .Where(candidate => candidate.LastReleasedUtc.HasValue)
                     .OrderByDescending(candidate => candidate.LastReleasedUtc!.Value)
@@ -532,42 +451,33 @@ public sealed class ModDatabaseService
         int maxResults,
         CancellationToken cancellationToken = default)
     {
-        if (maxResults <= 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
-        int requestLimit = CalculateRequestLimit(maxResults);
-        string requestUri = string.Format(
+        var requestLimit = CalculateRequestLimit(maxResults);
+        var requestUri = string.Format(
             CultureInfo.InvariantCulture,
             RecentlyCreatedEndpointFormat,
             requestLimit.ToString(CultureInfo.InvariantCulture));
 
-        IReadOnlyList<ModDatabaseSearchResult> candidates = await QueryModsAsync(
+        var candidates = await QueryModsAsync(
                 requestUri,
                 requestLimit,
                 Array.Empty<string>(),
-                requireTokenMatch: false,
+                false,
                 results => results,
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (candidates.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (candidates.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
-        IReadOnlyList<ModDatabaseSearchResult> enriched = await EnrichWithLatestReleaseDownloadsAsync(
+        var enriched = await EnrichWithLatestReleaseDownloadsAsync(
                 candidates,
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (enriched.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (enriched.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
         return enriched
             .Select((candidate, index) => new
@@ -588,15 +498,12 @@ public sealed class ModDatabaseService
         int maxResults,
         CancellationToken cancellationToken = default)
     {
-        if (maxResults <= 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
-        int requestLimit = CalculateRequestLimit(maxResults);
-        string requestUri = string.Format(
+        var requestLimit = CalculateRequestLimit(maxResults);
+        var requestUri = string.Format(
             CultureInfo.InvariantCulture,
             MostDownloadedEndpointFormat,
             requestLimit.ToString(CultureInfo.InvariantCulture));
@@ -605,7 +512,7 @@ public sealed class ModDatabaseService
                 requestUri,
                 maxResults,
                 Array.Empty<string>(),
-                requireTokenMatch: false,
+                false,
                 candidates => candidates
                     .OrderByDescending(candidate => candidate.TrendingPoints)
                     .ThenByDescending(candidate => candidate.Downloads)
@@ -618,40 +525,34 @@ public sealed class ModDatabaseService
         int maxResults,
         CancellationToken cancellationToken = default)
     {
-        if (maxResults <= 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         // Fetch a larger pool to randomize from
-        int requestLimit = CalculateRequestLimit(maxResults * 10);
-        string requestUri = string.Format(
+        var requestLimit = CalculateRequestLimit(maxResults * 10);
+        var requestUri = string.Format(
             CultureInfo.InvariantCulture,
             MostDownloadedEndpointFormat,
             requestLimit.ToString(CultureInfo.InvariantCulture));
 
-        IReadOnlyList<ModDatabaseSearchResult> candidates = await QueryModsAsync(
+        var candidates = await QueryModsAsync(
                 requestUri,
                 requestLimit,
                 Array.Empty<string>(),
-                requireTokenMatch: false,
+                false,
                 results => results,
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (candidates.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (candidates.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
         // Shuffle the results using Fisher-Yates algorithm
         var random = new Random(Guid.NewGuid().GetHashCode());
         var shuffled = candidates.ToArray();
-        for (int i = shuffled.Length - 1; i > 0; i--)
+        for (var i = shuffled.Length - 1; i > 0; i--)
         {
-            int j = random.Next(i + 1);
+            var j = random.Next(i + 1);
             (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
         }
 
@@ -660,39 +561,24 @@ public sealed class ModDatabaseService
 
     private static bool WasCreatedOnOrAfter(ModDatabaseSearchResult candidate, DateTime thresholdUtc)
     {
-        DateTime? createdUtc = candidate.CreatedUtc ?? candidate.DetailedInfo?.CreatedUtc;
-        if (createdUtc.HasValue)
-        {
-            return createdUtc.Value >= thresholdUtc;
-        }
+        var createdUtc = candidate.CreatedUtc ?? candidate.DetailedInfo?.CreatedUtc;
+        if (createdUtc.HasValue) return createdUtc.Value >= thresholdUtc;
 
-        ModDatabaseInfo? info = candidate.DetailedInfo;
+        var info = candidate.DetailedInfo;
         if (info?.Releases is { Count: > 0 } releases)
         {
             DateTime? earliest = null;
-            foreach (ModReleaseInfo? release in releases)
+            foreach (var release in releases)
             {
-                if (release?.CreatedUtc is not { } releaseCreatedUtc)
-                {
-                    continue;
-                }
+                if (release?.CreatedUtc is not { } releaseCreatedUtc) continue;
 
-                if (earliest is null || releaseCreatedUtc < earliest.Value)
-                {
-                    earliest = releaseCreatedUtc;
-                }
+                if (earliest is null || releaseCreatedUtc < earliest.Value) earliest = releaseCreatedUtc;
             }
 
-            if (earliest.HasValue)
-            {
-                return earliest.Value >= thresholdUtc;
-            }
+            if (earliest.HasValue) return earliest.Value >= thresholdUtc;
         }
 
-        if (candidate.LastReleasedUtc is { } lastReleasedUtc)
-        {
-            return lastReleasedUtc >= thresholdUtc;
-        }
+        if (candidate.LastReleasedUtc is { } lastReleasedUtc) return lastReleasedUtc >= thresholdUtc;
 
         return false;
     }
@@ -710,44 +596,32 @@ public sealed class ModDatabaseService
         try
         {
             using HttpRequestMessage request = new(HttpMethod.Get, requestUri);
-            using HttpResponseMessage response = await HttpClient
+            using var response = await HttpClient
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                return Array.Empty<ModDatabaseSearchResult>();
-            }
+            if (!response.IsSuccessStatusCode) return Array.Empty<ModDatabaseSearchResult>();
 
-            await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using JsonDocument document = await JsonDocument.ParseAsync(contentStream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await using var contentStream =
+                await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(contentStream, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
 
-            if (!document.RootElement.TryGetProperty("mods", out JsonElement modsElement)
+            if (!document.RootElement.TryGetProperty("mods", out var modsElement)
                 || modsElement.ValueKind != JsonValueKind.Array)
-            {
                 return Array.Empty<ModDatabaseSearchResult>();
-            }
 
             var candidates = new List<ModDatabaseSearchResult>();
 
-            foreach (JsonElement modElement in modsElement.EnumerateArray())
+            foreach (var modElement in modsElement.EnumerateArray())
             {
-                if (modElement.ValueKind != JsonValueKind.Object)
-                {
-                    continue;
-                }
+                if (modElement.ValueKind != JsonValueKind.Object) continue;
 
-                ModDatabaseSearchResult? result = TryCreateSearchResult(modElement, tokens, requireTokenMatch);
-                if (result != null)
-                {
-                    candidates.Add(result);
-                }
+                var result = TryCreateSearchResult(modElement, tokens, requireTokenMatch);
+                if (result != null) candidates.Add(result);
             }
 
-            if (candidates.Count == 0)
-            {
-                return Array.Empty<ModDatabaseSearchResult>();
-            }
+            if (candidates.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
             return orderResults(candidates)
                 .Take(maxResults)
@@ -767,10 +641,7 @@ public sealed class ModDatabaseService
         IReadOnlyList<ModDatabaseSearchResult> candidates,
         CancellationToken cancellationToken)
     {
-        if (candidates.Count == 0)
-        {
-            return Array.Empty<ModDatabaseSearchResult>();
-        }
+        if (candidates.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
@@ -778,9 +649,9 @@ public sealed class ModDatabaseService
         using var semaphore = new SemaphoreSlim(MaxConcurrentRequests);
 
         var tasks = new Task<ModDatabaseSearchResult>[candidates.Count];
-        for (int i = 0; i < candidates.Count; i++)
+        for (var i = 0; i < candidates.Count; i++)
         {
-            ModDatabaseSearchResult candidate = candidates[i];
+            var candidate = candidates[i];
             tasks[i] = EnrichCandidateWithLatestReleaseDownloadsAsync(candidate, semaphore, cancellationToken);
         }
 
@@ -792,19 +663,16 @@ public sealed class ModDatabaseService
         SemaphoreSlim semaphore,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(candidate.ModId))
-        {
-            return CloneResultWithDetails(candidate, null, null);
-        }
+        if (string.IsNullOrWhiteSpace(candidate.ModId)) return CloneResultWithDetails(candidate, null, null);
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            ModDatabaseInfo? info = await TryLoadDatabaseInfoInternalAsync(candidate.ModId, null, null, false, cancellationToken)
+            var info = await TryLoadDatabaseInfoInternalAsync(candidate.ModId, null, null, false, cancellationToken)
                 .ConfigureAwait(false);
-            int? latestDownloads = ExtractLatestReleaseDownloads(info);
+            var latestDownloads = ExtractLatestReleaseDownloads(info);
             return CloneResultWithDetails(candidate, info, latestDownloads);
         }
         catch (OperationCanceledException)
@@ -852,78 +720,63 @@ public sealed class ModDatabaseService
 
     private static int? ExtractLatestReleaseDownloads(ModDatabaseInfo? info)
     {
-        if (info is null)
-        {
-            return null;
-        }
+        if (info is null) return null;
 
-        if (info.LatestRelease?.Downloads is int downloads)
-        {
-            return downloads;
-        }
+        if (info.LatestRelease?.Downloads is int downloads) return downloads;
 
         if (info.Releases.Count > 0)
         {
-            ModReleaseInfo? latest = info.Releases[0];
-            if (latest?.Downloads is int releaseDownloads)
-            {
-                return releaseDownloads;
-            }
+            var latest = info.Releases[0];
+            if (latest?.Downloads is int releaseDownloads) return releaseDownloads;
         }
 
         return null;
     }
 
-    private static async Task<ModDatabaseInfo?> TryLoadDatabaseInfoInternalAsync(string modId, string? modVersion, string? normalizedGameVersion, bool requireExactVersionMatch, CancellationToken cancellationToken)
+    private static async Task<ModDatabaseInfo?> TryLoadDatabaseInfoInternalAsync(string modId, string? modVersion,
+        string? normalizedGameVersion, bool requireExactVersionMatch, CancellationToken cancellationToken)
     {
-        if (InternetAccessManager.IsInternetAccessDisabled)
-        {
-            return null;
-        }
+        if (InternetAccessManager.IsInternetAccessDisabled) return null;
 
         try
         {
-            string? normalizedModVersion = VersionStringUtility.Normalize(modVersion);
+            var normalizedModVersion = VersionStringUtility.Normalize(modVersion);
 
-            string requestUri = string.Format(CultureInfo.InvariantCulture, ApiEndpointFormat, Uri.EscapeDataString(modId));
+            var requestUri =
+                string.Format(CultureInfo.InvariantCulture, ApiEndpointFormat, Uri.EscapeDataString(modId));
             using HttpRequestMessage request = new(HttpMethod.Get, requestUri);
-            using HttpResponseMessage response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-            {
-                return null;
-            }
+            using var response = await HttpClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode) return null;
 
-            await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using JsonDocument document = await JsonDocument.ParseAsync(contentStream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await using var contentStream =
+                await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(contentStream, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
 
-            if (!document.RootElement.TryGetProperty("mod", out JsonElement modElement) || modElement.ValueKind != JsonValueKind.Object)
-            {
-                return null;
-            }
+            if (!document.RootElement.TryGetProperty("mod", out var modElement) ||
+                modElement.ValueKind != JsonValueKind.Object) return null;
 
             var tags = GetStringList(modElement, "tags");
-            string? assetId = TryGetAssetId(modElement);
-            string? modPageUrl = assetId == null ? null : ModPageBaseUrl + assetId;
-            int? downloads = GetNullableInt(modElement, "downloads");
-            int? comments = GetNullableInt(modElement, "comments");
-            int? follows = GetNullableInt(modElement, "follows");
-            int? trendingPoints = GetNullableInt(modElement, "trendingpoints");
-            string? side = GetString(modElement, "side");
-            string? logoUrl = GetString(modElement, "logofile");
-            if (string.IsNullOrWhiteSpace(logoUrl))
-            {
-                logoUrl = GetString(modElement, "logo");
-            }
-            DateTime? lastReleasedUtc = TryParseDateTime(GetString(modElement, "lastreleased"));
-            DateTime? createdUtc = TryParseDateTime(GetString(modElement, "created"));
-            IReadOnlyList<ModReleaseInfo> releases = BuildReleaseInfos(modElement, normalizedGameVersion, requireExactVersionMatch);
-            ModReleaseInfo? latestRelease = releases.Count > 0 ? releases[0] : null;
-            ModReleaseInfo? latestCompatibleRelease = releases.FirstOrDefault(release => release.IsCompatibleWithInstalledGame);
-            string? latestVersion = latestRelease?.Version;
-            string? latestCompatibleVersion = latestCompatibleRelease?.Version;
-            IReadOnlyList<string> requiredVersions = FindRequiredGameVersions(modElement, modVersion);
-            int? recentDownloads = CalculateDownloadsLastThirtyDays(releases);
-            int? tenDayDownloads = CalculateDownloadsLastTenDays(releases);
+            var assetId = TryGetAssetId(modElement);
+            var modPageUrl = assetId == null ? null : ModPageBaseUrl + assetId;
+            var downloads = GetNullableInt(modElement, "downloads");
+            var comments = GetNullableInt(modElement, "comments");
+            var follows = GetNullableInt(modElement, "follows");
+            var trendingPoints = GetNullableInt(modElement, "trendingpoints");
+            var side = GetString(modElement, "side");
+            var logoUrl = GetString(modElement, "logofile");
+            if (string.IsNullOrWhiteSpace(logoUrl)) logoUrl = GetString(modElement, "logo");
+            var lastReleasedUtc = TryParseDateTime(GetString(modElement, "lastreleased"));
+            var createdUtc = TryParseDateTime(GetString(modElement, "created"));
+            var releases = BuildReleaseInfos(modElement, normalizedGameVersion, requireExactVersionMatch);
+            var latestRelease = releases.Count > 0 ? releases[0] : null;
+            var latestCompatibleRelease = releases.FirstOrDefault(release => release.IsCompatibleWithInstalledGame);
+            var latestVersion = latestRelease?.Version;
+            var latestCompatibleVersion = latestCompatibleRelease?.Version;
+            var requiredVersions = FindRequiredGameVersions(modElement, modVersion);
+            var recentDownloads = CalculateDownloadsLastThirtyDays(releases);
+            var tenDayDownloads = CalculateDownloadsLastTenDays(releases);
 
             var info = new ModDatabaseInfo
             {
@@ -949,7 +802,8 @@ public sealed class ModDatabaseService
                 Side = side
             };
 
-            await CacheService.StoreAsync(modId, normalizedGameVersion, info, modVersion, cancellationToken).ConfigureAwait(false);
+            await CacheService.StoreAsync(modId, normalizedGameVersion, info, modVersion, cancellationToken)
+                .ConfigureAwait(false);
 
             return info;
         }
@@ -965,63 +819,51 @@ public sealed class ModDatabaseService
 
     private static IReadOnlyList<string> GetStringList(JsonElement element, string propertyName)
     {
-        if (!element.TryGetProperty(propertyName, out JsonElement value) || value.ValueKind != JsonValueKind.Array)
-        {
+        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Array)
             return Array.Empty<string>();
-        }
 
         var list = new List<string>();
-        foreach (JsonElement item in value.EnumerateArray())
-        {
+        foreach (var item in value.EnumerateArray())
             if (item.ValueKind == JsonValueKind.String)
             {
-                string? text = item.GetString();
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    list.Add(text);
-                }
+                var text = item.GetString();
+                if (!string.IsNullOrWhiteSpace(text)) list.Add(text);
             }
-        }
 
         return list.Count == 0 ? Array.Empty<string>() : list.ToArray();
     }
 
     private static string? TryGetAssetId(JsonElement element)
     {
-        if (!element.TryGetProperty("assetid", out JsonElement assetIdElement))
-        {
-            return null;
-        }
+        if (!element.TryGetProperty("assetid", out var assetIdElement)) return null;
 
         return assetIdElement.ValueKind switch
         {
-            JsonValueKind.Number when assetIdElement.TryGetInt64(out long number) => number.ToString(CultureInfo.InvariantCulture),
-            JsonValueKind.Number when assetIdElement.TryGetDecimal(out decimal decimalValue) => decimalValue.ToString(CultureInfo.InvariantCulture),
-            JsonValueKind.String => string.IsNullOrWhiteSpace(assetIdElement.GetString()) ? null : assetIdElement.GetString(),
+            JsonValueKind.Number when assetIdElement.TryGetInt64(out var number) => number.ToString(CultureInfo
+                .InvariantCulture),
+            JsonValueKind.Number when assetIdElement.TryGetDecimal(out var decimalValue) => decimalValue.ToString(
+                CultureInfo.InvariantCulture),
+            JsonValueKind.String => string.IsNullOrWhiteSpace(assetIdElement.GetString())
+                ? null
+                : assetIdElement.GetString(),
             _ => null
         };
     }
 
-    private static IReadOnlyList<ModReleaseInfo> BuildReleaseInfos(JsonElement modElement, string? normalizedGameVersion, bool requireExactVersionMatch)
+    private static IReadOnlyList<ModReleaseInfo> BuildReleaseInfos(JsonElement modElement,
+        string? normalizedGameVersion, bool requireExactVersionMatch)
     {
-        if (!modElement.TryGetProperty("releases", out JsonElement releasesElement) || releasesElement.ValueKind != JsonValueKind.Array)
-        {
-            return Array.Empty<ModReleaseInfo>();
-        }
+        if (!modElement.TryGetProperty("releases", out var releasesElement) ||
+            releasesElement.ValueKind != JsonValueKind.Array) return Array.Empty<ModReleaseInfo>();
 
         var releases = new List<ModReleaseInfo>();
 
-        foreach (JsonElement releaseElement in releasesElement.EnumerateArray())
+        foreach (var releaseElement in releasesElement.EnumerateArray())
         {
-            if (releaseElement.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
+            if (releaseElement.ValueKind != JsonValueKind.Object) continue;
 
-            if (TryCreateReleaseInfo(releaseElement, normalizedGameVersion, requireExactVersionMatch, out ModReleaseInfo release))
-            {
+            if (TryCreateReleaseInfo(releaseElement, normalizedGameVersion, requireExactVersionMatch, out var release))
                 releases.Add(release);
-            }
         }
 
         return releases.Count == 0 ? Array.Empty<ModReleaseInfo>() : releases;
@@ -1039,110 +881,82 @@ public sealed class ModDatabaseService
 
     private static int? CalculateDownloadsForPeriod(IReadOnlyList<ModReleaseInfo> releases, int days)
     {
-        if (releases.Count == 0)
-        {
-            return null;
-        }
+        if (releases.Count == 0) return null;
 
-        DateTime now = DateTime.UtcNow;
-        DateTime windowStart = now.AddDays(-days);
+        var now = DateTime.UtcNow;
+        var windowStart = now.AddDays(-days);
 
-        ModReleaseInfo[] relevantReleases = releases
+        var relevantReleases = releases
             .Where(release => release?.CreatedUtc.HasValue == true && release.Downloads.HasValue)
             .OrderByDescending(release => release!.CreatedUtc!.Value)
             .ToArray();
 
-        if (relevantReleases.Length == 0)
-        {
-            return null;
-        }
+        if (relevantReleases.Length == 0) return null;
 
-        double minimumIntervalDays = DevConfig.ModDatabaseMinimumIntervalDays; // Default: one hour.
+        var minimumIntervalDays = DevConfig.ModDatabaseMinimumIntervalDays; // Default: one hour.
 
         double estimatedDownloads = 0;
-        DateTime intervalEnd = now;
+        var intervalEnd = now;
 
         foreach (var release in relevantReleases)
         {
-            if (intervalEnd <= windowStart)
-            {
-                break;
-            }
+            if (intervalEnd <= windowStart) break;
 
-            DateTime releaseDate = release.CreatedUtc!.Value;
-            if (releaseDate > intervalEnd)
-            {
-                releaseDate = intervalEnd;
-            }
+            var releaseDate = release.CreatedUtc!.Value;
+            if (releaseDate > intervalEnd) releaseDate = intervalEnd;
 
-            double intervalLengthDays = (intervalEnd - releaseDate).TotalDays;
+            var intervalLengthDays = (intervalEnd - releaseDate).TotalDays;
             if (intervalLengthDays <= 0)
             {
                 intervalEnd = releaseDate;
                 continue;
             }
 
-            double dailyDownloads = Math.Max(release.Downloads!.Value, 0) / Math.Max(intervalLengthDays, minimumIntervalDays);
+            var dailyDownloads = Math.Max(release.Downloads!.Value, 0) /
+                                 Math.Max(intervalLengthDays, minimumIntervalDays);
 
-            DateTime effectiveStart = releaseDate < windowStart ? windowStart : releaseDate;
-            double effectiveIntervalDays = (intervalEnd - effectiveStart).TotalDays;
-            if (effectiveIntervalDays > 0)
-            {
-                estimatedDownloads += dailyDownloads * effectiveIntervalDays;
-            }
+            var effectiveStart = releaseDate < windowStart ? windowStart : releaseDate;
+            var effectiveIntervalDays = (intervalEnd - effectiveStart).TotalDays;
+            if (effectiveIntervalDays > 0) estimatedDownloads += dailyDownloads * effectiveIntervalDays;
 
             intervalEnd = releaseDate;
 
-            if (releaseDate <= windowStart)
-            {
-                break;
-            }
+            if (releaseDate <= windowStart) break;
         }
 
-        if (estimatedDownloads <= 0)
-        {
-            return 0;
-        }
+        if (estimatedDownloads <= 0) return 0;
 
         return (int)Math.Round(estimatedDownloads, MidpointRounding.AwayFromZero);
     }
 
-    private static bool TryCreateReleaseInfo(JsonElement releaseElement, string? normalizedGameVersion, bool requireExactVersionMatch, out ModReleaseInfo release)
+    private static bool TryCreateReleaseInfo(JsonElement releaseElement, string? normalizedGameVersion,
+        bool requireExactVersionMatch, out ModReleaseInfo release)
     {
         release = default!;
 
-        string? downloadUrl = GetString(releaseElement, "mainfile");
-        if (string.IsNullOrWhiteSpace(downloadUrl) || !Uri.TryCreate(downloadUrl, UriKind.Absolute, out Uri? downloadUri))
-        {
-            return false;
-        }
+        var downloadUrl = GetString(releaseElement, "mainfile");
+        if (string.IsNullOrWhiteSpace(downloadUrl) ||
+            !Uri.TryCreate(downloadUrl, UriKind.Absolute, out var downloadUri)) return false;
 
-        string? version = ExtractReleaseVersion(releaseElement);
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            return false;
-        }
+        var version = ExtractReleaseVersion(releaseElement);
+        if (string.IsNullOrWhiteSpace(version)) return false;
 
-        string? normalizedVersion = VersionStringUtility.Normalize(version);
-        IReadOnlyList<string> releaseTags = GetStringList(releaseElement, "tags");
-        bool isCompatible = false;
+        var normalizedVersion = VersionStringUtility.Normalize(version);
+        var releaseTags = GetStringList(releaseElement, "tags");
+        var isCompatible = false;
 
         if (normalizedGameVersion != null && releaseTags.Count > 0)
-        {
-            foreach (string tag in releaseTags)
-            {
+            foreach (var tag in releaseTags)
                 if (VersionStringUtility.SupportsVersion(tag, normalizedGameVersion, requireExactVersionMatch))
                 {
                     isCompatible = true;
                     break;
                 }
-            }
-        }
 
-        string? fileName = GetString(releaseElement, "filename");
-        string? changelog = ConvertChangelogToPlainText(GetString(releaseElement, "changelog"));
-        int? downloads = GetNullableInt(releaseElement, "downloads");
-        DateTime? createdUtc = TryParseDateTime(GetString(releaseElement, "created"));
+        var fileName = GetString(releaseElement, "filename");
+        var changelog = ConvertChangelogToPlainText(GetString(releaseElement, "changelog"));
+        var downloads = GetNullableInt(releaseElement, "downloads");
+        var createdUtc = TryParseDateTime(GetString(releaseElement, "created"));
 
         release = new ModReleaseInfo
         {
@@ -1164,20 +978,15 @@ public sealed class ModDatabaseService
     {
         version = null;
 
-        if (!modElement.TryGetProperty("releases", out JsonElement releasesElement)
+        if (!modElement.TryGetProperty("releases", out var releasesElement)
             || releasesElement.ValueKind != JsonValueKind.Array)
-        {
             return false;
-        }
 
-        foreach (JsonElement releaseElement in releasesElement.EnumerateArray())
+        foreach (var releaseElement in releasesElement.EnumerateArray())
         {
-            if (releaseElement.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
+            if (releaseElement.ValueKind != JsonValueKind.Object) continue;
 
-            string? releaseVersion = ExtractReleaseVersion(releaseElement);
+            var releaseVersion = ExtractReleaseVersion(releaseElement);
             if (!string.IsNullOrWhiteSpace(releaseVersion))
             {
                 version = releaseVersion;
@@ -1190,27 +999,19 @@ public sealed class ModDatabaseService
 
     private static string? GetString(JsonElement element, string propertyName)
     {
-        if (!element.TryGetProperty(propertyName, out JsonElement value) || value.ValueKind != JsonValueKind.String)
-        {
+        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
             return null;
-        }
 
-        string? text = value.GetString();
+        var text = value.GetString();
         return string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
     private static string? ConvertChangelogToPlainText(string? changelog)
     {
-        if (string.IsNullOrWhiteSpace(changelog))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(changelog)) return null;
 
-        string text = changelog.Trim();
-        if (text.Length == 0)
-        {
-            return null;
-        }
+        var text = changelog.Trim();
+        if (text.Length == 0) return null;
 
         text = text.Replace("\r\n", "\n", StringComparison.Ordinal);
         text = text.Replace('\r', '\n');
@@ -1224,89 +1025,69 @@ public sealed class ModDatabaseService
 
         text = WebUtility.HtmlDecode(text);
 
-        string[] lines = text.Split('\n');
+        var lines = text.Split('\n');
         var normalizedLines = new List<string>(lines.Length);
 
-        foreach (string line in lines)
+        foreach (var line in lines)
         {
-            string trimmedEnd = line.TrimEnd();
+            var trimmedEnd = line.TrimEnd();
             if (trimmedEnd.Length == 0)
             {
-                if (normalizedLines.Count == 0 || normalizedLines[^1].Length == 0)
-                {
-                    continue;
-                }
+                if (normalizedLines.Count == 0 || normalizedLines[^1].Length == 0) continue;
 
                 normalizedLines.Add(string.Empty);
                 continue;
             }
 
-            string trimmedStart = trimmedEnd.TrimStart();
+            var trimmedStart = trimmedEnd.TrimStart();
             if (trimmedStart.StartsWith("\u2022 ", StringComparison.Ordinal))
-            {
                 trimmedStart = "\u2022 " + trimmedStart[2..].Trim();
-            }
             else
-            {
                 trimmedStart = trimmedStart.Trim();
-            }
 
             normalizedLines.Add(trimmedStart);
         }
 
         while (normalizedLines.Count > 0 && normalizedLines[^1].Length == 0)
-        {
             normalizedLines.RemoveAt(normalizedLines.Count - 1);
-        }
 
-        if (normalizedLines.Count == 0)
-        {
-            return null;
-        }
+        if (normalizedLines.Count == 0) return null;
 
         return string.Join(Environment.NewLine, normalizedLines);
     }
 
-    private static ModDatabaseSearchResult? TryCreateSearchResult(JsonElement element, IReadOnlyList<string> tokens, bool requireTokenMatch)
+    private static ModDatabaseSearchResult? TryCreateSearchResult(JsonElement element, IReadOnlyList<string> tokens,
+        bool requireTokenMatch)
     {
-        string? name = GetString(element, "name");
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return null;
-        }
+        var name = GetString(element, "name");
+        if (string.IsNullOrWhiteSpace(name)) return null;
 
-        IReadOnlyList<string> modIds = GetStringList(element, "modidstrs");
-        string? primaryId = modIds.FirstOrDefault(id => !string.IsNullOrWhiteSpace(id))
-            ?? GetString(element, "urlalias")
-            ?? name;
+        var modIds = GetStringList(element, "modidstrs");
+        var primaryId = modIds.FirstOrDefault(id => !string.IsNullOrWhiteSpace(id))
+                        ?? GetString(element, "urlalias")
+                        ?? name;
 
-        if (string.IsNullOrWhiteSpace(primaryId))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(primaryId)) return null;
 
         primaryId = primaryId.Trim();
 
-        string? summary = GetString(element, "summary");
-        string? author = GetString(element, "author");
-        string? assetId = TryGetAssetId(element);
-        string? urlAlias = GetString(element, "urlalias");
-        string? side = GetString(element, "side");
-        string? logo = GetString(element, "logo");
-        if (string.IsNullOrWhiteSpace(logo))
-        {
-            logo = GetString(element, "logofile");
-        }
+        var summary = GetString(element, "summary");
+        var author = GetString(element, "author");
+        var assetId = TryGetAssetId(element);
+        var urlAlias = GetString(element, "urlalias");
+        var side = GetString(element, "side");
+        var logo = GetString(element, "logo");
+        if (string.IsNullOrWhiteSpace(logo)) logo = GetString(element, "logofile");
 
-        IReadOnlyList<string> tags = GetStringList(element, "tags");
-        int downloads = GetInt(element, "downloads");
-        int follows = GetInt(element, "follows");
-        int trendingPoints = GetInt(element, "trendingpoints");
-        int comments = GetInt(element, "comments");
-        DateTime? lastReleased = TryParseDateTime(GetString(element, "lastreleased"));
-        DateTime? createdUtc = TryParseDateTime(GetString(element, "created"));
+        var tags = GetStringList(element, "tags");
+        var downloads = GetInt(element, "downloads");
+        var follows = GetInt(element, "follows");
+        var trendingPoints = GetInt(element, "trendingpoints");
+        var comments = GetInt(element, "comments");
+        var lastReleased = TryParseDateTime(GetString(element, "lastreleased"));
+        var createdUtc = TryParseDateTime(GetString(element, "created"));
 
-        IReadOnlyList<string> alternateIds = modIds.Count == 0 ? new[] { primaryId } : modIds;
+        var alternateIds = modIds.Count == 0 ? new[] { primaryId } : modIds;
 
         double score;
         if (requireTokenMatch)
@@ -1325,9 +1106,7 @@ public sealed class ModDatabaseService
                     comments,
                     lastReleased,
                     out score))
-            {
                 return null;
-            }
         }
         else
         {
@@ -1373,33 +1152,24 @@ public sealed class ModDatabaseService
     {
         score = 0;
 
-        if (tokens.Count == 0)
-        {
-            return false;
-        }
+        if (tokens.Count == 0) return false;
 
-        int matchedTokenCount = 0;
-        string summaryText = summary ?? string.Empty;
-        IReadOnlyList<string> authorTokens = string.IsNullOrWhiteSpace(author)
+        var matchedTokenCount = 0;
+        var summaryText = summary ?? string.Empty;
+        var authorTokens = string.IsNullOrWhiteSpace(author)
             ? Array.Empty<string>()
             : CreateSearchTokens(author);
 
-        foreach (string token in tokens)
+        foreach (var token in tokens)
         {
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                continue;
-            }
+            if (string.IsNullOrWhiteSpace(token)) continue;
 
-            string currentToken = token.Trim();
-            if (currentToken.Length == 0)
-            {
-                continue;
-            }
+            var currentToken = token.Trim();
+            if (currentToken.Length == 0) continue;
 
-            bool tokenMatched = false;
+            var tokenMatched = false;
 
-            bool nameExactMatch = string.Equals(name, currentToken, StringComparison.OrdinalIgnoreCase);
+            var nameExactMatch = string.Equals(name, currentToken, StringComparison.OrdinalIgnoreCase);
             if (nameExactMatch)
             {
                 score += 12;
@@ -1411,7 +1181,7 @@ public sealed class ModDatabaseService
                 tokenMatched = true;
             }
 
-            bool primaryExactMatch = string.Equals(primaryId, currentToken, StringComparison.OrdinalIgnoreCase);
+            var primaryExactMatch = string.Equals(primaryId, currentToken, StringComparison.OrdinalIgnoreCase);
             if (primaryExactMatch)
             {
                 score += 10;
@@ -1424,7 +1194,8 @@ public sealed class ModDatabaseService
             }
             else
             {
-                bool alternateExact = alternateIds.Any(id => string.Equals(id, currentToken, StringComparison.OrdinalIgnoreCase));
+                var alternateExact =
+                    alternateIds.Any(id => string.Equals(id, currentToken, StringComparison.OrdinalIgnoreCase));
                 if (alternateExact)
                 {
                     score += 9;
@@ -1439,7 +1210,7 @@ public sealed class ModDatabaseService
 
             if (authorTokens.Count > 0)
             {
-                bool authorExactMatch = authorTokens.Any(authorToken =>
+                var authorExactMatch = authorTokens.Any(authorToken =>
                     string.Equals(authorToken, currentToken, StringComparison.OrdinalIgnoreCase));
                 if (authorExactMatch)
                 {
@@ -1454,7 +1225,7 @@ public sealed class ModDatabaseService
                 }
             }
 
-            bool tagExactMatch = tags.Any(tag => string.Equals(tag, currentToken, StringComparison.OrdinalIgnoreCase));
+            var tagExactMatch = tags.Any(tag => string.Equals(tag, currentToken, StringComparison.OrdinalIgnoreCase));
             if (tagExactMatch)
             {
                 score += 3;
@@ -1473,10 +1244,7 @@ public sealed class ModDatabaseService
                 tokenMatched = true;
             }
 
-            if (tokenMatched)
-            {
-                matchedTokenCount++;
-            }
+            if (tokenMatched) matchedTokenCount++;
         }
 
         if (matchedTokenCount == 0)
@@ -1493,11 +1261,8 @@ public sealed class ModDatabaseService
 
         if (lastReleased.HasValue)
         {
-            double days = (DateTime.UtcNow - lastReleased.Value).TotalDays;
-            if (!double.IsNaN(days))
-            {
-                score += Math.Max(0, 4 - (days / 45.0));
-            }
+            var days = (DateTime.UtcNow - lastReleased.Value).TotalDays;
+            if (!double.IsNaN(days)) score += Math.Max(0, 4 - days / 45.0);
         }
 
         return true;
@@ -1505,75 +1270,52 @@ public sealed class ModDatabaseService
 
     private static IReadOnlyList<string> CreateSearchTokens(string value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return Array.Empty<string>();
-        }
+        if (string.IsNullOrWhiteSpace(value)) return Array.Empty<string>();
 
-        string trimmed = value.Trim();
+        var trimmed = value.Trim();
         var tokens = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         void AddToken(string token)
         {
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                return;
-            }
+            if (string.IsNullOrWhiteSpace(token)) return;
 
             token = token.Trim();
-            if (seen.Add(token))
-            {
-                tokens.Add(token);
-            }
+            if (seen.Add(token)) tokens.Add(token);
         }
 
         AddToken(trimmed);
 
-        foreach (string token in trimmed.Split(
+        foreach (var token in trimmed.Split(
                      [' ', '\t', '\r', '\n', '-', '_', '.', '/', '\\'],
                      StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
             AddToken(token);
-        }
 
         return tokens.Count == 0 ? Array.Empty<string>() : tokens;
     }
 
     private static int? GetNullableInt(JsonElement element, string propertyName)
     {
-        if (!element.TryGetProperty(propertyName, out JsonElement value))
-        {
-            return null;
-        }
+        if (!element.TryGetProperty(propertyName, out var value)) return null;
 
         switch (value.ValueKind)
         {
-            case JsonValueKind.Number when value.TryGetInt64(out long longValue):
+            case JsonValueKind.Number when value.TryGetInt64(out var longValue):
                 return (int)Math.Clamp(longValue, int.MinValue, int.MaxValue);
-            case JsonValueKind.Number when value.TryGetDouble(out double doubleValue):
-                if (double.IsNaN(doubleValue) || double.IsInfinity(doubleValue))
-                {
-                    return null;
-                }
+            case JsonValueKind.Number when value.TryGetDouble(out var doubleValue):
+                if (double.IsNaN(doubleValue) || double.IsInfinity(doubleValue)) return null;
 
-                double truncated = Math.Truncate(doubleValue);
-                if (truncated < int.MinValue)
-                {
-                    return int.MinValue;
-                }
+                var truncated = Math.Truncate(doubleValue);
+                if (truncated < int.MinValue) return int.MinValue;
 
-                if (truncated > int.MaxValue)
-                {
-                    return int.MaxValue;
-                }
+                if (truncated > int.MaxValue) return int.MaxValue;
 
                 return (int)truncated;
             case JsonValueKind.String when long.TryParse(
-                    value.GetString(),
-                    NumberStyles.Integer,
-                    CultureInfo.InvariantCulture,
-                    out long parsed):
+                value.GetString(),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var parsed):
                 return (int)Math.Clamp(parsed, int.MinValue, int.MaxValue);
             default:
                 return null;
@@ -1587,64 +1329,41 @@ public sealed class ModDatabaseService
 
     private static DateTime? TryParseDateTime(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(value)) return null;
 
         if (DateTime.TryParse(
                 value,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                out DateTime result))
-        {
+                out var result))
             return result;
-        }
 
         if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result))
-        {
             return DateTime.SpecifyKind(result, DateTimeKind.Utc);
-        }
 
         return null;
     }
 
     private static IReadOnlyList<string> FindRequiredGameVersions(JsonElement modElement, string? modVersion)
     {
-        if (string.IsNullOrWhiteSpace(modVersion))
+        if (string.IsNullOrWhiteSpace(modVersion)) return Array.Empty<string>();
+
+        if (!modElement.TryGetProperty("releases", out var releasesElement) ||
+            releasesElement.ValueKind != JsonValueKind.Array) return Array.Empty<string>();
+
+        var normalizedModVersion = VersionStringUtility.Normalize(modVersion);
+
+        foreach (var release in releasesElement.EnumerateArray())
         {
-            return Array.Empty<string>();
-        }
+            if (release.ValueKind != JsonValueKind.Object) continue;
 
-        if (!modElement.TryGetProperty("releases", out JsonElement releasesElement) || releasesElement.ValueKind != JsonValueKind.Array)
-        {
-            return Array.Empty<string>();
-        }
+            if (!release.TryGetProperty("modversion", out var releaseModVersionElement) ||
+                releaseModVersionElement.ValueKind != JsonValueKind.String) continue;
 
-        string? normalizedModVersion = VersionStringUtility.Normalize(modVersion);
+            var releaseModVersion = releaseModVersionElement.GetString();
+            if (string.IsNullOrWhiteSpace(releaseModVersion)) continue;
 
-        foreach (JsonElement release in releasesElement.EnumerateArray())
-        {
-            if (release.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            if (!release.TryGetProperty("modversion", out JsonElement releaseModVersionElement) || releaseModVersionElement.ValueKind != JsonValueKind.String)
-            {
-                continue;
-            }
-
-            string? releaseModVersion = releaseModVersionElement.GetString();
-            if (string.IsNullOrWhiteSpace(releaseModVersion))
-            {
-                continue;
-            }
-
-            if (!ReleaseMatchesModVersion(releaseModVersion, modVersion, normalizedModVersion))
-            {
-                continue;
-            }
+            if (!ReleaseMatchesModVersion(releaseModVersion, modVersion, normalizedModVersion)) continue;
 
             var tags = GetStringList(release, "tags");
             return tags.Count == 0 ? Array.Empty<string>() : tags;
@@ -1653,40 +1372,31 @@ public sealed class ModDatabaseService
         return Array.Empty<string>();
     }
 
-    private static bool ReleaseMatchesModVersion(string releaseModVersion, string? modVersion, string? normalizedModVersion)
+    private static bool ReleaseMatchesModVersion(string releaseModVersion, string? modVersion,
+        string? normalizedModVersion)
     {
-        if (modVersion != null && string.Equals(releaseModVersion, modVersion, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
+        if (modVersion != null &&
+            string.Equals(releaseModVersion, modVersion, StringComparison.OrdinalIgnoreCase)) return true;
 
-        string? normalizedReleaseVersion = VersionStringUtility.Normalize(releaseModVersion);
-        if (normalizedReleaseVersion == null || normalizedModVersion == null)
-        {
-            return false;
-        }
+        var normalizedReleaseVersion = VersionStringUtility.Normalize(releaseModVersion);
+        if (normalizedReleaseVersion == null || normalizedModVersion == null) return false;
 
         return string.Equals(normalizedReleaseVersion, normalizedModVersion, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ExtractReleaseVersion(JsonElement releaseElement)
     {
-        if (releaseElement.TryGetProperty("modversion", out JsonElement modVersion) && modVersion.ValueKind == JsonValueKind.String)
+        if (releaseElement.TryGetProperty("modversion", out var modVersion) &&
+            modVersion.ValueKind == JsonValueKind.String)
         {
-            string? value = modVersion.GetString();
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
+            var value = modVersion.GetString();
+            if (!string.IsNullOrWhiteSpace(value)) return value;
         }
 
-        if (releaseElement.TryGetProperty("version", out JsonElement version) && version.ValueKind == JsonValueKind.String)
+        if (releaseElement.TryGetProperty("version", out var version) && version.ValueKind == JsonValueKind.String)
         {
-            string? value = version.GetString();
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
+            var value = version.GetString();
+            if (!string.IsNullOrWhiteSpace(value)) return value;
         }
 
         return null;

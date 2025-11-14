@@ -1,26 +1,25 @@
-using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Navigation;
-using VintageStoryModManager; // For DevConfig
-using VintageStoryModManager.Services; // For InternetAccessManager
-
+using VintageStoryModManager.Services;
+using SystemColors = System.Windows.SystemColors;
+// For DevConfig
+// For InternetAccessManager
 using WpfMessageBox = VintageStoryModManager.Services.ModManagerMessageBox;
 
 namespace VintageStoryModManager.Views.Dialogs;
 
 public partial class HelpDialogWindow : Window
 {
-
     public HelpDialogWindow(string managerDirectory, string? cachedModsDirectory)
     {
         InitializeComponent();
 
-        ConfigureCachedModsHyperlink(ModDBlink, cachedModsDirectory, ensureDirectory: true);
-        ConfigureFirebaseHyperlink(FirebaseFileHyperlink, managerDirectory, ensureDirectory: true);
-        ConfigureHyperlinkCommon(BackupLink, DevConfig.FirebaseBackupDirectory, ensureDirectory: true);
+        ConfigureCachedModsHyperlink(ModDBlink, cachedModsDirectory, true);
+        ConfigureFirebaseHyperlink(FirebaseFileHyperlink, managerDirectory, true);
+        ConfigureHyperlinkCommon(BackupLink, DevConfig.FirebaseBackupDirectory, true);
     }
 
     private void ConfigureCachedModsHyperlink(Hyperlink hyperlink, string? path, bool ensureDirectory)
@@ -41,13 +40,12 @@ public partial class HelpDialogWindow : Window
             hyperlink.Tag = null;
             hyperlink.NavigateUri = null;
             hyperlink.ToolTip = "Location not available";
-            hyperlink.Foreground = System.Windows.SystemColors.GrayTextBrush;
+            hyperlink.Foreground = SystemColors.GrayTextBrush;
             hyperlink.TextDecorations = null;
             return;
         }
 
         if (ensureDirectory)
-        {
             try
             {
                 Directory.CreateDirectory(path);
@@ -56,7 +54,6 @@ public partial class HelpDialogWindow : Window
             {
                 // Ignore failures; the navigation handler will surface errors if needed.
             }
-        }
 
         hyperlink.Tag = path;
         hyperlink.NavigateUri = TryCreateUri(path);
@@ -65,7 +62,7 @@ public partial class HelpDialogWindow : Window
 
     private static Uri? TryCreateUri(string path)
     {
-        return Uri.TryCreate(path, UriKind.Absolute, out Uri? uri) ? uri : null;
+        return Uri.TryCreate(path, UriKind.Absolute, out var uri) ? uri : null;
     }
 
     private void OnFirebaseHyperlinkRequestNavigate(object sender, RequestNavigateEventArgs e)
@@ -88,7 +85,7 @@ public partial class HelpDialogWindow : Window
     {
         e.Handled = true;
 
-        string url = DevConfig.ManagerModDatabaseUrl;
+        var url = DevConfig.ManagerModDatabaseUrl;
 
         if (InternetAccessManager.IsInternetAccessDisabled)
         {
@@ -122,12 +119,10 @@ public partial class HelpDialogWindow : Window
     {
         e.Handled = true;
 
-        if (sender is not Hyperlink hyperlink || hyperlink.Tag is not string target || string.IsNullOrWhiteSpace(target))
-        {
-            return;
-        }
+        if (sender is not Hyperlink hyperlink || hyperlink.Tag is not string target ||
+            string.IsNullOrWhiteSpace(target)) return;
 
-        string? destination = ResolveDestinationPath(target);
+        var destination = ResolveDestinationPath(target);
         if (destination is null)
         {
             WpfMessageBox.Show(this,
@@ -158,16 +153,10 @@ public partial class HelpDialogWindow : Window
 
     private static string? ResolveDestinationPath(string path)
     {
-        if (Directory.Exists(path) || File.Exists(path))
-        {
-            return path;
-        }
+        if (Directory.Exists(path) || File.Exists(path)) return path;
 
-        string? directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
-        {
-            return directory;
-        }
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory)) return directory;
 
         return null;
     }

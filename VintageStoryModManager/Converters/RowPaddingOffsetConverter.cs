@@ -1,4 +1,3 @@
-using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
@@ -9,27 +8,26 @@ public class RowPaddingOffsetConverter : IMultiValueConverter
 {
     public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {
-        if (values is not { Length: 2 })
-        {
-            return DependencyProperty.UnsetValue;
-        }
+        if (values is not { Length: 2 }) return DependencyProperty.UnsetValue;
 
         var baseThickness = values[0] switch
         {
             Thickness thickness => thickness,
-            string thicknessString when TryParseThickness(thicknessString, culture, out var parsedThickness) => parsedThickness,
-            _ => default(Thickness)
+            string thicknessString when TryParseThickness(thicknessString, culture, out var parsedThickness) =>
+                parsedThickness,
+            _ => default
         };
 
-        double offset = values[1] switch
+        var offset = values[1] switch
         {
             double doubleValue => doubleValue,
             float floatValue => floatValue,
-            string offsetString when double.TryParse(offsetString, NumberStyles.Float, culture, out var parsedOffset) => parsedOffset,
+            string offsetString when double.TryParse(offsetString, NumberStyles.Float, culture, out var parsedOffset) =>
+                parsedOffset,
             _ => 0d
         };
 
-        double halfOffset = offset / 2d;
+        var halfOffset = offset / 2d;
 
         return new Thickness(
             baseThickness.Left,
@@ -47,27 +45,17 @@ public class RowPaddingOffsetConverter : IMultiValueConverter
     {
         thickness = default;
 
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(value)) return false;
 
         var parts = value.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-        if (parts.Length is < 1 or > 4)
-        {
-            return false;
-        }
+        if (parts.Length is < 1 or > 4) return false;
 
-        double[] numbers = new double[4];
+        var numbers = new double[4];
 
-        for (int i = 0; i < parts.Length; i++)
-        {
+        for (var i = 0; i < parts.Length; i++)
             if (!double.TryParse(parts[i], NumberStyles.Float, culture, out numbers[i]))
-            {
                 return false;
-            }
-        }
 
         thickness = parts.Length switch
         {

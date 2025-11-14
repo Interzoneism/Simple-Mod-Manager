@@ -20,18 +20,19 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Are you sure you want to load this backup Modlist? Your current mods will be deleted and replaced with the mods in this backup."
-                   TextWrapping="Wrap"
-                   MaxWidth="520" />
+        <TextBlock
+            Text="Are you sure you want to load this backup Modlist? Your current mods will be deleted and replaced with the mods in this backup."
+            TextWrapping="Wrap"
+            MaxWidth="520" />
 
         <DockPanel Grid.Row="1"
                    Margin="0,24,0,0">
             <ui:ToggleSwitch x:Name="RestoreConfigsToggle"
-                              Header="Restore mod configs from backup"
-                              Margin="0,0,24,0"
-                              IsOn="False"
-                              HorizontalAlignment="Left"
-                              VerticalAlignment="Center" />
+                             Header="Restore mod configs from backup"
+                             Margin="0,0,24,0"
+                             IsOn="False"
+                             HorizontalAlignment="Left"
+                             VerticalAlignment="Center" />
 
             <StackPanel Orientation="Horizontal"
                         HorizontalAlignment="Right"

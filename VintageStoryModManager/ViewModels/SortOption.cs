@@ -1,12 +1,9 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Windows.Data;
 
 namespace VintageStoryModManager.ViewModels;
 
 /// <summary>
-/// Represents a reusable sort configuration for the mod list.
+///     Represents a reusable sort configuration for the mod list.
 /// </summary>
 public sealed class SortOption
 {
@@ -24,20 +21,17 @@ public sealed class SortOption
 
     public void Apply(ICollectionView view)
     {
-        if (view == null)
-        {
-            return;
-        }
+        if (view == null) return;
 
         using (view.DeferRefresh())
         {
             view.SortDescriptions.Clear();
-            foreach (var sort in _sorts)
-            {
-                view.SortDescriptions.Add(new SortDescription(sort.Property, sort.Direction));
-            }
+            foreach (var sort in _sorts) view.SortDescriptions.Add(new SortDescription(sort.Property, sort.Direction));
         }
     }
 
-    public override string ToString() => DisplayName;
+    public override string ToString()
+    {
+        return DisplayName;
+    }
 }

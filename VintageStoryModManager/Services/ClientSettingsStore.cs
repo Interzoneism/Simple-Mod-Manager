@@ -1,55 +1,47 @@
-
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace VintageStoryModManager.Services;
 
 /// <summary>
-/// Provides read/write access to the Vintage Story clientsettings.json file.
+///     Provides read/write access to the Vintage Story clientsettings.json file.
 /// </summary>
 public sealed class ClientSettingsStore
 {
-    private readonly string _settingsPath;
-    private readonly string _tempPath;
     private readonly string _backupPath;
+    private readonly JsonSerializerOptions _serializerOptions = new() { WriteIndented = true };
+    private readonly object _syncRoot = new();
+    private readonly string _tempPath;
+    private HashSet<string> _disabledLookup = null!;
+    private List<string> _disabledMods = null!;
+    private List<string> _modPaths = null!;
     private JsonObject _root = null!;
     private JsonObject _stringListSettings = null!;
     private JsonObject _stringSettings = null!;
-    private readonly JsonSerializerOptions _serializerOptions = new() { WriteIndented = true };
-    private List<string> _disabledMods = null!;
-    private HashSet<string> _disabledLookup = null!;
-    private List<string> _modPaths = null!;
-    private readonly IReadOnlyList<string> _searchBases;
-    private readonly object _syncRoot = new();
 
     public ClientSettingsStore(string dataDirectory)
     {
         if (string.IsNullOrWhiteSpace(dataDirectory))
-        {
             throw new ArgumentException("Value cannot be null or whitespace.", nameof(dataDirectory));
-        }
 
         DataDirectory = Path.GetFullPath(dataDirectory);
         Directory.CreateDirectory(DataDirectory);
 
-        _settingsPath = Path.Combine(DataDirectory, "clientsettings.json");
+        SettingsPath = Path.Combine(DataDirectory, "clientsettings.json");
         _tempPath = Path.Combine(DataDirectory, "clientsettings.tmp");
         _backupPath = Path.Combine(DataDirectory, "clientsettings.bkp");
 
         InitializeFromRoot(LoadOrCreateRoot());
         EnsureDefaultModPaths();
 
-        _searchBases = BuildSearchBases().ToList();
+        SearchBaseCandidates = BuildSearchBases().ToList();
     }
 
     public string DataDirectory { get; }
 
-    public string SettingsPath => _settingsPath;
+    public string SettingsPath { get; }
 
     public ReadOnlyCollection<string> DisabledEntries
     {
@@ -59,14 +51,6 @@ public sealed class ClientSettingsStore
             {
                 return new ReadOnlyCollection<string>(_disabledMods.ToList());
             }
-        }
-    }
-
-    public IReadOnlyList<string> GetDisabledEntriesSnapshot()
-    {
-        lock (_syncRoot)
-        {
-            return _disabledMods.ToArray();
         }
     }
 
@@ -84,6 +68,19 @@ public sealed class ClientSettingsStore
     public string? PlayerUid => TryGetStringSettingValue("playeruid");
 
     public string? PlayerName => TryGetStringSettingValue("playername");
+
+    /// <summary>
+    ///     Directories that are used as bases for resolving relative mod paths.
+    /// </summary>
+    public IReadOnlyList<string> SearchBaseCandidates { get; }
+
+    public IReadOnlyList<string> GetDisabledEntriesSnapshot()
+    {
+        lock (_syncRoot)
+        {
+            return _disabledMods.ToArray();
+        }
+    }
 
     public bool TryReload(out string? error)
     {
@@ -104,29 +101,15 @@ public sealed class ClientSettingsStore
         }
     }
 
-    /// <summary>
-    /// Directories that are used as bases for resolving relative mod paths.
-    /// </summary>
-    public IReadOnlyList<string> SearchBaseCandidates => _searchBases;
-
     public bool IsDisabled(string modId, string? version)
     {
-        if (string.IsNullOrWhiteSpace(modId))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(modId)) return false;
 
         lock (_syncRoot)
         {
-            if (_disabledLookup.Contains(modId))
-            {
-                return true;
-            }
+            if (_disabledLookup.Contains(modId)) return true;
 
-            if (!string.IsNullOrWhiteSpace(version))
-            {
-                return _disabledLookup.Contains($"{modId}@{version}");
-            }
+            if (!string.IsNullOrWhiteSpace(version)) return _disabledLookup.Contains($"{modId}@{version}");
         }
 
         return false;
@@ -147,20 +130,17 @@ public sealed class ClientSettingsStore
                 ? $"{normalizedModId}@{version!.Trim()}"
                 : null;
 
-            bool changed = false;
+            var changed = false;
 
             if (isActive)
             {
-                if (keyWithVersion != null)
-                {
-                    changed |= RemoveDisabledEntry(keyWithVersion);
-                }
+                if (keyWithVersion != null) changed |= RemoveDisabledEntry(keyWithVersion);
 
                 changed |= RemoveDisabledEntry(normalizedModId);
             }
             else
             {
-                string keyToAdd = keyWithVersion ?? normalizedModId;
+                var keyToAdd = keyWithVersion ?? normalizedModId;
                 if (!_disabledLookup.Contains(keyToAdd))
                 {
                     _disabledLookup.Add(keyToAdd);
@@ -197,24 +177,16 @@ public sealed class ClientSettingsStore
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             if (entries != null)
-            {
-                foreach (string entry in entries)
+                foreach (var entry in entries)
                 {
-                    if (string.IsNullOrWhiteSpace(entry))
-                    {
-                        continue;
-                    }
+                    if (string.IsNullOrWhiteSpace(entry)) continue;
 
-                    string trimmed = entry.Trim();
-                    if (seen.Add(trimmed))
-                    {
-                        sanitized.Add(trimmed);
-                    }
+                    var trimmed = entry.Trim();
+                    if (seen.Add(trimmed)) sanitized.Add(trimmed);
                 }
-            }
 
-            bool changed = sanitized.Count != _disabledMods.Count
-                || !sanitized.SequenceEqual(_disabledMods, StringComparer.OrdinalIgnoreCase);
+            var changed = sanitized.Count != _disabledMods.Count
+                          || !sanitized.SequenceEqual(_disabledMods, StringComparer.OrdinalIgnoreCase);
 
             if (!changed)
             {
@@ -225,7 +197,7 @@ public sealed class ClientSettingsStore
             _disabledMods.Clear();
             _disabledLookup.Clear();
 
-            foreach (string value in sanitized)
+            foreach (var value in sanitized)
             {
                 _disabledMods.Add(value);
                 _disabledLookup.Add(value);
@@ -245,7 +217,8 @@ public sealed class ClientSettingsStore
         }
     }
 
-    public bool TryUpdateDisabledEntry(string modId, string? previousVersion, string? newVersion, bool shouldDisable, out string? error)
+    public bool TryUpdateDisabledEntry(string modId, string? previousVersion, string? newVersion, bool shouldDisable,
+        out string? error)
     {
         if (string.IsNullOrWhiteSpace(modId))
         {
@@ -253,27 +226,21 @@ public sealed class ClientSettingsStore
             return false;
         }
 
-        string normalizedModId = modId.Trim();
-        string? previousKey = ComposeVersionKey(normalizedModId, previousVersion);
-        string? newKey = ComposeVersionKey(normalizedModId, newVersion);
+        var normalizedModId = modId.Trim();
+        var previousKey = ComposeVersionKey(normalizedModId, previousVersion);
+        var newKey = ComposeVersionKey(normalizedModId, newVersion);
 
         lock (_syncRoot)
         {
-            bool hadGeneralEntry = _disabledLookup.Contains(normalizedModId);
-            bool changed = false;
+            var hadGeneralEntry = _disabledLookup.Contains(normalizedModId);
+            var changed = false;
 
-            if (previousKey != null)
-            {
-                changed |= RemoveDisabledEntry(previousKey);
-            }
+            if (previousKey != null) changed |= RemoveDisabledEntry(previousKey);
 
             if (!shouldDisable)
             {
                 changed |= RemoveDisabledEntry(normalizedModId);
-                if (newKey != null)
-                {
-                    changed |= RemoveDisabledEntry(newKey);
-                }
+                if (newKey != null) changed |= RemoveDisabledEntry(newKey);
             }
             else
             {
@@ -288,7 +255,7 @@ public sealed class ClientSettingsStore
                 }
                 else
                 {
-                    string keyToAdd = newKey ?? normalizedModId;
+                    var keyToAdd = newKey ?? normalizedModId;
                     if (!_disabledLookup.Contains(keyToAdd))
                     {
                         _disabledLookup.Add(keyToAdd);
@@ -320,20 +287,14 @@ public sealed class ClientSettingsStore
 
     private static string? ComposeVersionKey(string modId, string? version)
     {
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(version)) return null;
 
         return string.Concat(modId, '@', version.Trim());
     }
 
     private bool RemoveDisabledEntry(string key)
     {
-        if (!_disabledLookup.Remove(key))
-        {
-            return false;
-        }
+        if (!_disabledLookup.Remove(key)) return false;
 
         _disabledMods.RemoveAll(value => string.Equals(value, key, StringComparison.OrdinalIgnoreCase));
         return true;
@@ -341,15 +302,12 @@ public sealed class ClientSettingsStore
 
     private JsonObject LoadOrCreateRoot()
     {
-        if (!File.Exists(_settingsPath))
-        {
-            return CreateDefaultSettings();
-        }
+        if (!File.Exists(SettingsPath)) return CreateDefaultSettings();
 
         try
         {
-            using FileStream stream = File.OpenRead(_settingsPath);
-            return (JsonNode.Parse(stream)?.AsObject()) ?? CreateDefaultSettings();
+            using var stream = File.OpenRead(SettingsPath);
+            return JsonNode.Parse(stream)?.AsObject() ?? CreateDefaultSettings();
         }
         catch (JsonException)
         {
@@ -380,19 +338,14 @@ public sealed class ClientSettingsStore
     private static JsonObject GetOrCreateObject(JsonObject owner, string propertyName)
     {
         foreach (var pair in owner)
-        {
             if (string.Equals(pair.Key, propertyName, StringComparison.OrdinalIgnoreCase))
             {
-                if (pair.Value is JsonObject existing)
-                {
-                    return existing;
-                }
+                if (pair.Value is JsonObject existing) return existing;
 
                 var created = new JsonObject();
                 owner[propertyName] = created;
                 return created;
             }
-        }
 
         var result = new JsonObject();
         owner[propertyName] = result;
@@ -402,17 +355,13 @@ public sealed class ClientSettingsStore
     private static List<string> ExtractStringList(JsonObject container, string propertyName)
     {
         foreach (var pair in container)
-        {
             if (string.Equals(pair.Key, propertyName, StringComparison.OrdinalIgnoreCase))
             {
                 if (pair.Value is JsonArray array)
-                {
                     return array.Select(node => node?.GetValue<string>() ?? string.Empty).ToList();
-                }
 
                 break;
             }
-        }
 
         var list = new List<string>();
         container[propertyName] = new JsonArray();
@@ -434,14 +383,68 @@ public sealed class ClientSettingsStore
     {
         lock (_syncRoot)
         {
-            if (_modPaths.Count > 0)
+            var expectedDataModsPath = Path.Combine(DataDirectory, "Mods");
+            var changed = false;
+
+            if (_modPaths.Count == 0)
             {
-                return;
+                _modPaths.Add("Mods");
+                _modPaths.Add(expectedDataModsPath);
+                changed = true;
+            }
+            else
+            {
+                if (!string.Equals(_modPaths[0], "Mods", StringComparison.OrdinalIgnoreCase))
+                {
+                    var existingModsIndex = _modPaths.FindIndex(path =>
+                        string.Equals(path, "Mods", StringComparison.OrdinalIgnoreCase));
+                    if (existingModsIndex >= 0) _modPaths.RemoveAt(existingModsIndex);
+
+                    _modPaths.Insert(0, "Mods");
+                    changed = true;
+                }
+
+                if (_modPaths.Count < 2)
+                {
+                    _modPaths.Insert(1, expectedDataModsPath);
+                    changed = true;
+                }
+                else if (!PathsEqual(_modPaths[1], expectedDataModsPath))
+                {
+                    var existingIndex = _modPaths.FindIndex(path => PathsEqual(path, expectedDataModsPath));
+                    if (existingIndex >= 0) _modPaths.RemoveAt(existingIndex);
+
+                    _modPaths[1] = expectedDataModsPath;
+                    changed = true;
+                }
             }
 
-            _modPaths.Add("Mods");
-            _modPaths.Add(Path.Combine(DataDirectory, "Mods"));
-            Persist();
+            if (changed) Persist();
+        }
+    }
+
+    private static bool PathsEqual(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
+
+        var normalizedLeft = NormalizePath(left);
+        var normalizedRight = NormalizePath(right);
+
+        return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return path;
+
+        try
+        {
+            return Path.GetFullPath(path);
+        }
+        catch (Exception)
+        {
+            return path.Trim();
         }
     }
 
@@ -459,24 +462,15 @@ public sealed class ClientSettingsStore
 
     private string? TryGetStringSettingValue(string settingName)
     {
-        if (string.IsNullOrWhiteSpace(settingName))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(settingName)) return null;
 
         lock (_syncRoot)
         {
             foreach (var pair in _stringSettings)
             {
-                if (!string.Equals(pair.Key, settingName, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
+                if (!string.Equals(pair.Key, settingName, StringComparison.OrdinalIgnoreCase)) continue;
 
-                if (pair.Value is null)
-                {
-                    return null;
-                }
+                if (pair.Value is null) return null;
 
                 string? rawValue;
                 try
@@ -499,20 +493,17 @@ public sealed class ClientSettingsStore
     {
         lock (_syncRoot)
         {
-            _stringListSettings["disabledMods"] = new JsonArray(_disabledMods.Select(value => JsonValue.Create(value)).ToArray());
+            _stringListSettings["disabledMods"] =
+                new JsonArray(_disabledMods.Select(value => JsonValue.Create(value)).ToArray());
             _stringListSettings["modPaths"] = new JsonArray(_modPaths.Select(path => JsonValue.Create(path)).ToArray());
 
             var json = _root.ToJsonString(_serializerOptions);
 
             File.WriteAllText(_tempPath, json);
-            if (File.Exists(_settingsPath))
-            {
-                File.Replace(_tempPath, _settingsPath, _backupPath);
-            }
+            if (File.Exists(SettingsPath))
+                File.Replace(_tempPath, SettingsPath, _backupPath);
             else
-            {
-                File.Move(_tempPath, _settingsPath);
-            }
+                File.Move(_tempPath, SettingsPath);
         }
     }
 }

@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace VintageStoryModManager.Models;
+﻿namespace VintageStoryModManager.Models;
 
 /// <summary>
-/// Represents the available user report options for a mod version.
+///     Represents the available user report options for a mod version.
 /// </summary>
 public enum ModVersionVoteOption
 {
@@ -16,7 +13,7 @@ public enum ModVersionVoteOption
 }
 
 /// <summary>
-/// Aggregated vote counts for each <see cref="ModVersionVoteOption"/> value.
+///     Aggregated vote counts for each <see cref="ModVersionVoteOption" /> value.
 /// </summary>
 public sealed class ModVersionVoteCounts
 {
@@ -46,21 +43,24 @@ public sealed class ModVersionVoteCounts
 
     public int Total => FullyFunctional + NoIssuesSoFar + SomeIssuesButWorks + NotFunctional + CrashesOrFreezesGame;
 
-    public int GetCount(ModVersionVoteOption option) => option switch
-    {
-        ModVersionVoteOption.FullyFunctional => FullyFunctional,
-        ModVersionVoteOption.NoIssuesSoFar => NoIssuesSoFar,
-        ModVersionVoteOption.SomeIssuesButWorks => SomeIssuesButWorks,
-        ModVersionVoteOption.NotFunctional => NotFunctional,
-        ModVersionVoteOption.CrashesOrFreezesGame => CrashesOrFreezesGame,
-        _ => 0
-    };
-
     public static ModVersionVoteCounts Empty { get; } = new(0, 0, 0, 0, 0);
+
+    public int GetCount(ModVersionVoteOption option)
+    {
+        return option switch
+        {
+            ModVersionVoteOption.FullyFunctional => FullyFunctional,
+            ModVersionVoteOption.NoIssuesSoFar => NoIssuesSoFar,
+            ModVersionVoteOption.SomeIssuesButWorks => SomeIssuesButWorks,
+            ModVersionVoteOption.NotFunctional => NotFunctional,
+            ModVersionVoteOption.CrashesOrFreezesGame => CrashesOrFreezesGame,
+            _ => 0
+        };
+    }
 }
 
 /// <summary>
-/// Captures the user report summary for a mod version at a particular Vintage Story version.
+///     Captures the user report summary for a mod version at a particular Vintage Story version.
 /// </summary>
 public sealed class ModVersionVoteSummary
 {
@@ -100,29 +100,26 @@ public sealed class ModVersionVoteSummary
 
     public ModVersionVoteOption? GetMajorityOption()
     {
-        int fullyFunctional = Counts.FullyFunctional;
-        int noIssues = Counts.NoIssuesSoFar;
-        int issues = Counts.SomeIssuesButWorks;
-        int notFunctional = Counts.NotFunctional;
-        int crashes = Counts.CrashesOrFreezesGame;
+        var fullyFunctional = Counts.FullyFunctional;
+        var noIssues = Counts.NoIssuesSoFar;
+        var issues = Counts.SomeIssuesButWorks;
+        var notFunctional = Counts.NotFunctional;
+        var crashes = Counts.CrashesOrFreezesGame;
 
-        int max = Math.Max(
+        var max = Math.Max(
             fullyFunctional,
             Math.Max(
                 noIssues,
                 Math.Max(issues, Math.Max(notFunctional, crashes))));
-        if (max == 0)
-        {
-            return null;
-        }
+        if (max == 0) return null;
 
-        bool fullyFunctionalIsMax = fullyFunctional == max;
-        bool noIssuesIsMax = noIssues == max;
-        bool issuesIsMax = issues == max;
-        bool notFunctionalIsMax = notFunctional == max;
-        bool crashesIsMax = crashes == max;
+        var fullyFunctionalIsMax = fullyFunctional == max;
+        var noIssuesIsMax = noIssues == max;
+        var issuesIsMax = issues == max;
+        var notFunctionalIsMax = notFunctional == max;
+        var crashesIsMax = crashes == max;
 
-        int duplicates = 0;
+        var duplicates = 0;
         ModVersionVoteOption? candidate = null;
 
         if (fullyFunctionalIsMax)
@@ -155,15 +152,9 @@ public sealed class ModVersionVoteSummary
             candidate = ModVersionVoteOption.CrashesOrFreezesGame;
         }
 
-        if (duplicates == 1)
-        {
-            return candidate;
-        }
+        if (duplicates == 1) return candidate;
 
-        if (duplicates == 2 && fullyFunctionalIsMax && noIssuesIsMax)
-        {
-            return ModVersionVoteOption.FullyFunctional;
-        }
+        if (duplicates == 2 && fullyFunctionalIsMax && noIssuesIsMax) return ModVersionVoteOption.FullyFunctional;
 
         return null;
     }
@@ -171,22 +162,28 @@ public sealed class ModVersionVoteSummary
 
 public static class ModVersionVoteOptionExtensions
 {
-    public static string ToDisplayString(this ModVersionVoteOption option) => option switch
+    public static string ToDisplayString(this ModVersionVoteOption option)
     {
-        ModVersionVoteOption.FullyFunctional => "Fully functional",
-        ModVersionVoteOption.NoIssuesSoFar => "No issues noticed",
-        ModVersionVoteOption.SomeIssuesButWorks => "Some issues but works",
-        ModVersionVoteOption.NotFunctional => "Not functional",
-        ModVersionVoteOption.CrashesOrFreezesGame => "Crashes/Freezes game",
-        _ => option.ToString() ?? string.Empty
-    };
+        return option switch
+        {
+            ModVersionVoteOption.FullyFunctional => "Fully functional",
+            ModVersionVoteOption.NoIssuesSoFar => "No issues noticed",
+            ModVersionVoteOption.SomeIssuesButWorks => "Some issues but works",
+            ModVersionVoteOption.NotFunctional => "Not functional",
+            ModVersionVoteOption.CrashesOrFreezesGame => "Crashes/Freezes game",
+            _ => option.ToString() ?? string.Empty
+        };
+    }
 
-    public static bool RequiresComment(this ModVersionVoteOption option) => option switch
+    public static bool RequiresComment(this ModVersionVoteOption option)
     {
-        ModVersionVoteOption.NotFunctional => true,
-        ModVersionVoteOption.CrashesOrFreezesGame => true,
-        _ => false
-    };
+        return option switch
+        {
+            ModVersionVoteOption.NotFunctional => true,
+            ModVersionVoteOption.CrashesOrFreezesGame => true,
+            _ => false
+        };
+    }
 }
 
 public sealed class ModVersionVoteComments

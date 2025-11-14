@@ -1,13 +1,8 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Net.Http;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -17,77 +12,58 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VintageStoryModManager.Models;
 using VintageStoryModManager.Services;
+using Application = System.Windows.Application;
 
 namespace VintageStoryModManager.ViewModels;
 
 /// <summary>
-/// View model that wraps <see cref="ModEntry"/> for presentation in the UI.
+///     View model that wraps <see cref="ModEntry" /> for presentation in the UI.
 /// </summary>
 public sealed class ModListItemViewModel : ObservableObject
 {
     private static readonly HttpClient HttpClient = new();
 
     private readonly Func<ModListItemViewModel, bool, Task<ActivationResult>> _activationHandler;
-    private readonly IReadOnlyList<ModDependencyInfo> _dependencies;
-    private readonly ModDependencyInfo? _gameDependency;
     private readonly IReadOnlyList<string> _authors;
     private readonly IReadOnlyList<string> _contributors;
     private readonly string? _description;
-    private readonly string? _metadataError;
-    private readonly Func<string?, string?, bool>? _shouldSkipVersion;
-    private readonly Func<bool>? _requireExactVersionMatch;
-    private string? _loadError;
-    private IReadOnlyList<ModDependencyInfo> _missingDependencies;
-    private bool _dependencyHasErrors;
-    private IReadOnlyList<string> _databaseTags;
-    private IReadOnlyList<string> _databaseRequiredGameVersions;
-    private ModReleaseInfo? _latestRelease;
-    private ModReleaseInfo? _latestCompatibleRelease;
-    private IReadOnlyList<ModReleaseInfo> _releases;
-    private IReadOnlyList<ReleaseChangelog> _newerReleaseChangelogs = Array.Empty<ReleaseChangelog>();
-    private int? _databaseDownloads;
-    private int? _databaseComments;
-    private int? _databaseRecentDownloads;
-    private int? _databaseTenDayDownloads;
-    private string? _modDatabaseAssetId;
-    private string? _modDatabasePageUrl;
-    private Uri? _modDatabasePageUri;
-    private ICommand? _openModDatabasePageCommand;
-    private string? _latestDatabaseVersion;
-    private ImageSource? _modDatabaseLogo;
-    private string? _modDatabaseLogoUrl;
+    private readonly ModDependencyInfo? _gameDependency;
     private readonly string? _installedGameVersion;
-    private readonly string _searchIndex;
-    private IReadOnlyList<ModVersionOptionViewModel> _versionOptions = Array.Empty<ModVersionOptionViewModel>();
+    private readonly string? _metadataError;
 
-    private double _modDatabaseRelevancyScore;
-    private DateTime? _modDatabaseLastUpdatedUtc;
+    private readonly Func<bool>? _requireExactVersionMatch;
+    private readonly string _searchIndex;
+    private readonly Func<string?, string?, bool>? _shouldSkipVersion;
+    private string? _activationError;
+    private int? _databaseComments;
+    private int? _databaseDownloads;
+    private int? _databaseRecentDownloads;
+    private IReadOnlyList<string> _databaseRequiredGameVersions;
+    private int? _databaseTenDayDownloads;
+    private bool _hasActivationError;
 
     private bool _isActive;
-    private bool _suppressState;
-    private string _tooltip = string.Empty;
-    private string? _versionWarningMessage;
-    private string? _activationError;
-    private bool _hasActivationError;
-    private string _statusText = string.Empty;
-    private string _statusDetails = string.Empty;
     private bool _isSelected;
-    private bool _hasUpdate;
-    private string? _updateMessage;
-    private ModVersionOptionViewModel? _selectedVersionOption;
-    private string? _modDatabaseSide;
-    private ModVersionVoteSummary? _userReportSummary;
-    private string _userReportDisplay = "—";
-    private string? _userReportModVersion;
-    private string? _userReportTooltip;
     private bool _isUserReportLoading;
-    private bool _userReportHasError;
-    private ModVersionVoteSummary? _latestReleaseUserReportSummary;
-    private string? _latestReleaseUserReportVersion;
     private string? _latestReleaseUserReportDisplay;
     private string? _latestReleaseUserReportTooltip;
-
-    public sealed record ReleaseChangelog(string Version, string Changelog);
+    private string? _loadError;
+    private DateTime? _modDatabaseLastUpdatedUtc;
+    private ImageSource? _modDatabaseLogo;
+    private string? _modDatabaseLogoUrl;
+    private string? _modDatabaseSide;
+    private ICommand? _openModDatabasePageCommand;
+    private IReadOnlyList<ModReleaseInfo> _releases;
+    private ModVersionOptionViewModel? _selectedVersionOption;
+    private string _statusDetails = string.Empty;
+    private string _statusText = string.Empty;
+    private bool _suppressState;
+    private string _tooltip = string.Empty;
+    private string? _updateMessage;
+    private string _userReportDisplay = "—";
+    private bool _userReportHasError;
+    private string? _userReportTooltip;
+    private string? _versionWarningMessage;
 
     public ModListItemViewModel(
         ModEntry entry,
@@ -107,6 +83,7 @@ public sealed class ModListItemViewModel : ObservableObject
 
         ModId = entry.ModId;
         DisplayName = string.IsNullOrWhiteSpace(entry.Name) ? entry.ModId : entry.Name;
+        NameSortKey = string.IsNullOrWhiteSpace(entry.ManifestName) ? DisplayName : entry.ManifestName;
         Version = entry.Version;
         NetworkVersion = entry.NetworkVersion;
         Website = entry.Website;
@@ -116,45 +93,44 @@ public sealed class ModListItemViewModel : ObservableObject
         _authors = entry.Authors;
         _contributors = entry.Contributors;
         var databaseInfo = entry.DatabaseInfo;
-        _databaseTags = databaseInfo?.Tags ?? Array.Empty<string>();
+        DatabaseTags = databaseInfo?.Tags ?? Array.Empty<string>();
         _databaseRequiredGameVersions = databaseInfo?.RequiredGameVersions ?? Array.Empty<string>();
-        _latestRelease = databaseInfo?.LatestRelease;
-        _latestCompatibleRelease = databaseInfo?.LatestCompatibleRelease;
+        LatestRelease = databaseInfo?.LatestRelease;
+        LatestCompatibleRelease = databaseInfo?.LatestCompatibleRelease;
         _releases = databaseInfo?.Releases ?? Array.Empty<ModReleaseInfo>();
-        _modDatabaseAssetId = databaseInfo?.AssetId;
-        _modDatabasePageUrl = databaseInfo?.ModPageUrl;
-        _modDatabasePageUri = TryCreateHttpUri(_modDatabasePageUrl);
-        LogDebug($"Initial database page URL '{FormatValue(_modDatabasePageUrl)}' resolved to '{FormatUri(_modDatabasePageUri)}'.");
-        if (_modDatabasePageUri != null)
+        ModDatabaseAssetId = databaseInfo?.AssetId;
+        ModDatabasePageUrl = databaseInfo?.ModPageUrl;
+        ModDatabasePageUri = TryCreateHttpUri(ModDatabasePageUrl);
+        LogDebug(
+            $"Initial database page URL '{FormatValue(ModDatabasePageUrl)}' resolved to '{FormatUri(ModDatabasePageUri)}'.");
+        if (ModDatabasePageUri != null)
         {
-            Uri commandUri = _modDatabasePageUri;
+            var commandUri = ModDatabasePageUri;
             _openModDatabasePageCommand = new RelayCommand(() => LaunchUri(commandUri));
         }
+
         _databaseDownloads = databaseInfo?.Downloads;
         _databaseComments = databaseInfo?.Comments;
         _databaseRecentDownloads = databaseInfo?.DownloadsLastThirtyDays;
         _databaseTenDayDownloads = databaseInfo?.DownloadsLastTenDays;
         _modDatabaseLogoUrl = databaseInfo?.LogoUrl;
         _modDatabaseLogo = CreateModDatabaseLogoImage();
-        LogDebug($"Initial database logo creation result: {_modDatabaseLogo is not null}. Source URL: '{FormatValue(_modDatabaseLogoUrl)}'.");
-        _modDatabaseRelevancyScore = entry.ModDatabaseSearchScore ?? 0;
+        LogDebug(
+            $"Initial database logo creation result: {_modDatabaseLogo is not null}. Source URL: '{FormatValue(_modDatabaseLogoUrl)}'.");
+        ModDatabaseRelevancySortKey = entry.ModDatabaseSearchScore ?? 0;
         _modDatabaseLastUpdatedUtc = databaseInfo?.LastReleasedUtc ?? DetermineLastUpdatedFromReleases(_releases);
         if (_databaseRecentDownloads is null)
-        {
             _databaseRecentDownloads = CalculateDownloadsLastThirtyDaysFromReleases(_releases);
-        }
         if (_databaseTenDayDownloads is null)
-        {
             _databaseTenDayDownloads = CalculateDownloadsLastTenDaysFromReleases(_releases);
-        }
-        _latestDatabaseVersion = _latestRelease?.Version
-            ?? databaseInfo?.LatestVersion
-            ?? _latestCompatibleRelease?.Version
-            ?? databaseInfo?.LatestCompatibleVersion;
-        string? initialUserReportVersion = !string.IsNullOrWhiteSpace(entry.Version)
+        LatestDatabaseVersion = LatestRelease?.Version
+                                ?? databaseInfo?.LatestVersion
+                                ?? LatestCompatibleRelease?.Version
+                                ?? databaseInfo?.LatestCompatibleVersion;
+        var initialUserReportVersion = !string.IsNullOrWhiteSpace(entry.Version)
             ? entry.Version
-            : SelectPreferredUserReportVersion(_latestRelease, _latestCompatibleRelease, databaseInfo);
-        SetUserReportVersion(initialUserReportVersion, reinitializeState: false);
+            : SelectPreferredUserReportVersion(LatestRelease, LatestCompatibleRelease, databaseInfo);
+        SetUserReportVersion(initialUserReportVersion, false);
         _loadError = entry.LoadError;
 
         IsInstalled = isInstalled;
@@ -163,23 +139,25 @@ public sealed class ModListItemViewModel : ObservableObject
         LogDebug($"Website URL '{FormatValue(Website)}' resolved to '{FormatUri(WebsiteUri)}'.");
         OpenWebsiteCommand = WebsiteUri != null ? new RelayCommand(() => LaunchUri(WebsiteUri)) : null;
 
-        IReadOnlyList<ModDependencyInfo> dependencies = entry.Dependencies ?? Array.Empty<ModDependencyInfo>();
-        _gameDependency = dependencies.FirstOrDefault(d => string.Equals(d.ModId, "game", StringComparison.OrdinalIgnoreCase))
+        var dependencies = entry.Dependencies ?? Array.Empty<ModDependencyInfo>();
+        _gameDependency =
+            dependencies.FirstOrDefault(d => string.Equals(d.ModId, "game", StringComparison.OrdinalIgnoreCase))
             ?? dependencies.FirstOrDefault(d => d.IsGameOrCoreDependency);
 
         if (dependencies.Count == 0)
         {
-            _dependencies = Array.Empty<ModDependencyInfo>();
+            Dependencies = Array.Empty<ModDependencyInfo>();
         }
         else
         {
-            ModDependencyInfo[] filtered = dependencies.Where(d => !d.IsGameOrCoreDependency).ToArray();
-            _dependencies = filtered.Length == 0 ? Array.Empty<ModDependencyInfo>() : filtered;
+            var filtered = dependencies.Where(d => !d.IsGameOrCoreDependency).ToArray();
+            Dependencies = filtered.Length == 0 ? Array.Empty<ModDependencyInfo>() : filtered;
         }
-        _missingDependencies = entry.MissingDependencies is { Count: > 0 }
+
+        MissingDependencies = entry.MissingDependencies is { Count: > 0 }
             ? entry.MissingDependencies.ToArray()
             : Array.Empty<ModDependencyInfo>();
-        _dependencyHasErrors = entry.DependencyHasErrors;
+        DependencyHasErrors = entry.DependencyHasErrors;
         _description = entry.Description;
         _metadataError = entry.Error;
         Side = entry.Side;
@@ -199,13 +177,15 @@ public sealed class ModListItemViewModel : ObservableObject
         UpdateNewerReleaseChangelogs();
         UpdateStatusFromErrors();
         UpdateTooltip();
-        InitializeUserReportState(_installedGameVersion, _userReportModVersion);
+        InitializeUserReportState(_installedGameVersion, UserReportModVersion);
         _searchIndex = BuildSearchIndex(entry, location);
     }
 
     public string ModId { get; }
 
     public string DisplayName { get; }
+
+    public string NameSortKey { get; }
 
     public string? Version { get; }
 
@@ -219,11 +199,8 @@ public sealed class ModListItemViewModel : ObservableObject
         {
             if (_gameDependency is { } dependency)
             {
-                string version = dependency.Version?.Trim() ?? string.Empty;
-                if (version.Length > 0)
-                {
-                    return version;
-                }
+                var version = dependency.Version?.Trim() ?? string.Empty;
+                if (version.Length > 0) return version;
             }
 
             return string.IsNullOrWhiteSpace(NetworkVersion) ? "—" : NetworkVersion!;
@@ -234,33 +211,34 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public string ContributorsDisplay => _contributors.Count == 0 ? "—" : string.Join(", ", _contributors);
 
-    public string DependenciesDisplay => _dependencies.Count == 0
+    public string DependenciesDisplay => Dependencies.Count == 0
         ? "—"
-        : string.Join(", ", _dependencies.Select(dependency => dependency.Display));
+        : string.Join(", ", Dependencies.Select(dependency => dependency.Display));
 
-    public IReadOnlyList<ModDependencyInfo> Dependencies => _dependencies;
+    public IReadOnlyList<ModDependencyInfo> Dependencies { get; }
 
-    public IReadOnlyList<ModDependencyInfo> MissingDependencies => _missingDependencies;
+    public IReadOnlyList<ModDependencyInfo> MissingDependencies { get; private set; }
 
-    public bool DependencyHasErrors => _dependencyHasErrors;
+    public bool DependencyHasErrors { get; private set; }
 
-    public bool HasDependencyIssues => _dependencyHasErrors || _missingDependencies.Count > 0;
+    public bool HasDependencyIssues => DependencyHasErrors || MissingDependencies.Count > 0;
 
     public bool CanFixDependencyIssues => HasDependencyIssues || HasLoadError;
 
-    public IReadOnlyList<string> DatabaseTags => _databaseTags;
+    public IReadOnlyList<string> DatabaseTags { get; private set; }
 
-    public string DatabaseTagsDisplay => _databaseTags.Count == 0 ? "—" : string.Join(", ", _databaseTags);
+    public string DatabaseTagsDisplay => DatabaseTags.Count == 0 ? "—" : string.Join(", ", DatabaseTags);
 
-    public string? ModDatabaseAssetId => _modDatabaseAssetId;
+    public string? ModDatabaseAssetId { get; private set; }
 
-    public string? ModDatabasePageUrl => _modDatabasePageUrl;
+    public string? ModDatabasePageUrl { get; private set; }
 
-    public Uri? ModDatabasePageUri => _modDatabasePageUri;
+    public Uri? ModDatabasePageUri { get; private set; }
 
     public bool HasModDatabasePageLink => ModDatabasePageUri != null;
 
-    public string ModDatabasePageUrlDisplay => string.IsNullOrWhiteSpace(ModDatabasePageUrl) ? "—" : ModDatabasePageUrl!;
+    public string ModDatabasePageUrlDisplay =>
+        string.IsNullOrWhiteSpace(ModDatabasePageUrl) ? "—" : ModDatabasePageUrl!;
 
     public string DownloadsDisplay => _databaseDownloads.HasValue
         ? _databaseDownloads.Value.ToString("N0", CultureInfo.CurrentCulture)
@@ -278,7 +256,7 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public int ModDatabaseRecentDownloadsSortKey => _databaseRecentDownloads ?? 0;
 
-    public double ModDatabaseRelevancySortKey => _modDatabaseRelevancyScore;
+    public double ModDatabaseRelevancySortKey { get; }
 
     public long ModDatabaseLastUpdatedSortKey => _modDatabaseLastUpdatedUtc?.Ticks ?? 0L;
 
@@ -290,16 +268,13 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public bool HasModDatabasePreviewImage => ModDatabasePreviewImage != null;
 
-    public string? LatestDatabaseVersion => _latestDatabaseVersion;
+    public string? LatestDatabaseVersion { get; private set; }
 
     public string LatestDatabaseVersionDisplay
     {
         get
         {
-            if (InternetAccessManager.IsInternetAccessDisabled)
-            {
-                return "?";
-            }
+            if (InternetAccessManager.IsInternetAccessDisabled) return "?";
 
             return string.IsNullOrWhiteSpace(LatestDatabaseVersion) ? "—" : LatestDatabaseVersion!;
         }
@@ -309,10 +284,10 @@ public sealed class ModListItemViewModel : ObservableObject
     {
         get
         {
-            string version = string.IsNullOrWhiteSpace(LatestDatabaseVersion)
+            var version = string.IsNullOrWhiteSpace(LatestDatabaseVersion)
                 ? LatestDatabaseVersionDisplay
                 : LatestDatabaseVersion!;
-            int order = CanUpdate ? 0 : 1;
+            var order = CanUpdate ? 0 : 1;
 
             return string.Create(
                 version.Length + 2,
@@ -326,45 +301,43 @@ public sealed class ModListItemViewModel : ObservableObject
         }
     }
 
-    public void RefreshInternetAccessDependentState()
-    {
-        OnPropertyChanged(nameof(LatestDatabaseVersionDisplay));
-        OnPropertyChanged(nameof(LatestVersionSortKey));
-    }
-
     public bool IsInstalled { get; }
 
-    public bool CanUpdate => _hasUpdate;
+    public bool CanUpdate { get; private set; }
 
-    public bool RequiresCompatibilitySelection => _hasUpdate
-        && _latestRelease != null
-        && !_latestRelease.IsCompatibleWithInstalledGame
-        && _latestCompatibleRelease != null
-        && !string.Equals(_latestRelease.Version, _latestCompatibleRelease.Version, StringComparison.OrdinalIgnoreCase);
+    public bool RequiresCompatibilitySelection => CanUpdate
+                                                  && LatestRelease != null
+                                                  && !LatestRelease.IsCompatibleWithInstalledGame
+                                                  && LatestCompatibleRelease != null
+                                                  && !string.Equals(LatestRelease.Version,
+                                                      LatestCompatibleRelease.Version,
+                                                      StringComparison.OrdinalIgnoreCase);
 
-    public bool HasCompatibleUpdate => _latestCompatibleRelease != null;
+    public bool HasCompatibleUpdate => LatestCompatibleRelease != null;
 
-    public bool LatestReleaseIsCompatible => _latestRelease?.IsCompatibleWithInstalledGame ?? false;
+    public bool LatestReleaseIsCompatible => LatestRelease?.IsCompatibleWithInstalledGame ?? false;
 
-    public bool ShouldHighlightLatestVersion => _hasUpdate;
+    public bool ShouldHighlightLatestVersion => CanUpdate;
 
-    public ModReleaseInfo? LatestRelease => _latestRelease;
+    public ModReleaseInfo? LatestRelease { get; private set; }
 
-    public ModReleaseInfo? LatestCompatibleRelease => _latestCompatibleRelease;
+    public ModReleaseInfo? LatestCompatibleRelease { get; private set; }
 
-    public IReadOnlyList<ModVersionOptionViewModel> VersionOptions => _versionOptions;
+    public IReadOnlyList<ModVersionOptionViewModel> VersionOptions { get; private set; } =
+        Array.Empty<ModVersionOptionViewModel>();
 
-    public bool HasVersionOptions => _versionOptions.Count > 0;
+    public bool HasVersionOptions => VersionOptions.Count > 0;
 
-    public bool HasDownloadableRelease => _latestRelease != null || _latestCompatibleRelease != null;
+    public bool HasDownloadableRelease => LatestRelease != null || LatestCompatibleRelease != null;
 
-    public IReadOnlyList<ReleaseChangelog> NewerReleaseChangelogs => _newerReleaseChangelogs;
+    public IReadOnlyList<ReleaseChangelog> NewerReleaseChangelogs { get; private set; } =
+        Array.Empty<ReleaseChangelog>();
 
-    public bool HasNewerReleaseChangelogs => _newerReleaseChangelogs.Count > 0;
+    public bool HasNewerReleaseChangelogs => NewerReleaseChangelogs.Count > 0;
 
-    public ModVersionVoteSummary? LatestReleaseUserReportSummary => _latestReleaseUserReportSummary;
+    public ModVersionVoteSummary? LatestReleaseUserReportSummary { get; private set; }
 
-    public string? LatestReleaseUserReportVersion => _latestReleaseUserReportVersion;
+    public string? LatestReleaseUserReportVersion { get; private set; }
 
     public string? LatestReleaseUserReportDisplay
     {
@@ -372,9 +345,7 @@ public sealed class ModListItemViewModel : ObservableObject
         private set
         {
             if (SetProperty(ref _latestReleaseUserReportDisplay, value))
-            {
                 OnPropertyChanged(nameof(HasLatestReleaseUserReport));
-            }
         }
     }
 
@@ -386,57 +357,13 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public bool HasLatestReleaseUserReport => !string.IsNullOrWhiteSpace(_latestReleaseUserReportDisplay);
 
-    public IReadOnlyList<ReleaseChangelog> GetChangelogEntriesForUpgrade(string? targetVersion)
-    {
-        if (_releases.Count == 0 || string.IsNullOrWhiteSpace(targetVersion))
-        {
-            return Array.Empty<ReleaseChangelog>();
-        }
+    public ModVersionVoteSummary? UserReportSummary { get; private set; }
 
-        string trimmedTarget = targetVersion.Trim();
-        string? normalizedTarget = VersionStringUtility.Normalize(targetVersion);
+    public string? UserReportModVersion { get; private set; }
 
-        string? installedVersion = Version;
-        string? normalizedInstalled = VersionStringUtility.Normalize(installedVersion);
+    public ModVersionVoteCounts UserReportCounts => UserReportSummary?.Counts ?? ModVersionVoteCounts.Empty;
 
-        var entries = new List<ReleaseChangelog>();
-        bool capturing = false;
-
-        foreach (ModReleaseInfo release in _releases)
-        {
-            if (!capturing && DoesReleaseMatchVersion(release, trimmedTarget, normalizedTarget))
-            {
-                capturing = true;
-            }
-
-            if (!capturing)
-            {
-                continue;
-            }
-
-            if (!string.IsNullOrWhiteSpace(installedVersion)
-                && DoesReleaseMatchVersion(release, installedVersion.Trim(), normalizedInstalled))
-            {
-                break;
-            }
-
-            string? changelog = release.Changelog?.Trim();
-            if (!string.IsNullOrEmpty(changelog))
-            {
-                entries.Add(new ReleaseChangelog(release.Version, changelog));
-            }
-        }
-
-        return entries.Count == 0 ? Array.Empty<ReleaseChangelog>() : entries;
-    }
-
-    public ModVersionVoteSummary? UserReportSummary => _userReportSummary;
-
-    public string? UserReportModVersion => _userReportModVersion;
-
-    public ModVersionVoteCounts UserReportCounts => _userReportSummary?.Counts ?? ModVersionVoteCounts.Empty;
-
-    public ModVersionVoteOption? UserVoteOption => _userReportSummary?.UserVote;
+    public ModVersionVoteOption? UserVoteOption => UserReportSummary?.UserVote;
 
     public string UserReportDisplay
     {
@@ -463,31 +390,242 @@ public sealed class ModListItemViewModel : ObservableObject
     }
 
     public bool CanSubmitUserReport => !string.IsNullOrWhiteSpace(_installedGameVersion)
-        && !string.IsNullOrWhiteSpace(_userReportModVersion);
+                                       && !string.IsNullOrWhiteSpace(UserReportModVersion);
+
+    public string InstallButtonToolTip
+    {
+        get
+        {
+            if (!HasDownloadableRelease) return "No downloadable releases are available.";
+
+            if (LatestRelease?.IsCompatibleWithInstalledGame == true)
+                return $"Install version {LatestRelease.Version}.";
+
+            if (LatestCompatibleRelease != null)
+                return $"Install compatible version {LatestCompatibleRelease.Version}.";
+
+            if (LatestRelease != null) return $"Install version {LatestRelease.Version} (may be incompatible).";
+
+            return "No downloadable releases are available.";
+        }
+    }
+
+    public ModVersionOptionViewModel? SelectedVersionOption
+    {
+        get => _selectedVersionOption;
+        set => SetProperty(ref _selectedVersionOption, value);
+    }
+
+    public string UpdateButtonToolTip
+    {
+        get
+        {
+            if (LatestRelease is null) return "No updates available.";
+
+            if (LatestRelease.IsCompatibleWithInstalledGame) return $"Install version {LatestRelease.Version}.";
+
+            if (LatestCompatibleRelease != null
+                && !string.Equals(LatestRelease.Version, LatestCompatibleRelease.Version,
+                    StringComparison.OrdinalIgnoreCase))
+                return $"Latest: {LatestRelease.Version}. Compatible: {LatestCompatibleRelease.Version}.";
+
+            return $"Install version {LatestRelease.Version} (may be incompatible).";
+        }
+    }
+
+    public string DescriptionDisplay =>
+        string.IsNullOrWhiteSpace(_description) ? "No description available." : _description!;
+
+    public string? Website { get; }
+
+    public Uri? WebsiteUri { get; }
+
+    public bool HasWebsiteLink => WebsiteUri != null;
+
+    public ICommand? OpenWebsiteCommand { get; }
+
+    public ICommand? OpenModDatabasePageCommand => _openModDatabasePageCommand;
+
+    public string SourcePath { get; }
+
+    public string Location { get; }
+
+    public ModSourceKind SourceKind { get; }
+
+    public string SourceKindDisplay => SourceKind switch
+    {
+        ModSourceKind.ZipArchive => "Zip",
+        ModSourceKind.Folder => "Folder",
+        ModSourceKind.Assembly => "Assembly",
+        ModSourceKind.SourceCode => "Source",
+        _ => SourceKind.ToString()
+    };
+
+    public string? Side { get; }
+
+    public string SideDisplay
+    {
+        get
+        {
+            var preferredSide = GetPreferredSide();
+            return string.IsNullOrWhiteSpace(preferredSide) ? "—" : GetCapitalizedSide(preferredSide)!;
+        }
+    }
+
+    public string? SideSortValue => GetCapitalizedSide(GetPreferredSide());
+
+    public bool? RequiredOnClient { get; }
+
+    public string RequiredOnClientDisplay => RequiredOnClient.HasValue ? RequiredOnClient.Value ? "Yes" : "No" : "—";
+
+    public bool? RequiredOnServer { get; }
+
+    public string RequiredOnServerDisplay => RequiredOnServer.HasValue ? RequiredOnServer.Value ? "Yes" : "No" : "—";
+
+    public ImageSource? Icon { get; }
+
+    public bool HasErrors { get; }
+
+    public bool HasLoadError => !string.IsNullOrWhiteSpace(_loadError);
+
+    public bool CanToggle => !HasErrors && !HasLoadError;
+
+    public bool HasActivationError
+    {
+        get => _hasActivationError;
+        private set => SetProperty(ref _hasActivationError, value);
+    }
+
+    public string? ActivationError
+    {
+        get => _activationError;
+        private set
+        {
+            if (SetProperty(ref _activationError, value))
+            {
+                HasActivationError = !string.IsNullOrWhiteSpace(value);
+                UpdateStatusFromErrors();
+                UpdateTooltip();
+            }
+        }
+    }
+
+    public string StatusText
+    {
+        get => _statusText;
+        private set
+        {
+            if (SetProperty(ref _statusText, value)) OnPropertyChanged(nameof(StatusSortOrder));
+        }
+    }
+
+    public int StatusSortOrder => StatusText switch
+    {
+        "Error" => 0,
+        "Warning" => 1,
+        _ => 2
+    };
+
+    public string StatusDetails
+    {
+        get => _statusDetails;
+        private set => SetProperty(ref _statusDetails, value);
+    }
+
+    public string Tooltip
+    {
+        get => _tooltip;
+        private set => SetProperty(ref _tooltip, value);
+    }
+
+    public bool IsActive
+    {
+        get => _isActive;
+        set
+        {
+            if (_suppressState)
+            {
+                if (SetProperty(ref _isActive, value))
+                {
+                    OnPropertyChanged(nameof(ActiveSortOrder));
+                    OnPropertyChanged(nameof(CanFixDependencyIssues));
+                }
+
+                return;
+            }
+
+            if (_isActive == value) return;
+
+            var previous = _isActive;
+            if (!SetProperty(ref _isActive, value)) return;
+
+            OnPropertyChanged(nameof(ActiveSortOrder));
+            OnPropertyChanged(nameof(CanFixDependencyIssues));
+            _ = ApplyActivationChangeAsync(previous, value);
+        }
+    }
+
+    public int ActiveSortOrder => _isActive ? 0 : 1;
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value);
+    }
+
+    public void RefreshInternetAccessDependentState()
+    {
+        OnPropertyChanged(nameof(LatestDatabaseVersionDisplay));
+        OnPropertyChanged(nameof(LatestVersionSortKey));
+    }
+
+    public IReadOnlyList<ReleaseChangelog> GetChangelogEntriesForUpgrade(string? targetVersion)
+    {
+        if (_releases.Count == 0 || string.IsNullOrWhiteSpace(targetVersion)) return Array.Empty<ReleaseChangelog>();
+
+        var trimmedTarget = targetVersion.Trim();
+        var normalizedTarget = VersionStringUtility.Normalize(targetVersion);
+
+        var installedVersion = Version;
+        var normalizedInstalled = VersionStringUtility.Normalize(installedVersion);
+
+        var entries = new List<ReleaseChangelog>();
+        var capturing = false;
+
+        foreach (var release in _releases)
+        {
+            if (!capturing && DoesReleaseMatchVersion(release, trimmedTarget, normalizedTarget)) capturing = true;
+
+            if (!capturing) continue;
+
+            if (!string.IsNullOrWhiteSpace(installedVersion)
+                && DoesReleaseMatchVersion(release, installedVersion.Trim(), normalizedInstalled))
+                break;
+
+            var changelog = release.Changelog?.Trim();
+            if (!string.IsNullOrEmpty(changelog)) entries.Add(new ReleaseChangelog(release.Version, changelog));
+        }
+
+        return entries.Count == 0 ? Array.Empty<ReleaseChangelog>() : entries;
+    }
 
     private bool SetUserReportVersion(string? version, bool reinitializeState)
     {
-        string? normalized = NormalizeVersion(version);
-        if (string.Equals(_userReportModVersion, normalized, StringComparison.Ordinal))
-        {
-            return false;
-        }
+        var normalized = NormalizeVersion(version);
+        if (string.Equals(UserReportModVersion, normalized, StringComparison.Ordinal)) return false;
 
-        _userReportModVersion = normalized;
+        UserReportModVersion = normalized;
         OnPropertyChanged(nameof(UserReportModVersion));
         OnPropertyChanged(nameof(CanSubmitUserReport));
 
-        if (reinitializeState)
-        {
-            InitializeUserReportState(_installedGameVersion, _userReportModVersion);
-        }
+        if (reinitializeState) InitializeUserReportState(_installedGameVersion, UserReportModVersion);
 
         return true;
     }
 
     private static string? NormalizeVersion(string? value)
     {
-        string? trimmed = value?.Trim();
+        var trimmed = value?.Trim();
         return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
     }
 
@@ -497,9 +635,9 @@ public sealed class ModListItemViewModel : ObservableObject
         ModDatabaseInfo? databaseInfo)
     {
         return latestRelease?.Version
-            ?? databaseInfo?.LatestVersion
-            ?? latestCompatibleRelease?.Version
-            ?? databaseInfo?.LatestCompatibleVersion;
+               ?? databaseInfo?.LatestVersion
+               ?? latestCompatibleRelease?.Version
+               ?? databaseInfo?.LatestCompatibleVersion;
     }
 
     private void InitializeUserReportState(string? installedGameVersion, string? modVersion)
@@ -547,15 +685,12 @@ public sealed class ModListItemViewModel : ObservableObject
             ? "Failed to load user reports. Try again later."
             : message;
 
-        if (_userReportSummary is null)
-        {
-            UserReportDisplay = "Error";
-        }
+        if (UserReportSummary is null) UserReportDisplay = "Error";
     }
 
     public void ApplyUserReportSummary(ModVersionVoteSummary summary)
     {
-        _userReportSummary = summary ?? throw new ArgumentNullException(nameof(summary));
+        UserReportSummary = summary ?? throw new ArgumentNullException(nameof(summary));
         IsUserReportLoading = false;
         UserReportHasError = false;
         UserReportDisplay = BuildUserReportDisplay(summary);
@@ -567,7 +702,7 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private void ClearUserReportSummary()
     {
-        if (_userReportSummary is null)
+        if (UserReportSummary is null)
         {
             OnPropertyChanged(nameof(UserReportSummary));
             OnPropertyChanged(nameof(UserReportCounts));
@@ -575,7 +710,7 @@ public sealed class ModListItemViewModel : ObservableObject
             return;
         }
 
-        _userReportSummary = null;
+        UserReportSummary = null;
         OnPropertyChanged(nameof(UserReportSummary));
         OnPropertyChanged(nameof(UserReportCounts));
         OnPropertyChanged(nameof(UserVoteOption));
@@ -583,14 +718,10 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private static string BuildUserReportDisplay(ModVersionVoteSummary? summary)
     {
-        if (summary is null || summary.TotalVotes == 0)
-        {
-            return "No votes";
-        }
+        if (summary is null || summary.TotalVotes == 0) return "No votes";
 
-        ModVersionVoteOption? majority = summary.GetMajorityOption();
+        var majority = summary.GetMajorityOption();
         if (majority is null)
-        {
             return string.Create(
                 8 + summary.TotalVotes.ToString(CultureInfo.CurrentCulture).Length,
                 summary.TotalVotes,
@@ -598,37 +729,34 @@ public sealed class ModListItemViewModel : ObservableObject
                 {
                     const string prefix = "Mixed (";
                     prefix.AsSpan().CopyTo(span);
-                    int offset = prefix.Length;
-                    string totalText = total.ToString(CultureInfo.CurrentCulture);
+                    var offset = prefix.Length;
+                    var totalText = total.ToString(CultureInfo.CurrentCulture);
                     totalText.AsSpan().CopyTo(span[offset..]);
                     span[offset + totalText.Length] = ')';
                 });
-        }
 
-        int count = summary.Counts.GetCount(majority.Value);
-        string displayName = majority.Value.ToDisplayString();
-        string countText = count.ToString(CultureInfo.CurrentCulture);
+        var count = summary.Counts.GetCount(majority.Value);
+        var displayName = majority.Value.ToDisplayString();
+        var countText = count.ToString(CultureInfo.CurrentCulture);
         return string.Concat(displayName, " (", countText, ")");
     }
 
     private string BuildUserReportTooltip(ModVersionVoteSummary? summary)
     {
-        string versionText = string.IsNullOrWhiteSpace(_installedGameVersion)
+        var versionText = string.IsNullOrWhiteSpace(_installedGameVersion)
             ? "this VS version"
             : string.Format(CultureInfo.CurrentCulture, "VS {0}", _installedGameVersion);
 
         if (summary is null)
-        {
             return string.Format(
                 CultureInfo.CurrentCulture,
                 "No votes recorded yet for {0}. Click to share your experience.",
                 versionText);
-        }
 
-        ModVersionVoteCounts counts = summary.Counts;
-        string countsLine = BuildCountsSummary(versionText, counts);
+        var counts = summary.Counts;
+        var countsLine = BuildCountsSummary(versionText, counts);
 
-        string commentsText = BuildNegativeCommentsText(summary, requireNegativeMajority: false);
+        var commentsText = BuildNegativeCommentsText(summary, false);
         return string.IsNullOrEmpty(commentsText)
             ? countsLine
             : string.Concat(countsLine, Environment.NewLine, Environment.NewLine, commentsText);
@@ -638,29 +766,28 @@ public sealed class ModListItemViewModel : ObservableObject
     {
         var builder = new StringBuilder();
         builder.AppendFormat(CultureInfo.CurrentCulture, "User reports for {0}:{1}", versionText, Environment.NewLine);
-        builder.AppendFormat(CultureInfo.CurrentCulture, "Fully functional ({0}){1}", counts.FullyFunctional, Environment.NewLine);
-        builder.AppendFormat(CultureInfo.CurrentCulture, "No issues noticed ({0}){1}", counts.NoIssuesSoFar, Environment.NewLine);
-        builder.AppendFormat(CultureInfo.CurrentCulture, "Some issues but works ({0}){1}", counts.SomeIssuesButWorks, Environment.NewLine);
-        builder.AppendFormat(CultureInfo.CurrentCulture, "Not functional ({0}){1}", counts.NotFunctional, Environment.NewLine);
+        builder.AppendFormat(CultureInfo.CurrentCulture, "Fully functional ({0}){1}", counts.FullyFunctional,
+            Environment.NewLine);
+        builder.AppendFormat(CultureInfo.CurrentCulture, "No issues noticed ({0}){1}", counts.NoIssuesSoFar,
+            Environment.NewLine);
+        builder.AppendFormat(CultureInfo.CurrentCulture, "Some issues but works ({0}){1}", counts.SomeIssuesButWorks,
+            Environment.NewLine);
+        builder.AppendFormat(CultureInfo.CurrentCulture, "Not functional ({0}){1}", counts.NotFunctional,
+            Environment.NewLine);
         builder.AppendFormat(CultureInfo.CurrentCulture, "Crashes/Freezes game ({0})", counts.CrashesOrFreezesGame);
         return builder.ToString();
     }
 
     private static string BuildNegativeCommentsText(ModVersionVoteSummary summary, bool requireNegativeMajority)
     {
-        if (summary is null)
-        {
-            return string.Empty;
-        }
+        if (summary is null) return string.Empty;
 
         if (requireNegativeMajority)
         {
-            ModVersionVoteOption? majority = summary.GetMajorityOption();
+            var majority = summary.GetMajorityOption();
             if (majority is not ModVersionVoteOption.NotFunctional
                 && majority is not ModVersionVoteOption.CrashesOrFreezesGame)
-            {
                 return string.Empty;
-            }
         }
 
         var builder = new StringBuilder();
@@ -671,23 +798,17 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private static void AppendCommentSection(StringBuilder builder, string heading, IReadOnlyList<string> comments)
     {
-        if (comments is null || comments.Count == 0)
-        {
-            return;
-        }
+        if (comments is null || comments.Count == 0) return;
 
         var uniqueComments = new List<string>(comments.Count);
         var countsByComment = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        foreach (string comment in comments)
+        foreach (var comment in comments)
         {
-            if (string.IsNullOrWhiteSpace(comment))
-            {
-                continue;
-            }
+            if (string.IsNullOrWhiteSpace(comment)) continue;
 
-            string trimmedComment = comment.Trim();
-            if (countsByComment.TryGetValue(trimmedComment, out int count))
+            var trimmedComment = comment.Trim();
+            if (countsByComment.TryGetValue(trimmedComment, out var count))
             {
                 countsByComment[trimmedComment] = count + 1;
             }
@@ -698,10 +819,7 @@ public sealed class ModListItemViewModel : ObservableObject
             }
         }
 
-        if (uniqueComments.Count == 0)
-        {
-            return;
-        }
+        if (uniqueComments.Count == 0) return;
 
         if (builder.Length > 0)
         {
@@ -712,7 +830,7 @@ public sealed class ModListItemViewModel : ObservableObject
         builder.Append(heading);
         builder.Append(':');
 
-        foreach (string comment in uniqueComments)
+        foreach (var comment in uniqueComments)
         {
             builder.AppendLine();
             builder.Append(" • ");
@@ -730,272 +848,55 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public void ApplyLatestReleaseUserReportSummary(ModVersionVoteSummary summary)
     {
-        if (summary is null)
-        {
-            return;
-        }
+        if (summary is null) return;
 
-        _latestReleaseUserReportSummary = summary;
-        _latestReleaseUserReportVersion = summary.ModVersion;
+        LatestReleaseUserReportSummary = summary;
+        LatestReleaseUserReportVersion = summary.ModVersion;
         LatestReleaseUserReportDisplay = BuildLatestReleaseUserReportDisplay(summary);
         LatestReleaseUserReportTooltip = BuildLatestReleaseUserReportTooltip(summary);
     }
 
     public void ClearLatestReleaseUserReport()
     {
-        if (_latestReleaseUserReportSummary is null
-            && _latestReleaseUserReportVersion is null
+        if (LatestReleaseUserReportSummary is null
+            && LatestReleaseUserReportVersion is null
             && _latestReleaseUserReportDisplay is null)
-        {
             return;
-        }
 
-        _latestReleaseUserReportSummary = null;
-        _latestReleaseUserReportVersion = null;
+        LatestReleaseUserReportSummary = null;
+        LatestReleaseUserReportVersion = null;
         LatestReleaseUserReportDisplay = null;
         LatestReleaseUserReportTooltip = null;
     }
 
     private static string? BuildLatestReleaseUserReportDisplay(ModVersionVoteSummary? summary)
     {
-        if (summary is null || summary.TotalVotes == 0)
-        {
-            return null;
-        }
+        if (summary is null || summary.TotalVotes == 0) return null;
 
-        string display = BuildUserReportDisplay(summary);
+        var display = BuildUserReportDisplay(summary);
         return string.Equals(display, "No votes", StringComparison.Ordinal) ? null : display;
     }
 
     private static string? BuildLatestReleaseUserReportTooltip(ModVersionVoteSummary? summary)
     {
-        if (summary is null || summary.TotalVotes == 0)
-        {
-            return null;
-        }
+        if (summary is null || summary.TotalVotes == 0) return null;
 
-        string versionText = string.IsNullOrWhiteSpace(summary.VintageStoryVersion)
+        var versionText = string.IsNullOrWhiteSpace(summary.VintageStoryVersion)
             ? "this Vintage Story version"
             : string.Format(CultureInfo.CurrentCulture, "Vintage Story {0}", summary.VintageStoryVersion);
 
-        string countsLine = BuildCountsSummary(versionText, summary.Counts);
-        string commentsText = BuildNegativeCommentsText(summary, requireNegativeMajority: true);
+        var countsLine = BuildCountsSummary(versionText, summary.Counts);
+        var commentsText = BuildNegativeCommentsText(summary, true);
 
         return string.IsNullOrEmpty(commentsText)
             ? countsLine
             : string.Concat(countsLine, Environment.NewLine, Environment.NewLine, commentsText);
     }
 
-    public string InstallButtonToolTip
-    {
-        get
-        {
-            if (!HasDownloadableRelease)
-            {
-                return "No downloadable releases are available.";
-            }
-
-            if (_latestRelease?.IsCompatibleWithInstalledGame == true)
-            {
-                return $"Install version {_latestRelease.Version}.";
-            }
-
-            if (_latestCompatibleRelease != null)
-            {
-                return $"Install compatible version {_latestCompatibleRelease.Version}.";
-            }
-
-            if (_latestRelease != null)
-            {
-                return $"Install version {_latestRelease.Version} (may be incompatible).";
-            }
-
-            return "No downloadable releases are available.";
-        }
-    }
-
-    public ModVersionOptionViewModel? SelectedVersionOption
-    {
-        get => _selectedVersionOption;
-        set => SetProperty(ref _selectedVersionOption, value);
-    }
-
-    public string UpdateButtonToolTip
-    {
-        get
-        {
-            if (_latestRelease is null)
-            {
-                return "No updates available.";
-            }
-
-            if (_latestRelease.IsCompatibleWithInstalledGame)
-            {
-                return $"Install version {_latestRelease.Version}.";
-            }
-
-            if (_latestCompatibleRelease != null
-                && !string.Equals(_latestRelease.Version, _latestCompatibleRelease.Version, StringComparison.OrdinalIgnoreCase))
-            {
-                return $"Latest: {_latestRelease.Version}. Compatible: {_latestCompatibleRelease.Version}.";
-            }
-
-            return $"Install version {_latestRelease.Version} (may be incompatible).";
-        }
-    }
-
-    public string DescriptionDisplay => string.IsNullOrWhiteSpace(_description) ? "No description available." : _description!;
-
-    public string? Website { get; }
-
-    public Uri? WebsiteUri { get; }
-
-    public bool HasWebsiteLink => WebsiteUri != null;
-
-    public ICommand? OpenWebsiteCommand { get; }
-
-    public ICommand? OpenModDatabasePageCommand => _openModDatabasePageCommand;
-
-    public string SourcePath { get; }
-
-    public string Location { get; }
-
-    public ModSourceKind SourceKind { get; }
-
-    public string SourceKindDisplay => SourceKind switch
-    {
-        ModSourceKind.ZipArchive => "Zip",
-        ModSourceKind.Folder => "Folder",
-        ModSourceKind.Assembly => "Assembly",
-        ModSourceKind.SourceCode => "Source",
-        _ => SourceKind.ToString()
-    };
-
-    public string? Side { get; }
-
-    public string SideDisplay
-    {
-        get
-        {
-            string? preferredSide = GetPreferredSide();
-            return string.IsNullOrWhiteSpace(preferredSide) ? "—" : preferredSide!;
-        }
-    }
-
-    public bool? RequiredOnClient { get; }
-
-    public string RequiredOnClientDisplay => RequiredOnClient.HasValue ? (RequiredOnClient.Value ? "Yes" : "No") : "—";
-
-    public bool? RequiredOnServer { get; }
-
-    public string RequiredOnServerDisplay => RequiredOnServer.HasValue ? (RequiredOnServer.Value ? "Yes" : "No") : "—";
-
-    public ImageSource? Icon { get; }
-
-    public bool HasErrors { get; }
-
-    public bool HasLoadError => !string.IsNullOrWhiteSpace(_loadError);
-
-    public bool CanToggle => !HasErrors && !HasLoadError;
-
-    public bool HasActivationError
-    {
-        get => _hasActivationError;
-        private set => SetProperty(ref _hasActivationError, value);
-    }
-
-    public string? ActivationError
-    {
-        get => _activationError;
-        private set
-        {
-            if (SetProperty(ref _activationError, value))
-            {
-                HasActivationError = !string.IsNullOrWhiteSpace(value);
-                UpdateStatusFromErrors();
-                UpdateTooltip();
-            }
-        }
-    }
-
-    public string StatusText
-    {
-        get => _statusText;
-        private set
-        {
-            if (SetProperty(ref _statusText, value))
-            {
-                OnPropertyChanged(nameof(StatusSortOrder));
-            }
-        }
-    }
-
-    public int StatusSortOrder => StatusText switch
-    {
-        "Error" => 0,
-        "Warning" => 1,
-        _ => 2
-    };
-
-    public string StatusDetails
-    {
-        get => _statusDetails;
-        private set => SetProperty(ref _statusDetails, value);
-    }
-
-    public string Tooltip
-    {
-        get => _tooltip;
-        private set => SetProperty(ref _tooltip, value);
-    }
-
-    public bool IsActive
-    {
-        get => _isActive;
-        set
-        {
-            if (_suppressState)
-            {
-                if (SetProperty(ref _isActive, value))
-                {
-                    OnPropertyChanged(nameof(ActiveSortOrder));
-                    OnPropertyChanged(nameof(CanFixDependencyIssues));
-                }
-                return;
-            }
-
-            if (_isActive == value)
-            {
-                return;
-            }
-
-            bool previous = _isActive;
-            if (!SetProperty(ref _isActive, value))
-            {
-                return;
-            }
-
-            OnPropertyChanged(nameof(ActiveSortOrder));
-            OnPropertyChanged(nameof(CanFixDependencyIssues));
-            _ = ApplyActivationChangeAsync(previous, value);
-        }
-    }
-
-    public int ActiveSortOrder => _isActive ? 0 : 1;
-
-    public bool IsSelected
-    {
-        get => _isSelected;
-        set => SetProperty(ref _isSelected, value);
-    }
-
     public void UpdateLoadError(string? loadError)
     {
-        string? normalized = string.IsNullOrWhiteSpace(loadError) ? null : loadError;
-        if (string.Equals(_loadError, normalized, StringComparison.Ordinal))
-        {
-            return;
-        }
+        var normalized = string.IsNullOrWhiteSpace(loadError) ? null : loadError;
+        if (string.Equals(_loadError, normalized, StringComparison.Ordinal)) return;
 
         _loadError = normalized;
         OnPropertyChanged(nameof(HasLoadError));
@@ -1007,59 +908,53 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public void UpdateDatabaseInfo(ModDatabaseInfo info, bool loadLogoImmediately = true)
     {
-        if (info is null)
-        {
-            return;
-        }
+        if (info is null) return;
 
-        string? previousSide = NormalizeSide(_modDatabaseSide);
-        string? updatedSide = NormalizeSide(info.Side);
+        var previousSide = NormalizeSide(_modDatabaseSide);
+        var updatedSide = NormalizeSide(info.Side);
         _modDatabaseSide = info.Side;
         if (!string.Equals(previousSide, updatedSide, StringComparison.Ordinal))
         {
             OnPropertyChanged(nameof(SideDisplay));
+            OnPropertyChanged(nameof(SideSortValue));
         }
 
-        IReadOnlyList<string> tags = info.Tags ?? Array.Empty<string>();
-        if (HasDifferentContent(_databaseTags, tags))
+        var tags = info.Tags ?? Array.Empty<string>();
+        if (HasDifferentContent(DatabaseTags, tags))
         {
-            _databaseTags = tags;
+            DatabaseTags = tags;
             OnPropertyChanged(nameof(DatabaseTags));
             OnPropertyChanged(nameof(DatabaseTagsDisplay));
         }
 
-        IReadOnlyList<string> requiredVersions = info.RequiredGameVersions ?? Array.Empty<string>();
+        var requiredVersions = info.RequiredGameVersions ?? Array.Empty<string>();
         if (HasDifferentContent(_databaseRequiredGameVersions, requiredVersions))
-        {
             _databaseRequiredGameVersions = requiredVersions;
-        }
 
-        ModReleaseInfo? latestRelease = info.LatestRelease;
-        ModReleaseInfo? latestCompatibleRelease = info.LatestCompatibleRelease;
-        IReadOnlyList<ModReleaseInfo> releases = info.Releases ?? Array.Empty<ModReleaseInfo>();
+        var latestRelease = info.LatestRelease;
+        var latestCompatibleRelease = info.LatestCompatibleRelease;
+        var releases = info.Releases ?? Array.Empty<ModReleaseInfo>();
 
         if (string.IsNullOrWhiteSpace(Version))
         {
-            string? preferredUserReportVersion = SelectPreferredUserReportVersion(
+            var preferredUserReportVersion = SelectPreferredUserReportVersion(
                 latestRelease,
                 latestCompatibleRelease,
                 info);
-            SetUserReportVersion(preferredUserReportVersion, reinitializeState: true);
+            SetUserReportVersion(preferredUserReportVersion, true);
         }
 
-        string? latestReleaseVersion = latestRelease?.Version;
-        if (!string.Equals(_latestReleaseUserReportVersion, latestReleaseVersion, StringComparison.OrdinalIgnoreCase))
-        {
+        var latestReleaseVersion = latestRelease?.Version;
+        if (!string.Equals(LatestReleaseUserReportVersion, latestReleaseVersion, StringComparison.OrdinalIgnoreCase))
             ClearLatestReleaseUserReport();
-        }
 
-        _latestRelease = latestRelease;
-        _latestCompatibleRelease = latestCompatibleRelease;
+        LatestRelease = latestRelease;
+        LatestCompatibleRelease = latestCompatibleRelease;
         _releases = releases;
 
         UpdateModDatabaseMetrics(info, releases);
 
-        int? downloads = info.Downloads;
+        var downloads = info.Downloads;
         if (_databaseDownloads != downloads)
         {
             _databaseDownloads = downloads;
@@ -1067,95 +962,98 @@ public sealed class ModListItemViewModel : ObservableObject
             OnPropertyChanged(nameof(ModDatabaseDownloadsSortKey));
         }
 
-        int? comments = info.Comments;
+        var comments = info.Comments;
         if (_databaseComments != comments)
         {
             _databaseComments = comments;
             OnPropertyChanged(nameof(CommentsDisplay));
         }
 
-        LogDebug($"UpdateDatabaseInfo invoked. AssetId='{FormatValue(info.AssetId)}', PageUrl='{FormatValue(info.ModPageUrl)}', LogoUrl='{FormatValue(info.LogoUrl)}'.");
+        LogDebug(
+            $"UpdateDatabaseInfo invoked. AssetId='{FormatValue(info.AssetId)}', PageUrl='{FormatValue(info.ModPageUrl)}', LogoUrl='{FormatValue(info.LogoUrl)}'.");
 
-        string? logoUrl = info.LogoUrl;
-        bool logoUrlChanged = !string.Equals(_modDatabaseLogoUrl, logoUrl, StringComparison.Ordinal);
+        var logoUrl = info.LogoUrl;
+        var logoUrlChanged = !string.Equals(_modDatabaseLogoUrl, logoUrl, StringComparison.Ordinal);
         if (logoUrlChanged)
         {
             _modDatabaseLogoUrl = logoUrl;
-            bool shouldCreateLogo = loadLogoImmediately && Icon is null;
+            var shouldCreateLogo = loadLogoImmediately && Icon is null;
             if (shouldCreateLogo)
             {
                 _modDatabaseLogo = CreateModDatabaseLogoImage();
-                LogDebug($"Updated database logo. New URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
+                LogDebug(
+                    $"Updated database logo. New URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
             }
             else
             {
                 if (_modDatabaseLogo is not null)
-                {
                     LogDebug("Clearing previously loaded database logo to defer image refresh.");
-                }
 
                 _modDatabaseLogo = null;
-                LogDebug($"Deferred database logo update. New URL='{FormatValue(_modDatabaseLogoUrl)}'. Logo creation skipped={!shouldCreateLogo}.");
+                LogDebug(
+                    $"Deferred database logo update. New URL='{FormatValue(_modDatabaseLogoUrl)}'. Logo creation skipped={!shouldCreateLogo}.");
             }
 
             OnPropertyChanged(nameof(ModDatabasePreviewImage));
             OnPropertyChanged(nameof(HasModDatabasePreviewImage));
         }
-        else if (loadLogoImmediately && Icon is null && _modDatabaseLogo is null && !string.IsNullOrWhiteSpace(_modDatabaseLogoUrl))
+        else if (loadLogoImmediately && Icon is null && _modDatabaseLogo is null &&
+                 !string.IsNullOrWhiteSpace(_modDatabaseLogoUrl))
         {
             _modDatabaseLogo = CreateModDatabaseLogoImage();
             OnPropertyChanged(nameof(ModDatabasePreviewImage));
             OnPropertyChanged(nameof(HasModDatabasePreviewImage));
-            LogDebug($"Loaded deferred database logo. URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
+            LogDebug(
+                $"Loaded deferred database logo. URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
         }
 
-        if (!string.Equals(_modDatabaseAssetId, info.AssetId, StringComparison.Ordinal))
+        if (!string.Equals(ModDatabaseAssetId, info.AssetId, StringComparison.Ordinal))
         {
-            _modDatabaseAssetId = info.AssetId;
+            ModDatabaseAssetId = info.AssetId;
             OnPropertyChanged(nameof(ModDatabaseAssetId));
-            LogDebug($"Database asset id updated to '{FormatValue(_modDatabaseAssetId)}'.");
+            LogDebug($"Database asset id updated to '{FormatValue(ModDatabaseAssetId)}'.");
         }
 
-        string? pageUrl = info.ModPageUrl;
-        if (!string.Equals(_modDatabasePageUrl, pageUrl, StringComparison.Ordinal))
+        var pageUrl = info.ModPageUrl;
+        if (!string.Equals(ModDatabasePageUrl, pageUrl, StringComparison.Ordinal))
         {
-            _modDatabasePageUrl = pageUrl;
+            ModDatabasePageUrl = pageUrl;
             OnPropertyChanged(nameof(ModDatabasePageUrl));
             OnPropertyChanged(nameof(ModDatabasePageUrlDisplay));
-            LogDebug($"Database page URL updated to '{FormatValue(_modDatabasePageUrl)}'.");
+            LogDebug($"Database page URL updated to '{FormatValue(ModDatabasePageUrl)}'.");
         }
 
-        Uri? pageUri = TryCreateHttpUri(pageUrl);
-        if (_modDatabasePageUri != pageUri)
+        var pageUri = TryCreateHttpUri(pageUrl);
+        if (ModDatabasePageUri != pageUri)
         {
-            _modDatabasePageUri = pageUri;
+            ModDatabasePageUri = pageUri;
             OnPropertyChanged(nameof(ModDatabasePageUri));
             OnPropertyChanged(nameof(HasModDatabasePageLink));
-            LogDebug($"Database page URI resolved to '{FormatUri(_modDatabasePageUri)}'.");
+            LogDebug($"Database page URI resolved to '{FormatUri(ModDatabasePageUri)}'.");
         }
 
         ICommand? pageCommand = null;
         if (pageUri != null)
         {
-            Uri commandUri = pageUri;
+            var commandUri = pageUri;
             pageCommand = new RelayCommand(() => LaunchUri(commandUri));
             LogDebug($"Database page command initialized for '{commandUri}'.");
         }
 
         SetProperty(ref _openModDatabasePageCommand, pageCommand, nameof(OpenModDatabasePageCommand));
 
-        string? latestDatabaseVersion = latestRelease?.Version
-            ?? info.LatestVersion
-            ?? latestCompatibleRelease?.Version
-            ?? info.LatestCompatibleVersion;
+        var latestDatabaseVersion = latestRelease?.Version
+                                    ?? info.LatestVersion
+                                    ?? latestCompatibleRelease?.Version
+                                    ?? info.LatestCompatibleVersion;
 
-        if (!string.Equals(_latestDatabaseVersion, latestDatabaseVersion, StringComparison.Ordinal))
+        if (!string.Equals(LatestDatabaseVersion, latestDatabaseVersion, StringComparison.Ordinal))
         {
-            _latestDatabaseVersion = latestDatabaseVersion;
+            LatestDatabaseVersion = latestDatabaseVersion;
             OnPropertyChanged(nameof(LatestDatabaseVersion));
             OnPropertyChanged(nameof(LatestDatabaseVersionDisplay));
             OnPropertyChanged(nameof(LatestVersionSortKey));
-            LogDebug($"Latest database version updated to '{FormatValue(_latestDatabaseVersion)}'.");
+            LogDebug($"Latest database version updated to '{FormatValue(LatestDatabaseVersion)}'.");
         }
 
         InitializeUpdateAvailability();
@@ -1179,14 +1077,23 @@ public sealed class ModListItemViewModel : ObservableObject
         UpdateTooltip();
     }
 
+    public void ClearDatabaseTags()
+    {
+        if (DatabaseTags.Count == 0) return;
+
+        DatabaseTags = Array.Empty<string>();
+        OnPropertyChanged(nameof(DatabaseTags));
+        OnPropertyChanged(nameof(DatabaseTagsDisplay));
+    }
+
     public void RefreshSkippedUpdateState()
     {
-        bool previousHasUpdate = _hasUpdate;
-        string? previousMessage = _updateMessage;
+        var previousHasUpdate = CanUpdate;
+        var previousMessage = _updateMessage;
 
         InitializeUpdateAvailability();
 
-        if (previousHasUpdate != _hasUpdate)
+        if (previousHasUpdate != CanUpdate)
         {
             OnPropertyChanged(nameof(CanUpdate));
             OnPropertyChanged(nameof(ShouldHighlightLatestVersion));
@@ -1209,41 +1116,27 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public void EnsureModDatabaseLogoLoaded()
     {
-        if (_modDatabaseLogo is not null)
-        {
-            return;
-        }
+        if (_modDatabaseLogo is not null) return;
 
-        if (string.IsNullOrWhiteSpace(_modDatabaseLogoUrl))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(_modDatabaseLogoUrl)) return;
 
         _modDatabaseLogo = CreateModDatabaseLogoImage();
         OnPropertyChanged(nameof(ModDatabasePreviewImage));
         OnPropertyChanged(nameof(HasModDatabasePreviewImage));
-        LogDebug($"Deferred database logo load complete. URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
+        LogDebug(
+            $"Deferred database logo load complete. URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
     }
 
     public async Task LoadModDatabaseLogoAsync(CancellationToken cancellationToken)
     {
-        if (_modDatabaseLogo is not null)
-        {
-            return;
-        }
+        if (_modDatabaseLogo is not null) return;
 
-        if (InternetAccessManager.IsInternetAccessDisabled)
-        {
-            return;
-        }
+        if (InternetAccessManager.IsInternetAccessDisabled) return;
 
-        string? logoUrl = _modDatabaseLogoUrl;
-        if (string.IsNullOrWhiteSpace(logoUrl))
-        {
-            return;
-        }
+        var logoUrl = _modDatabaseLogoUrl;
+        if (string.IsNullOrWhiteSpace(logoUrl)) return;
 
-        Uri? uri = TryCreateHttpUri(logoUrl);
+        var uri = TryCreateHttpUri(logoUrl);
         if (uri is null)
         {
             LogDebug($"Async database logo load skipped. Unable to resolve URI from '{FormatValue(logoUrl)}'.");
@@ -1255,14 +1148,16 @@ public sealed class ModListItemViewModel : ObservableObject
             InternetAccessManager.ThrowIfInternetAccessDisabled();
 
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-            using HttpResponseMessage response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            using var response = await HttpClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
-                LogDebug($"Async database logo load failed for '{uri}'. HTTP status {(int)response.StatusCode} ({response.StatusCode}).");
+                LogDebug(
+                    $"Async database logo load failed for '{uri}'. HTTP status {(int)response.StatusCode} ({response.StatusCode}).");
                 return;
             }
 
-            byte[] payload = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+            var payload = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
             if (payload.Length == 0)
             {
                 LogDebug($"Async database logo load returned no data for '{uri}'.");
@@ -1271,24 +1166,19 @@ public sealed class ModListItemViewModel : ObservableObject
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            ImageSource? image = CreateBitmapFromBytes(payload, uri);
-            if (image is null)
-            {
-                return;
-            }
+            var image = CreateBitmapFromBytes(payload, uri);
+            if (image is null) return;
 
             await InvokeOnDispatcherAsync(
                     () =>
                     {
-                        if (_modDatabaseLogo is not null)
-                        {
-                            return;
-                        }
+                        if (_modDatabaseLogo is not null) return;
 
                         _modDatabaseLogo = image;
                         OnPropertyChanged(nameof(ModDatabasePreviewImage));
                         OnPropertyChanged(nameof(HasModDatabasePreviewImage));
-                        LogDebug($"Async database logo load complete. URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
+                        LogDebug(
+                            $"Async database logo load complete. URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
                     },
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -1305,10 +1195,7 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public void SetIsActiveSilently(bool isActive)
     {
-        if (_isActive == isActive)
-        {
-            return;
-        }
+        if (_isActive == isActive) return;
 
         _suppressState = true;
         try
@@ -1328,11 +1215,11 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public void UpdateDependencyIssues(bool hasDependencyErrors, IReadOnlyList<ModDependencyInfo> missingDependencies)
     {
-        bool changed = false;
+        var changed = false;
 
-        if (_dependencyHasErrors != hasDependencyErrors)
+        if (DependencyHasErrors != hasDependencyErrors)
         {
-            _dependencyHasErrors = hasDependencyErrors;
+            DependencyHasErrors = hasDependencyErrors;
             OnPropertyChanged(nameof(DependencyHasErrors));
             changed = true;
         }
@@ -1341,16 +1228,14 @@ public sealed class ModListItemViewModel : ObservableObject
             ? missingDependencies.ToArray()
             : Array.Empty<ModDependencyInfo>();
 
-        if (!ReferenceEquals(_missingDependencies, normalizedMissing))
-        {
-            if (_missingDependencies.Count != normalizedMissing.Count
-                || !_missingDependencies.SequenceEqual(normalizedMissing))
+        if (!ReferenceEquals(MissingDependencies, normalizedMissing))
+            if (MissingDependencies.Count != normalizedMissing.Count
+                || !MissingDependencies.SequenceEqual(normalizedMissing))
             {
-                _missingDependencies = normalizedMissing;
+                MissingDependencies = normalizedMissing;
                 OnPropertyChanged(nameof(MissingDependencies));
                 changed = true;
             }
-        }
 
         if (changed)
         {
@@ -1419,7 +1304,7 @@ public sealed class ModListItemViewModel : ObservableObject
             StatusText = "Warning";
             StatusDetails = _versionWarningMessage!;
         }
-        else if (_hasUpdate)
+        else if (CanUpdate)
         {
             StatusText = "Update";
             StatusDetails = string.IsNullOrWhiteSpace(_updateMessage)
@@ -1435,95 +1320,77 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private void UpdateTooltip()
     {
-        string tooltipText = DisplayName;
+        var tooltipText = DisplayName;
 
         if (!string.IsNullOrWhiteSpace(_description))
-        {
             tooltipText = string.Concat(
                 tooltipText,
                 Environment.NewLine,
                 Environment.NewLine,
                 _description.Trim());
-        }
 
         if (!string.IsNullOrWhiteSpace(_versionWarningMessage))
-        {
             tooltipText = string.Concat(
                 tooltipText,
                 Environment.NewLine,
                 Environment.NewLine,
                 _versionWarningMessage);
-        }
 
-        if (_hasUpdate && !string.IsNullOrWhiteSpace(_updateMessage))
-        {
+        if (CanUpdate && !string.IsNullOrWhiteSpace(_updateMessage))
             tooltipText = string.Concat(
                 tooltipText,
                 Environment.NewLine,
                 Environment.NewLine,
                 _updateMessage);
-        }
 
         Tooltip = tooltipText;
     }
 
     internal bool MatchesSearchTokens(IReadOnlyList<string> tokens)
     {
-        if (tokens.Count == 0)
-        {
-            return true;
-        }
+        if (tokens.Count == 0) return true;
 
         foreach (var token in tokens)
-        {
             if (_searchIndex.IndexOf(token, StringComparison.OrdinalIgnoreCase) < 0)
-            {
                 return false;
-            }
-        }
 
         return true;
     }
 
     private void InitializeUpdateAvailability()
     {
-        if (_latestRelease is null)
+        if (LatestRelease is null)
         {
-            _hasUpdate = false;
+            CanUpdate = false;
             _updateMessage = null;
             return;
         }
 
-        if (!VersionStringUtility.IsCandidateVersionNewer(_latestRelease.Version, Version))
+        if (!VersionStringUtility.IsCandidateVersionNewer(LatestRelease.Version, Version))
         {
-            _hasUpdate = false;
+            CanUpdate = false;
             _updateMessage = null;
             return;
         }
 
-        if (_shouldSkipVersion?.Invoke(ModId, _latestRelease.Version) == true)
+        if (_shouldSkipVersion?.Invoke(ModId, LatestRelease.Version) == true)
         {
-            _hasUpdate = false;
+            CanUpdate = false;
             _updateMessage = null;
             return;
         }
 
-        _hasUpdate = true;
-        _updateMessage = BuildUpdateMessage(_latestRelease);
+        CanUpdate = true;
+        _updateMessage = BuildUpdateMessage(LatestRelease);
     }
 
     private string BuildUpdateMessage(ModReleaseInfo release)
     {
-        if (release.IsCompatibleWithInstalledGame)
-        {
-            return $"Update available: {release.Version}";
-        }
+        if (release.IsCompatibleWithInstalledGame) return $"Update available: {release.Version}";
 
-        if (_latestCompatibleRelease != null
-            && !string.Equals(_latestCompatibleRelease.Version, release.Version, StringComparison.OrdinalIgnoreCase))
-        {
-            return $"Update available: {release.Version} (latest compatible: {_latestCompatibleRelease.Version})";
-        }
+        if (LatestCompatibleRelease != null
+            && !string.Equals(LatestCompatibleRelease.Version, release.Version, StringComparison.OrdinalIgnoreCase))
+            return $"Update available: {release.Version} (latest compatible: {LatestCompatibleRelease.Version})";
 
         return $"Update available: {release.Version} (may be incompatible with your Vintage Story version)";
     }
@@ -1532,88 +1399,68 @@ public sealed class ModListItemViewModel : ObservableObject
     {
         if (_releases.Count == 0 && string.IsNullOrWhiteSpace(Version))
         {
-            _versionOptions = Array.Empty<ModVersionOptionViewModel>();
+            VersionOptions = Array.Empty<ModVersionOptionViewModel>();
             OnPropertyChanged(nameof(VersionOptions));
             OnPropertyChanged(nameof(HasVersionOptions));
             SetProperty(ref _selectedVersionOption, null);
             return;
         }
 
-        string? normalizedInstalled = VersionStringUtility.Normalize(Version);
+        var normalizedInstalled = VersionStringUtility.Normalize(Version);
         var options = new List<ModVersionOptionViewModel>(_releases.Count + 1);
-        bool hasInstalled = false;
+        var hasInstalled = false;
 
-        foreach (ModReleaseInfo release in _releases)
+        foreach (var release in _releases)
         {
-            bool isInstalled = IsReleaseInstalled(release, Version, normalizedInstalled);
-            if (isInstalled)
-            {
-                hasInstalled = true;
-            }
+            var isInstalled = IsReleaseInstalled(release, Version, normalizedInstalled);
+            if (isInstalled) hasInstalled = true;
 
             options.Add(ModVersionOptionViewModel.FromRelease(release, isInstalled));
         }
 
         if (!hasInstalled && !string.IsNullOrWhiteSpace(Version))
-        {
             options.Insert(0, ModVersionOptionViewModel.FromInstalledVersion(Version!, normalizedInstalled));
-        }
 
         IReadOnlyList<ModVersionOptionViewModel> finalized = options.Count == 0
             ? Array.Empty<ModVersionOptionViewModel>()
             : options.AsReadOnly();
 
-        _versionOptions = finalized;
+        VersionOptions = finalized;
         OnPropertyChanged(nameof(VersionOptions));
         OnPropertyChanged(nameof(HasVersionOptions));
 
-        ModVersionOptionViewModel? selected = finalized.FirstOrDefault(option => option.IsInstalled)
-            ?? finalized.FirstOrDefault();
+        var selected = finalized.FirstOrDefault(option => option.IsInstalled)
+                       ?? finalized.FirstOrDefault();
 
         SetProperty(ref _selectedVersionOption, selected);
     }
 
     private void UpdateNewerReleaseChangelogs()
     {
-        IReadOnlyList<ReleaseChangelog> updated = BuildNewerReleaseChangelogList();
-        if (ReferenceEquals(_newerReleaseChangelogs, updated))
-        {
-            return;
-        }
+        var updated = BuildNewerReleaseChangelogList();
+        if (ReferenceEquals(NewerReleaseChangelogs, updated)) return;
 
-        _newerReleaseChangelogs = updated;
+        NewerReleaseChangelogs = updated;
         OnPropertyChanged(nameof(NewerReleaseChangelogs));
         OnPropertyChanged(nameof(HasNewerReleaseChangelogs));
     }
 
     private IReadOnlyList<ReleaseChangelog> BuildNewerReleaseChangelogList()
     {
-        if (_releases.Count == 0)
-        {
-            return Array.Empty<ReleaseChangelog>();
-        }
+        if (_releases.Count == 0) return Array.Empty<ReleaseChangelog>();
 
-        int installedIndex = FindInstalledReleaseIndex();
-        int endExclusive = installedIndex >= 0 ? installedIndex : _releases.Count;
-        if (endExclusive <= 0)
-        {
-            return Array.Empty<ReleaseChangelog>();
-        }
+        var installedIndex = FindInstalledReleaseIndex();
+        var endExclusive = installedIndex >= 0 ? installedIndex : _releases.Count;
+        if (endExclusive <= 0) return Array.Empty<ReleaseChangelog>();
 
         var results = new List<ReleaseChangelog>();
-        for (int i = 0; i < endExclusive; i++)
+        for (var i = 0; i < endExclusive; i++)
         {
-            ModReleaseInfo release = _releases[i];
-            if (string.IsNullOrWhiteSpace(release.Changelog))
-            {
-                continue;
-            }
+            var release = _releases[i];
+            if (string.IsNullOrWhiteSpace(release.Changelog)) continue;
 
-            string trimmed = release.Changelog.Trim();
-            if (trimmed.Length == 0)
-            {
-                continue;
-            }
+            var trimmed = release.Changelog.Trim();
+            if (trimmed.Length == 0) continue;
 
             results.Add(new ReleaseChangelog(release.Version, trimmed));
         }
@@ -1623,88 +1470,68 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private int FindInstalledReleaseIndex()
     {
-        if (_releases.Count == 0 || string.IsNullOrWhiteSpace(Version))
-        {
-            return -1;
-        }
+        if (_releases.Count == 0 || string.IsNullOrWhiteSpace(Version)) return -1;
 
-        string trimmedInstalled = Version!.Trim();
-        string? normalizedInstalled = VersionStringUtility.Normalize(Version);
+        var trimmedInstalled = Version!.Trim();
+        var normalizedInstalled = VersionStringUtility.Normalize(Version);
 
-        for (int i = 0; i < _releases.Count; i++)
+        for (var i = 0; i < _releases.Count; i++)
         {
-            ModReleaseInfo release = _releases[i];
+            var release = _releases[i];
             if (!string.IsNullOrWhiteSpace(release.Version)
                 && string.Equals(release.Version.Trim(), trimmedInstalled, StringComparison.OrdinalIgnoreCase))
-            {
                 return i;
-            }
 
             if (normalizedInstalled != null
                 && !string.IsNullOrWhiteSpace(release.NormalizedVersion)
                 && string.Equals(release.NormalizedVersion, normalizedInstalled, StringComparison.OrdinalIgnoreCase))
-            {
                 return i;
-            }
         }
 
         return -1;
     }
 
-    private static bool IsReleaseInstalled(ModReleaseInfo release, string? installedVersion, string? normalizedInstalled)
+    private static bool IsReleaseInstalled(ModReleaseInfo release, string? installedVersion,
+        string? normalizedInstalled)
     {
-        if (string.IsNullOrWhiteSpace(installedVersion))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(installedVersion)) return false;
 
-        string trimmedInstalled = installedVersion.Trim();
+        var trimmedInstalled = installedVersion.Trim();
         if (!string.IsNullOrWhiteSpace(release.Version)
             && string.Equals(release.Version.Trim(), trimmedInstalled, StringComparison.OrdinalIgnoreCase))
-        {
             return true;
-        }
 
         if (normalizedInstalled != null && !string.IsNullOrWhiteSpace(release.NormalizedVersion))
-        {
             return string.Equals(release.NormalizedVersion, normalizedInstalled, StringComparison.OrdinalIgnoreCase);
-        }
 
         return false;
     }
 
-    private static bool DoesReleaseMatchVersion(ModReleaseInfo release, string trimmedVersion, string? normalizedVersion)
+    private static bool DoesReleaseMatchVersion(ModReleaseInfo release, string trimmedVersion,
+        string? normalizedVersion)
     {
         if (!string.IsNullOrWhiteSpace(release.Version)
             && string.Equals(release.Version.Trim(), trimmedVersion, StringComparison.OrdinalIgnoreCase))
-        {
             return true;
-        }
 
         if (!string.IsNullOrWhiteSpace(release.NormalizedVersion)
             && normalizedVersion != null
             && string.Equals(release.NormalizedVersion, normalizedVersion, StringComparison.OrdinalIgnoreCase))
-        {
             return true;
-        }
 
         return false;
     }
 
     private void InitializeVersionWarning(string? installedGameVersion)
     {
-        string? normalizedInstalled = VersionStringUtility.Normalize(installedGameVersion);
-        IReadOnlyList<(string Normalized, string Original)> requiredVersions = BuildRequiredVersionCandidates();
+        var normalizedInstalled = VersionStringUtility.Normalize(installedGameVersion);
+        var requiredVersions = BuildRequiredVersionCandidates();
 
-        bool requireExact = _requireExactVersionMatch?.Invoke() ?? false;
-        if (TryCreateVersionWarning(requiredVersions, normalizedInstalled, requireExact, out string? message))
-        {
+        var requireExact = _requireExactVersionMatch?.Invoke() ?? false;
+        if (TryCreateVersionWarning(requiredVersions, normalizedInstalled, requireExact, out var message))
             _versionWarningMessage = message;
-        }
         else
-        {
             _versionWarningMessage = null;
-        }
     }
 
     private IReadOnlyList<(string Normalized, string Original)> BuildRequiredVersionCandidates()
@@ -1712,31 +1539,23 @@ public sealed class ModListItemViewModel : ObservableObject
         if (_databaseRequiredGameVersions.Count > 0)
         {
             var normalized = new List<(string Normalized, string Original)>(_databaseRequiredGameVersions.Count);
-            foreach (string tag in _databaseRequiredGameVersions)
+            foreach (var tag in _databaseRequiredGameVersions)
             {
-                string? normalizedTag = VersionStringUtility.Normalize(tag);
-                if (!string.IsNullOrWhiteSpace(normalizedTag))
-                {
-                    normalized.Add((normalizedTag!, tag));
-                }
+                var normalizedTag = VersionStringUtility.Normalize(tag);
+                if (!string.IsNullOrWhiteSpace(normalizedTag)) normalized.Add((normalizedTag!, tag));
             }
 
-            if (normalized.Count > 0)
-            {
-                return normalized;
-            }
+            if (normalized.Count > 0) return normalized;
         }
 
         if (_gameDependency is { Version: not null } dependency)
         {
-            string? normalizedDependency = VersionStringUtility.Normalize(dependency.Version);
+            var normalizedDependency = VersionStringUtility.Normalize(dependency.Version);
             if (!string.IsNullOrWhiteSpace(normalizedDependency))
-            {
-                return new (string, string)[]
+                return new[]
                 {
                     (normalizedDependency!, dependency.Version!)
                 };
-            }
         }
 
         return Array.Empty<(string, string)>();
@@ -1744,40 +1563,27 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private string AppendWarningText(string baseText)
     {
-        if (string.IsNullOrWhiteSpace(_versionWarningMessage))
-        {
-            return baseText;
-        }
+        if (string.IsNullOrWhiteSpace(_versionWarningMessage)) return baseText;
 
-        if (string.IsNullOrWhiteSpace(baseText))
-        {
-            return _versionWarningMessage!;
-        }
+        if (string.IsNullOrWhiteSpace(baseText)) return _versionWarningMessage!;
 
         return string.Concat(baseText, Environment.NewLine, Environment.NewLine, _versionWarningMessage);
     }
 
-    private static bool TryCreateVersionWarning(IReadOnlyCollection<(string Normalized, string Original)> requiredVersions, string? installedVersion, bool requireExact, out string? message)
+    private static bool TryCreateVersionWarning(
+        IReadOnlyCollection<(string Normalized, string Original)> requiredVersions, string? installedVersion,
+        bool requireExact, out string? message)
     {
         message = null;
 
-        if (requiredVersions.Count == 0 || string.IsNullOrWhiteSpace(installedVersion))
-        {
-            return false;
-        }
+        if (requiredVersions.Count == 0 || string.IsNullOrWhiteSpace(installedVersion)) return false;
 
-        if (!TryGetMajorMinor(installedVersion!, out int installedMajor, out int installedMinor))
-        {
-            return false;
-        }
+        if (!TryGetMajorMinor(installedVersion!, out var installedMajor, out var installedMinor)) return false;
 
-        bool hasComparable = false;
-        foreach ((string normalized, _) in requiredVersions)
+        var hasComparable = false;
+        foreach (var (normalized, _) in requiredVersions)
         {
-            if (!TryGetMajorMinor(normalized, out int requiredMajor, out int requiredMinor))
-            {
-                continue;
-            }
+            if (!TryGetMajorMinor(normalized, out var requiredMajor, out var requiredMinor)) continue;
 
             hasComparable = true;
 
@@ -1785,62 +1591,26 @@ public sealed class ModListItemViewModel : ObservableObject
             {
                 // Exact mode: Strict - compare first three version parts (major.minor.patch)
                 // Return false (no warning) if first 3 parts match exactly
-                if (VersionStringUtility.MatchesFirstThreeDigits(normalized, installedVersion))
-                {
-                    return false;
-                }
+                if (VersionStringUtility.MatchesFirstThreeDigits(normalized, installedVersion)) return false;
             }
             else
             {
                 // Relaxed mode (default): Lenient - only compare major.minor (first two parts)
                 // Return false (no warning) if major.minor match, ignoring patch version differences
-                if (requiredMajor == installedMajor && requiredMinor == installedMinor)
-                {
-                    return false;
-                }
+                if (requiredMajor == installedMajor && requiredMinor == installedMinor) return false;
             }
         }
 
-        if (!hasComparable)
-        {
-            return false;
-        }
+        if (!hasComparable) return false;
 
-        string displayVersions = FormatRequiredVersions(requiredVersions.Select(pair => pair.Original));
-        message = $"The mod asks for Vintage Story version {displayVersions} but you have {installedVersion}, it might be incompatible";
+        message = "This mod isn't marked as compatible with your Vintage Story version, but might work anyway. " +
+                  "Check user reports column or read the comments on the Mod DB page for more info.";
         return true;
-    }
-
-    private static string FormatRequiredVersions(IEnumerable<string> versions)
-    {
-        string[] filtered = versions
-            .Where(version => !string.IsNullOrWhiteSpace(version))
-            .Select(version => version.Trim())
-            .Where(version => version.Length > 0)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (filtered.Length == 0)
-        {
-            return "—";
-        }
-
-        if (filtered.Length == 1)
-        {
-            return filtered[0];
-        }
-
-        if (filtered.Length == 2)
-        {
-            return string.Join(" or ", filtered);
-        }
-
-        return string.Join(", ", filtered.Take(filtered.Length - 1)) + " or " + filtered[^1];
     }
 
     private void UpdateModDatabaseMetrics(ModDatabaseInfo info, IReadOnlyList<ModReleaseInfo> releases)
     {
-        int? recentDownloads = info?.DownloadsLastThirtyDays ?? CalculateDownloadsLastThirtyDaysFromReleases(releases);
+        var recentDownloads = info?.DownloadsLastThirtyDays ?? CalculateDownloadsLastThirtyDaysFromReleases(releases);
         if (_databaseRecentDownloads != recentDownloads)
         {
             _databaseRecentDownloads = recentDownloads;
@@ -1848,14 +1618,14 @@ public sealed class ModListItemViewModel : ObservableObject
             OnPropertyChanged(nameof(ModDatabaseRecentDownloadsSortKey));
         }
 
-        int? tenDayDownloads = info?.DownloadsLastTenDays ?? CalculateDownloadsLastTenDaysFromReleases(releases);
+        var tenDayDownloads = info?.DownloadsLastTenDays ?? CalculateDownloadsLastTenDaysFromReleases(releases);
         if (_databaseTenDayDownloads != tenDayDownloads)
         {
             _databaseTenDayDownloads = tenDayDownloads;
             OnPropertyChanged(nameof(TenDayDownloadsDisplay));
         }
 
-        DateTime? lastUpdated = DetermineLastUpdated(info, releases);
+        var lastUpdated = DetermineLastUpdated(info, releases);
         if (_modDatabaseLastUpdatedUtc != lastUpdated)
         {
             _modDatabaseLastUpdatedUtc = lastUpdated;
@@ -1875,21 +1645,15 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private static int? CalculateRecentDownloadsFromReleases(IReadOnlyList<ModReleaseInfo> releases, int days)
     {
-        if (releases.Count == 0)
-        {
-            return null;
-        }
+        if (releases.Count == 0) return null;
 
-        DateTime threshold = DateTime.UtcNow.AddDays(-days);
-        int total = 0;
-        bool hasData = false;
+        var threshold = DateTime.UtcNow.AddDays(-days);
+        var total = 0;
+        var hasData = false;
 
         foreach (var release in releases)
         {
-            if (release?.CreatedUtc is not { } createdUtc || createdUtc < threshold)
-            {
-                continue;
-            }
+            if (release?.CreatedUtc is not { } createdUtc || createdUtc < threshold) continue;
 
             if (release.Downloads.HasValue)
             {
@@ -1903,10 +1667,7 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private static DateTime? DetermineLastUpdated(ModDatabaseInfo? info, IReadOnlyList<ModReleaseInfo> releases)
     {
-        if (info?.LastReleasedUtc is DateTime lastReleased)
-        {
-            return lastReleased;
-        }
+        if (info?.LastReleasedUtc is DateTime lastReleased) return lastReleased;
 
         return DetermineLastUpdatedFromReleases(releases);
     }
@@ -1917,15 +1678,9 @@ public sealed class ModListItemViewModel : ObservableObject
 
         foreach (var release in releases)
         {
-            if (release?.CreatedUtc is not { } createdUtc)
-            {
-                continue;
-            }
+            if (release?.CreatedUtc is not { } createdUtc) continue;
 
-            if (!latest.HasValue || createdUtc > latest.Value)
-            {
-                latest = createdUtc;
-            }
+            if (!latest.HasValue || createdUtc > latest.Value) latest = createdUtc;
         }
 
         return latest;
@@ -1936,23 +1691,14 @@ public sealed class ModListItemViewModel : ObservableObject
         major = 0;
         minor = 0;
 
-        string[] parts = version.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length == 0)
-        {
-            return false;
-        }
+        var parts = version.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0) return false;
 
-        if (!int.TryParse(parts[0], out major))
-        {
-            return false;
-        }
+        if (!int.TryParse(parts[0], out major)) return false;
 
         if (parts.Length > 1)
         {
-            if (!int.TryParse(parts[1], out minor))
-            {
-                return false;
-            }
+            if (!int.TryParse(parts[1], out minor)) return false;
         }
         else
         {
@@ -1990,13 +1736,13 @@ public sealed class ModListItemViewModel : ObservableObject
         AppendText(builder, ModDatabaseAssetId);
         AppendText(builder, LatestDatabaseVersion);
         AppendText(builder, LatestDatabaseVersionDisplay);
-        AppendText(builder, _latestRelease?.Version);
-        AppendText(builder, _latestCompatibleRelease?.Version);
-        AppendCollection(builder, _databaseTags);
+        AppendText(builder, LatestRelease?.Version);
+        AppendText(builder, LatestCompatibleRelease?.Version);
+        AppendCollection(builder, DatabaseTags);
         AppendCollection(builder, _databaseRequiredGameVersions);
         AppendCollection(builder, _authors);
         AppendCollection(builder, _contributors);
-        AppendDependencies(builder, _dependencies);
+        AppendDependencies(builder, Dependencies);
         AppendReleases(builder, _releases);
 
         return builder.ToString();
@@ -2004,87 +1750,57 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private static void AppendText(StringBuilder builder, string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(value)) return;
 
         AppendSegment(builder, value);
 
-        string normalized = NormalizeSearchText(value);
+        var normalized = NormalizeSearchText(value);
         if (!string.IsNullOrEmpty(normalized) && !string.Equals(normalized, value, StringComparison.Ordinal))
-        {
             AppendSegment(builder, normalized);
-        }
     }
 
     private static void AppendCollection(StringBuilder builder, IEnumerable<string> values)
     {
-        foreach (var value in values)
-        {
-            AppendText(builder, value);
-        }
+        foreach (var value in values) AppendText(builder, value);
     }
 
     private static void AppendSegment(StringBuilder builder, string value)
     {
-        if (builder.Length > 0)
-        {
-            builder.Append(' ');
-        }
+        if (builder.Length > 0) builder.Append(' ');
 
         builder.Append(value);
     }
 
     private static bool HasDifferentContent<T>(IReadOnlyList<T> current, IReadOnlyList<T> updated)
     {
-        if (ReferenceEquals(current, updated))
-        {
-            return false;
-        }
+        if (ReferenceEquals(current, updated)) return false;
 
-        if (current.Count != updated.Count)
-        {
-            return true;
-        }
+        if (current.Count != updated.Count) return true;
 
-        EqualityComparer<T> comparer = EqualityComparer<T>.Default;
-        for (int i = 0; i < current.Count; i++)
-        {
+        var comparer = EqualityComparer<T>.Default;
+        for (var i = 0; i < current.Count; i++)
             if (!comparer.Equals(current[i], updated[i]))
-            {
                 return true;
-            }
-        }
 
         return false;
     }
 
     private string? GetPreferredSide()
     {
-        string? databaseSide = NormalizeSide(_modDatabaseSide);
-        if (!string.IsNullOrWhiteSpace(databaseSide))
-        {
-            return databaseSide;
-        }
+        var databaseSide = NormalizeSide(_modDatabaseSide);
+        if (!string.IsNullOrWhiteSpace(databaseSide)) return databaseSide;
 
         return NormalizeSide(Side);
     }
 
     private static string? NormalizeSide(string? side)
     {
-        if (string.IsNullOrWhiteSpace(side))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(side)) return null;
 
-        string trimmed = side.Trim();
-        if (trimmed.Length == 0)
-        {
-            return null;
-        }
+        var trimmed = side.Trim();
+        if (trimmed.Length == 0) return null;
 
-        string lower = trimmed.ToLowerInvariant();
+        var lower = trimmed.ToLowerInvariant();
         return lower switch
         {
             "both" => "both",
@@ -2095,31 +1811,36 @@ public sealed class ModListItemViewModel : ObservableObject
         };
     }
 
+    private static string? GetCapitalizedSide(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0) return null;
+
+        if (trimmed.Length == 1) return char.ToUpperInvariant(trimmed[0]).ToString(CultureInfo.InvariantCulture);
+
+        var firstCharacter = char.ToUpperInvariant(trimmed[0]).ToString(CultureInfo.InvariantCulture);
+        return string.Concat(firstCharacter, trimmed.Substring(1));
+    }
+
     private static string NormalizeSearchText(string value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return string.Empty;
-        }
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
 
-        string normalized = value.Normalize(NormalizationForm.FormD);
+        var normalized = value.Normalize(NormalizationForm.FormD);
         var builder = new StringBuilder(normalized.Length);
 
-        foreach (char character in normalized)
+        foreach (var character in normalized)
         {
-            UnicodeCategory category = CharUnicodeInfo.GetUnicodeCategory(character);
+            var category = CharUnicodeInfo.GetUnicodeCategory(character);
 
             if (category == UnicodeCategory.NonSpacingMark
                 || category == UnicodeCategory.SpacingCombiningMark
                 || category == UnicodeCategory.EnclosingMark)
-            {
                 continue;
-            }
 
-            if (char.IsLetterOrDigit(character))
-            {
-                builder.Append(character);
-            }
+            if (char.IsLetterOrDigit(character)) builder.Append(character);
         }
 
         return builder.ToString();
@@ -2146,27 +1867,21 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private static Uri? TryCreateHttpUri(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(value)) return null;
 
-        if (Uri.TryCreate(value, UriKind.Absolute, out Uri? absolute) && IsSupportedScheme(absolute))
-        {
-            return absolute;
-        }
+        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute) && IsSupportedScheme(absolute)) return absolute;
 
         if (Uri.TryCreate($"https://{value}", UriKind.Absolute, out absolute) && IsSupportedScheme(absolute))
-        {
             return absolute;
-        }
 
         return null;
     }
 
-    private static bool IsSupportedScheme(Uri uri) =>
-        string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+    private static bool IsSupportedScheme(Uri uri)
+    {
+        return string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static void LaunchUri(Uri uri)
     {
@@ -2196,14 +1911,14 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private ImageSource? CreateModDatabaseLogoImage()
     {
-        return CreateImageFromUri(_modDatabaseLogoUrl, "Mod database logo", enableLogging: false);
+        return CreateImageFromUri(_modDatabaseLogoUrl, "Mod database logo", false);
     }
 
     private ImageSource? CreateBitmapFromBytes(byte[] payload, Uri sourceUri)
     {
         try
         {
-            using var stream = new MemoryStream(payload, writable: false);
+            using var stream = new MemoryStream(payload, false);
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
@@ -2222,38 +1937,26 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private ImageSource? CreateImageFromUri(string? url, string context, bool enableLogging = true)
     {
-        string formattedUrl = FormatValue(url);
-        if (enableLogging)
-        {
-            LogDebug($"{context}: Attempting to create image from URL {formattedUrl}.");
-        }
+        var formattedUrl = FormatValue(url);
+        if (enableLogging) LogDebug($"{context}: Attempting to create image from URL {formattedUrl}.");
 
-        Uri? uri = TryCreateHttpUri(url);
+        var uri = TryCreateHttpUri(url);
         if (uri == null)
         {
-            if (enableLogging)
-            {
-                LogDebug($"{context}: Unable to resolve absolute URI from {formattedUrl}.");
-            }
+            if (enableLogging) LogDebug($"{context}: Unable to resolve absolute URI from {formattedUrl}.");
             return null;
         }
 
-        if (enableLogging)
-        {
-            LogDebug($"{context}: Resolved URI '{uri}'.");
-        }
+        if (enableLogging) LogDebug($"{context}: Resolved URI '{uri}'.");
 
         if (InternetAccessManager.IsInternetAccessDisabled)
         {
-            if (enableLogging)
-            {
-                LogDebug($"{context}: Skipping image load because internet access is disabled.");
-            }
+            if (enableLogging) LogDebug($"{context}: Skipping image load because internet access is disabled.");
 
             return null;
         }
 
-        ImageSource? image = CreateImageSafely(
+        var image = CreateImageSafely(
             () =>
             {
                 var bitmap = new BitmapImage();
@@ -2269,18 +1972,16 @@ public sealed class ModListItemViewModel : ObservableObject
             enableLogging);
 
         if (enableLogging)
-        {
             LogDebug(image is null
                 ? $"{context}: Failed to load image from '{uri}'."
                 : $"{context}: Successfully loaded image from '{uri}'.");
-        }
 
         return image;
     }
 
     private ImageSource? CreateImage(byte[]? bytes, string context)
     {
-        int length = bytes?.Length ?? 0;
+        var length = bytes?.Length ?? 0;
         LogDebug($"{context}: Received {length} byte(s) for image creation.");
         if (bytes == null || length == 0)
         {
@@ -2288,8 +1989,8 @@ public sealed class ModListItemViewModel : ObservableObject
             return null;
         }
 
-        byte[] buffer = bytes;
-        ImageSource? image = CreateImageSafely(
+        var buffer = bytes;
+        var image = CreateImageSafely(
             () =>
             {
                 using MemoryStream stream = new(buffer);
@@ -2312,58 +2013,42 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private ImageSource? CreateImageSafely(Func<ImageSource?> factory, string context, bool enableLogging = true)
     {
-        if (System.Windows.Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
-        {
+        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
             try
             {
+                if (enableLogging) LogDebug($"{context}: Invoking image creation on dispatcher thread.");
+                var result = dispatcher.Invoke(factory);
                 if (enableLogging)
-                {
-                    LogDebug($"{context}: Invoking image creation on dispatcher thread.");
-                }
-                ImageSource? result = dispatcher.Invoke(factory);
-                if (enableLogging)
-                {
-                    LogDebug($"{context}: Dispatcher invocation completed with result {(result is null ? "null" : "available")}.");
-                }
+                    LogDebug(
+                        $"{context}: Dispatcher invocation completed with result {(result is null ? "null" : "available")}.");
                 return result;
             }
             catch (Exception ex)
             {
-                if (enableLogging)
-                {
-                    LogDebug($"{context}: Exception during dispatcher invocation: {ex.Message}.");
-                }
+                if (enableLogging) LogDebug($"{context}: Exception during dispatcher invocation: {ex.Message}.");
                 return null;
             }
-        }
 
         try
         {
-            ImageSource? result = factory();
+            var result = factory();
             if (enableLogging)
-            {
-                LogDebug($"{context}: Image creation completed on current thread with result {(result is null ? "null" : "available")}.");
-            }
+                LogDebug(
+                    $"{context}: Image creation completed on current thread with result {(result is null ? "null" : "available")}.");
             return result;
         }
         catch (Exception ex)
         {
-            if (enableLogging)
-            {
-                LogDebug($"{context}: Exception during image creation: {ex.Message}.");
-            }
+            if (enableLogging) LogDebug($"{context}: Exception during image creation: {ex.Message}.");
             return null;
         }
     }
 
     private static Task InvokeOnDispatcherAsync(Action action, CancellationToken cancellationToken)
     {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return Task.CompletedTask;
-        }
+        if (cancellationToken.IsCancellationRequested) return Task.CompletedTask;
 
-        if (System.Windows.Application.Current?.Dispatcher is { } dispatcher)
+        if (Application.Current?.Dispatcher is { } dispatcher)
         {
             if (dispatcher.CheckAccess())
             {
@@ -2385,15 +2070,9 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private static void TryFreezeImageSource(ImageSource image, string context, Action<string>? log)
     {
-        if (image is not Freezable freezable)
-        {
-            return;
-        }
+        if (image is not Freezable freezable) return;
 
-        if (freezable.IsFrozen)
-        {
-            return;
-        }
+        if (freezable.IsFrozen) return;
 
         if (!freezable.CanFreeze)
         {
@@ -2413,15 +2092,9 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private static string FormatValue(string? value)
     {
-        if (value is null)
-        {
-            return "<null>";
-        }
+        if (value is null) return "<null>";
 
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return "<empty>";
-        }
+        if (string.IsNullOrWhiteSpace(value)) return "<empty>";
 
         return value;
     }
@@ -2430,5 +2103,6 @@ public sealed class ModListItemViewModel : ObservableObject
     {
         return uri?.AbsoluteUri ?? "<null>";
     }
-}
 
+    public sealed record ReleaseChangelog(string Version, string Changelog);
+}

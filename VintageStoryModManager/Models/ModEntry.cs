@@ -1,16 +1,15 @@
-using System;
-using System.Collections.Generic;
-
 namespace VintageStoryModManager.Models;
 
 /// <summary>
-/// Represents the metadata for an installed mod along with its source location.
+///     Represents the metadata for an installed mod along with its source location.
 /// </summary>
 public sealed class ModEntry
 {
     public required string ModId { get; init; }
 
     public required string Name { get; init; }
+
+    public string? ManifestName { get; init; }
 
     public string? Version { get; init; }
 
@@ -61,7 +60,10 @@ public sealed class ModEntry
         DatabaseInfo = info;
     }
 
-    public override string ToString() => $"{Name} ({ModId})";
+    public override string ToString()
+    {
+        return $"{Name} ({ModId})";
+    }
 }
 
 public enum ModSourceKind

@@ -1,5 +1,3 @@
-using System;
-
 namespace VintageStoryModManager.Views.Dialogs;
 
 public sealed class ExperimentalModDebugLogLine
@@ -16,7 +14,8 @@ public sealed class ExperimentalModDebugLogLine
         "missing"
     };
 
-    private ExperimentalModDebugLogLine(string text, bool isHighlighted, string? modName = null, string? filePath = null, int lineNumber = 0)
+    private ExperimentalModDebugLogLine(string text, bool isHighlighted, string? modName = null,
+        string? filePath = null, int lineNumber = 0)
     {
         Text = text;
         IsHighlighted = isHighlighted;
@@ -35,19 +34,21 @@ public sealed class ExperimentalModDebugLogLine
 
     public int LineNumber { get; }
 
-    public static ExperimentalModDebugLogLine FromLogEntry(string rawText, string? modName = null, string? filePath = null, int lineNumber = 0)
+    public static ExperimentalModDebugLogLine FromLogEntry(string rawText, string? modName = null,
+        string? filePath = null, int lineNumber = 0)
     {
         ArgumentNullException.ThrowIfNull(rawText);
 
-        string text = rawText.Length > MaxLogLineLength
+        var text = rawText.Length > MaxLogLineLength
             ? string.Concat(rawText.AsSpan(0, MaxLogLineLength), "... (log line too long to show)")
             : rawText;
 
-        bool isHighlighted = ContainsHighlightKeyword(rawText);
+        var isHighlighted = ContainsHighlightKeyword(rawText);
         return new ExperimentalModDebugLogLine(text, isHighlighted, modName, filePath, lineNumber);
     }
 
-    public static ExperimentalModDebugLogLine FromPlainText(string text, string? modName = null, string? filePath = null, int lineNumber = 0)
+    public static ExperimentalModDebugLogLine FromPlainText(string text, string? modName = null,
+        string? filePath = null, int lineNumber = 0)
     {
         ArgumentNullException.ThrowIfNull(text);
         return new ExperimentalModDebugLogLine(text, false, modName, filePath, lineNumber);
@@ -55,13 +56,9 @@ public sealed class ExperimentalModDebugLogLine
 
     private static bool ContainsHighlightKeyword(string text)
     {
-        foreach (string keyword in HighlightKeywords)
-        {
+        foreach (var keyword in HighlightKeywords)
             if (text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-            {
                 return true;
-            }
-        }
 
         return false;
     }

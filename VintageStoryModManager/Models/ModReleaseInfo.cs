@@ -1,10 +1,7 @@
-using System;
-using System.Collections.Generic;
-
 namespace VintageStoryModManager.Models;
 
 /// <summary>
-/// Represents a downloadable release of a mod from the official mod database.
+///     Represents a downloadable release of a mod from the official mod database.
 /// </summary>
 public sealed class ModReleaseInfo
 {
@@ -26,4 +23,3 @@ public sealed class ModReleaseInfo
 
     public DateTime? CreatedUtc { get; init; }
 }
-

@@ -1,25 +1,23 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 using VintageStoryModManager.Services;
+using VintageStoryModManager.Views.Dialogs;
+using Application = System.Windows.Application;
 using WpfMessageBox = VintageStoryModManager.Services.ModManagerMessageBox;
 using Color = System.Windows.Media.Color;
-using VintageStoryModManager.Views.Dialogs;
 
 namespace VintageStoryModManager;
 
-public partial class App : System.Windows.Application
+public partial class App : Application
 {
     private static readonly string SingleInstanceMutexName = DevConfig.SingleInstanceMutexName;
     private static readonly Uri DarkVsThemeUri = new("Resources/Themes/DarkVsTheme.xaml", UriKind.Relative);
+    private ResourceDictionary? _activeTheme;
     private Mutex? _instanceMutex;
     private bool _ownsMutex;
-    private ResourceDictionary? _activeTheme;
 
     public App()
     {
@@ -51,10 +49,7 @@ public partial class App : System.Windows.Application
 
         if (_instanceMutex != null)
         {
-            if (_ownsMutex)
-            {
-                _instanceMutex.ReleaseMutex();
-            }
+            if (_ownsMutex) _instanceMutex.ReleaseMutex();
             _instanceMutex.Dispose();
             _instanceMutex = null;
             _ownsMutex = false;
@@ -63,7 +58,7 @@ public partial class App : System.Windows.Application
 
     private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        string message = $"An unexpected error occurred:\n{e.Exception.Message}";
+        var message = $"An unexpected error occurred:\n{e.Exception.Message}";
         WpfMessageBox.Show(message, "Simple VS Manager", MessageBoxButton.OK, MessageBoxImage.Error);
 
         try
@@ -84,20 +79,14 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            Process currentProcess = Process.GetCurrentProcess();
+            var currentProcess = Process.GetCurrentProcess();
 
-            foreach (Process process in Process.GetProcessesByName(currentProcess.ProcessName))
+            foreach (var process in Process.GetProcessesByName(currentProcess.ProcessName))
             {
-                if (process.Id == currentProcess.Id)
-                {
-                    continue;
-                }
+                if (process.Id == currentProcess.Id) continue;
 
-                IntPtr handle = process.MainWindowHandle;
-                if (handle == IntPtr.Zero)
-                {
-                    continue;
-                }
+                var handle = process.MainWindowHandle;
+                if (handle == IntPtr.Zero) continue;
 
                 WindowActivator.ShowAndActivate(handle);
                 break;
@@ -131,31 +120,9 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private static class WindowActivator
-    {
-        private const int SwRestore = 9;
-
-        [DllImport("user32.dll")]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-        public static void ShowAndActivate(IntPtr windowHandle)
-        {
-            if (windowHandle == IntPtr.Zero)
-            {
-                return;
-            }
-
-            ShowWindow(windowHandle, SwRestore);
-            SetForegroundWindow(windowHandle);
-        }
-    }
-
     private void ApplyPreferredTheme()
     {
-        ColorTheme theme = ColorTheme.VintageStory;
+        var theme = ColorTheme.VintageStory;
         IReadOnlyDictionary<string, string>? palette = null;
 
         try
@@ -175,13 +142,10 @@ public partial class App : System.Windows.Application
 
     public static void ApplyTheme(ColorTheme theme, IReadOnlyDictionary<string, string>? paletteOverrides)
     {
-        if (Current is not App app)
-        {
-            return;
-        }
+        if (Current is not App app) return;
 
         app.EnsureActiveThemeDictionary();
-        IReadOnlyDictionary<string, string>? overridesToApply = paletteOverrides is { Count: > 0 }
+        var overridesToApply = paletteOverrides is { Count: > 0 }
             ? paletteOverrides
             : null;
         app.ApplyThemeDictionary(ResolveThemeUri(theme), overridesToApply);
@@ -189,18 +153,12 @@ public partial class App : System.Windows.Application
 
     private void EnsureActiveThemeDictionary()
     {
-        if (_activeTheme is not null || Resources is not { MergedDictionaries.Count: > 0 })
-        {
-            return;
-        }
+        if (_activeTheme is not null || Resources is not { MergedDictionaries.Count: > 0 }) return;
 
-        foreach (ResourceDictionary dictionary in Resources.MergedDictionaries)
+        foreach (var dictionary in Resources.MergedDictionaries)
         {
-            string? source = dictionary.Source?.OriginalString;
-            if (string.IsNullOrEmpty(source))
-            {
-                continue;
-            }
+            var source = dictionary.Source?.OriginalString;
+            if (string.IsNullOrEmpty(source)) continue;
 
             if (source.Contains("Resources/Themes/", StringComparison.OrdinalIgnoreCase))
             {
@@ -212,10 +170,7 @@ public partial class App : System.Windows.Application
 
     private void ApplyThemeDictionary(Uri source, IReadOnlyDictionary<string, string>? paletteOverrides)
     {
-        if (Resources is null)
-        {
-            return;
-        }
+        if (Resources is null) return;
 
         if (_activeTheme != null)
         {
@@ -226,10 +181,7 @@ public partial class App : System.Windows.Application
         try
         {
             var dictionary = new ResourceDictionary { Source = source };
-            if (paletteOverrides is not null)
-            {
-                ApplyPaletteOverrides(dictionary, paletteOverrides);
-            }
+            if (paletteOverrides is not null) ApplyPaletteOverrides(dictionary, paletteOverrides);
 
             Resources.MergedDictionaries.Add(dictionary);
             _activeTheme = dictionary;
@@ -237,10 +189,7 @@ public partial class App : System.Windows.Application
         catch (Exception)
         {
             // If loading the preferred theme fails, fall back to the default theme.
-            if (!ReferenceEquals(source, DarkVsThemeUri))
-            {
-                ApplyThemeDictionary(DarkVsThemeUri, paletteOverrides);
-            }
+            if (!ReferenceEquals(source, DarkVsThemeUri)) ApplyThemeDictionary(DarkVsThemeUri, paletteOverrides);
         }
     }
 
@@ -249,24 +198,16 @@ public partial class App : System.Windows.Application
         return DarkVsThemeUri;
     }
 
-    private static void ApplyPaletteOverrides(ResourceDictionary dictionary, IReadOnlyDictionary<string, string> paletteOverrides)
+    private static void ApplyPaletteOverrides(ResourceDictionary dictionary,
+        IReadOnlyDictionary<string, string> paletteOverrides)
     {
         foreach (var pair in paletteOverrides)
         {
-            if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
-            {
-                continue;
-            }
+            if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value)) continue;
 
-            if (!dictionary.Contains(pair.Key))
-            {
-                continue;
-            }
+            if (!dictionary.Contains(pair.Key)) continue;
 
-            if (!TryParseColor(pair.Value, out Color color))
-            {
-                continue;
-            }
+            if (!TryParseColor(pair.Value, out var color)) continue;
 
             dictionary[pair.Key] = color;
         }
@@ -276,23 +217,17 @@ public partial class App : System.Windows.Application
     {
         color = default;
 
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(value)) return false;
 
-        string trimmed = value.Trim();
-        if (!trimmed.StartsWith("#", StringComparison.Ordinal) || trimmed.Length <= 1)
-        {
-            return false;
-        }
+        var trimmed = value.Trim();
+        if (!trimmed.StartsWith("#", StringComparison.Ordinal) || trimmed.Length <= 1) return false;
 
-        string hex = trimmed[1..];
+        var hex = trimmed[1..];
         if (hex.Length == 6)
         {
-            if (TryParseHexByte(hex.Substring(0, 2), out byte r)
-                && TryParseHexByte(hex.Substring(2, 2), out byte g)
-                && TryParseHexByte(hex.Substring(4, 2), out byte b))
+            if (TryParseHexByte(hex.Substring(0, 2), out var r)
+                && TryParseHexByte(hex.Substring(2, 2), out var g)
+                && TryParseHexByte(hex.Substring(4, 2), out var b))
             {
                 color = Color.FromRgb(r, g, b);
                 return true;
@@ -303,10 +238,10 @@ public partial class App : System.Windows.Application
 
         if (hex.Length == 8)
         {
-            if (TryParseHexByte(hex.Substring(0, 2), out byte a)
-                && TryParseHexByte(hex.Substring(2, 2), out byte r)
-                && TryParseHexByte(hex.Substring(4, 2), out byte g)
-                && TryParseHexByte(hex.Substring(6, 2), out byte b))
+            if (TryParseHexByte(hex.Substring(0, 2), out var a)
+                && TryParseHexByte(hex.Substring(2, 2), out var r)
+                && TryParseHexByte(hex.Substring(4, 2), out var g)
+                && TryParseHexByte(hex.Substring(6, 2), out var b))
             {
                 color = Color.FromArgb(a, r, g, b);
                 return true;
@@ -321,5 +256,24 @@ public partial class App : System.Windows.Application
     private static bool TryParseHexByte(string hex, out byte value)
     {
         return byte.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
+    }
+
+    private static class WindowActivator
+    {
+        private const int SwRestore = 9;
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        public static void ShowAndActivate(IntPtr windowHandle)
+        {
+            if (windowHandle == IntPtr.Zero) return;
+
+            ShowWindow(windowHandle, SwRestore);
+            SetForegroundWindow(windowHandle);
+        }
     }
 }

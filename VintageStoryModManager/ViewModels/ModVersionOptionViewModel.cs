@@ -1,11 +1,10 @@
-using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using VintageStoryModManager.Models;
 
 namespace VintageStoryModManager.ViewModels;
 
 /// <summary>
-/// Represents a selectable mod version in the version picker.
+///     Represents a selectable mod version in the version picker.
 /// </summary>
 public sealed class ModVersionOptionViewModel : ObservableObject
 {
@@ -46,10 +45,7 @@ public sealed class ModVersionOptionViewModel : ObservableObject
         get => _isInstalled;
         set
         {
-            if (SetProperty(ref _isInstalled, value))
-            {
-                OnPropertyChanged(nameof(SelectionDisplay));
-            }
+            if (SetProperty(ref _isInstalled, value)) OnPropertyChanged(nameof(SelectionDisplay));
         }
     }
 
@@ -57,7 +53,10 @@ public sealed class ModVersionOptionViewModel : ObservableObject
         ? $"{VersionDisplay} (Installed)"
         : VersionDisplay;
 
-    public override string ToString() => SelectionDisplay;
+    public override string ToString()
+    {
+        return SelectionDisplay;
+    }
 
     public static ModVersionOptionViewModel FromRelease(ModReleaseInfo release, bool isInstalled)
     {
@@ -69,22 +68,19 @@ public sealed class ModVersionOptionViewModel : ObservableObject
             release,
             release.IsCompatibleWithInstalledGame,
             isInstalled,
-            isFromDatabase: true);
+            true);
     }
 
     public static ModVersionOptionViewModel FromInstalledVersion(string version, string? normalizedVersion)
     {
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            version = "Unknown";
-        }
+        if (string.IsNullOrWhiteSpace(version)) version = "Unknown";
 
         return new ModVersionOptionViewModel(
             version,
             normalizedVersion,
-            release: null,
-            isCompatible: false,
-            isInstalled: true,
-            isFromDatabase: false);
+            null,
+            false,
+            true,
+            false);
     }
 }

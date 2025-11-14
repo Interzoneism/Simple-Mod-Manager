@@ -47,12 +47,15 @@
                     <ListView.Resources>
                         <Style TargetType="GridViewColumnHeader">
                             <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
-                            <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
-                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                            <Setter Property="Background"
+                                    Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
+                            <Setter Property="BorderBrush"
+                                    Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
                         </Style>
                         <Style TargetType="ListViewItem">
                             <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
-                            <Setter Property="Background" Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                            <Setter Property="Background"
+                                    Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
                             <Setter Property="BorderBrush" Value="Transparent" />
                             <Setter Property="BorderThickness" Value="0" />
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -66,19 +69,22 @@
                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                 BorderThickness="{TemplateBinding BorderThickness}"
                                                 SnapsToDevicePixels="True">
-                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                            <ContentPresenter
+                                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                                         </Border>
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>
                             <Style.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                                    <Setter Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
                                 </Trigger>
                                 <Trigger Property="IsSelected" Value="True">
                                     <Setter Property="Background" Value="{DynamicResource Brush.Selection.Background}" />
-                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.SelectionForeground}" />
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource Brush.Text.SelectionForeground}" />
                                 </Trigger>
                             </Style.Triggers>
                         </Style>

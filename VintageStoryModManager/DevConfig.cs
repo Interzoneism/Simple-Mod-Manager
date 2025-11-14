@@ -1,10 +1,9 @@
-using System;
 using System.IO;
 
 namespace VintageStoryModManager;
 
 /// <summary>
-/// Central location for developer-tunable configuration values.
+///     Central location for developer-tunable configuration values.
 /// </summary>
 public static class DevConfig
 {
@@ -13,6 +12,7 @@ public static class DevConfig
 
     // View model tuning.
     public static int MaxConcurrentDatabaseRefreshes { get; } = 4;
+    public static int MaxConcurrentUserReportRefreshes { get; } = 6;
     public static int MaxNewModsRecentMonths { get; } = 24;
     public static int InstalledModsIncrementalBatchSize { get; } = 32;
     public static int MaxModDatabaseResultLimit { get; } = int.MaxValue;
@@ -29,8 +29,10 @@ public static class DevConfig
     public static double DefaultModInfoPanelRightMargin { get; } = 40.0;
     public static string ManagerModDatabaseUrl { get; } = "https://mods.vintagestory.at/simplevsmanager";
     public static string ManagerModDatabaseModId { get; } = "5545";
+
     public static string ModDatabaseUnavailableMessage { get; } =
         "Could not reach the online Mod Database, please check your internet connection";
+
     public static string PresetDirectoryName { get; } = "Presets";
     public static string ModListDirectoryName { get; } = "Modlists";
     public static string CloudModListCacheDirectoryName { get; } = "Modlists (Cloud Cache)";
@@ -50,16 +52,11 @@ public static class DevConfig
     {
         get
         {
-            string? local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (string.IsNullOrWhiteSpace(local))
-            {
                 local = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            }
 
-            if (string.IsNullOrWhiteSpace(local))
-            {
-                return Path.Combine(AppContext.BaseDirectory, "SVSM Backup");
-            }
+            if (string.IsNullOrWhiteSpace(local)) return Path.Combine(AppContext.BaseDirectory, "SVSM Backup");
 
             return Path.Combine(local, "SVSM Backup");
         }
@@ -104,6 +101,7 @@ public static class DevConfig
     // Mod discovery.
     public static int ModDiscoveryBatchSize { get; } = 16;
     public static string ModDiscoveryGeneralLoadErrorMessage { get; } = "Unable to load mod. Check log files.";
+
     public static string ModDiscoveryDependencyErrorMessage { get; } =
         "Unable to load mod. A dependency has an error. Make sure they all load correctly.";
 
@@ -113,6 +111,7 @@ public static class DevConfig
     // Compatibility vote storage.
     public static string ModVersionVoteDefaultDbUrl { get; } =
         "https://simple-vs-manager-default-rtdb.europe-west1.firebasedatabase.app";
+
     public static string ModVersionVoteRootPath { get; } = "compatVotes";
 
     // Internet access restrictions messaging.
@@ -121,13 +120,19 @@ public static class DevConfig
 
     // Mod database service endpoints and limits.
     public static string ModDatabaseApiEndpointFormat { get; } = "https://mods.vintagestory.at/api/mod/{0}";
-    public static string ModDatabaseSearchEndpointFormat { get; } = "https://mods.vintagestory.at/api/mods?search={0}&limit={1}";
+
+    public static string ModDatabaseSearchEndpointFormat { get; } =
+        "https://mods.vintagestory.at/api/mods?search={0}&limit={1}";
+
     public static string ModDatabaseMostDownloadedEndpointFormat { get; } =
         "https://mods.vintagestory.at/api/mods?sort=downloadsdesc&limit={0}";
+
     public static string ModDatabaseRecentlyCreatedEndpointFormat { get; } =
         "https://mods.vintagestory.at/api/mods?sortby=created&sortdir=d&limit={0}";
+
     public static string ModDatabaseRecentlyUpdatedEndpointFormat { get; } =
         "https://mods.vintagestory.at/api/mods?sortby=updated&sortdir=d&limit={0}";
+
     public static string ModDatabasePageBaseUrl { get; } = "https://mods.vintagestory.at/show/mod/";
     public static int ModDatabaseMaxConcurrentMetadataRequests { get; } = 4;
     public static int ModDatabaseMinimumTotalDownloadsForTrending { get; } = 500;

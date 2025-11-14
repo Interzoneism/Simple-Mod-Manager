@@ -1,29 +1,20 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace VintageStoryModManager.ViewModels;
 
 public sealed class UpdateModsDialogViewModel : ObservableObject
 {
-    private bool? _selectAllState;
     private bool _isUpdatingSelectAll;
+    private bool? _selectAllState;
 
     public UpdateModsDialogViewModel(IEnumerable<UpdateModSelectionViewModel> mods)
     {
-        if (mods is null)
-        {
-            throw new ArgumentNullException(nameof(mods));
-        }
+        if (mods is null) throw new ArgumentNullException(nameof(mods));
 
         Mods = new ObservableCollection<UpdateModSelectionViewModel>(mods);
-        foreach (UpdateModSelectionViewModel mod in Mods)
-        {
-            mod.PropertyChanged += OnModPropertyChanged;
-        }
+        foreach (var mod in Mods) mod.PropertyChanged += OnModPropertyChanged;
 
         UpdateSelectAllState();
     }
@@ -37,26 +28,17 @@ public sealed class UpdateModsDialogViewModel : ObservableObject
         get => _selectAllState;
         set
         {
-            if (_isUpdatingSelectAll)
-            {
-                return;
-            }
+            if (_isUpdatingSelectAll) return;
 
             if (SetProperty(ref _selectAllState, value))
             {
-                if (!value.HasValue)
-                {
-                    return;
-                }
+                if (!value.HasValue) return;
 
                 try
                 {
                     _isUpdatingSelectAll = true;
-                    bool target = value.Value;
-                    foreach (UpdateModSelectionViewModel mod in Mods)
-                    {
-                        mod.IsSelected = target;
-                    }
+                    var target = value.Value;
+                    foreach (var mod in Mods) mod.IsSelected = target;
                 }
                 finally
                 {
@@ -75,15 +57,9 @@ public sealed class UpdateModsDialogViewModel : ObservableObject
 
     public bool RemoveMod(UpdateModSelectionViewModel? mod)
     {
-        if (mod is null)
-        {
-            return false;
-        }
+        if (mod is null) return false;
 
-        if (!Mods.Remove(mod))
-        {
-            return false;
-        }
+        if (!Mods.Remove(mod)) return false;
 
         mod.PropertyChanged -= OnModPropertyChanged;
         UpdateSelectAllState();
@@ -92,23 +68,20 @@ public sealed class UpdateModsDialogViewModel : ObservableObject
 
     private void OnModPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (!string.Equals(e.PropertyName, nameof(UpdateModSelectionViewModel.IsSelected), StringComparison.Ordinal))
-        {
-            return;
-        }
+        if (!string.Equals(e.PropertyName, nameof(UpdateModSelectionViewModel.IsSelected),
+                StringComparison.Ordinal)) return;
 
         UpdateSelectAllState();
     }
 
     private void UpdateSelectAllState()
     {
-        bool allSelected = Mods.Count > 0 && Mods.All(m => m.IsSelected);
-        bool anySelected = Mods.Any(m => m.IsSelected);
+        var allSelected = Mods.Count > 0 && Mods.All(m => m.IsSelected);
+        var anySelected = Mods.Any(m => m.IsSelected);
 
-        bool? newState = allSelected ? true : anySelected ? (bool?)null : false;
+        var newState = allSelected ? true : anySelected ? (bool?)null : false;
 
         if (_selectAllState != newState)
-        {
             try
             {
                 _isUpdatingSelectAll = true;
@@ -119,7 +92,6 @@ public sealed class UpdateModsDialogViewModel : ObservableObject
             {
                 _isUpdatingSelectAll = false;
             }
-        }
 
         OnPropertyChanged(nameof(HasSelection));
     }

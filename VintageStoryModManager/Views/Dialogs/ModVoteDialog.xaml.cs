@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Threading.Tasks;
 using System.Windows;
 using VintageStoryModManager.Models;
 using VintageStoryModManager.Services;
@@ -30,9 +27,10 @@ public partial class ModVoteDialog : Window
         "Breaks so much you might as well call it a crash"
     };
 
-    private ModVersionVoteSummary _summary;
     private readonly Func<ModVersionVoteOption?, string?, Task<ModVersionVoteSummary?>> _submitVoteAsync;
     private bool _isSubmitting;
+
+    private ModVersionVoteSummary _summary;
 
     public ModVoteDialog(
         ModListItemViewModel mod,
@@ -51,15 +49,12 @@ public partial class ModVoteDialog : Window
             ? "Mod version: Unknown"
             : string.Format(CultureInfo.CurrentCulture, "Mod version: {0}", mod.VersionDisplay);
 
-        string? gameVersion = _summary.VintageStoryVersion;
+        var gameVersion = _summary.VintageStoryVersion;
         if (string.IsNullOrWhiteSpace(gameVersion))
-        {
             GameVersionTextBlock.Text = "Vintage Story version: Unknown";
-        }
         else
-        {
-            GameVersionTextBlock.Text = string.Format(CultureInfo.CurrentCulture, "Vintage Story version: {0}", gameVersion);
-        }
+            GameVersionTextBlock.Text =
+                string.Format(CultureInfo.CurrentCulture, "Vintage Story version: {0}", gameVersion);
 
         UpdateOptionButtons();
         StatusTextBlock.Text = BuildStatusText();
@@ -76,8 +71,8 @@ public partial class ModVoteDialog : Window
 
     private void UpdateOptionButton(WpfButton button, ModVersionVoteOption option)
     {
-        int count = _summary.Counts.GetCount(option);
-        string countLabel = count == 1
+        var count = _summary.Counts.GetCount(option);
+        var countLabel = count == 1
             ? "1 vote"
             : string.Format(CultureInfo.CurrentCulture, "{0} votes", count);
         button.Content = string.Format(
@@ -95,8 +90,8 @@ public partial class ModVoteDialog : Window
 
     private string BuildStatusText()
     {
-        int total = _summary.TotalVotes;
-        string totalLabel = total == 1
+        var total = _summary.TotalVotes;
+        var totalLabel = total == 1
             ? "1 total vote"
             : string.Format(CultureInfo.CurrentCulture, "{0} total votes", total);
         return string.Format(
@@ -107,22 +102,13 @@ public partial class ModVoteDialog : Window
 
     private async void VoteButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not WpfButton button || button.Tag is not ModVersionVoteOption option)
-        {
-            return;
-        }
+        if (sender is not WpfButton button || button.Tag is not ModVersionVoteOption option) return;
 
-        if (_isSubmitting)
-        {
-            return;
-        }
+        if (_isSubmitting) return;
 
         ModVersionVoteOption? requestedOption = option;
-        bool isRemovingVote = _summary.UserVote == option;
-        if (isRemovingVote)
-        {
-            requestedOption = null;
-        }
+        var isRemovingVote = _summary.UserVote == option;
+        if (isRemovingVote) requestedOption = null;
 
         string? comment = null;
         if (requestedOption.HasValue && requestedOption.Value.RequiresComment())
@@ -141,13 +127,10 @@ public partial class ModVoteDialog : Window
 
         try
         {
-            ModVersionVoteSummary? result = await _submitVoteAsync(requestedOption, comment).ConfigureAwait(true);
-            if (result is not null)
-            {
-                _summary = result;
-            }
+            var result = await _submitVoteAsync(requestedOption, comment).ConfigureAwait(true);
+            if (result is not null) _summary = result;
 
-            string statusPrefix = requestedOption.HasValue
+            var statusPrefix = requestedOption.HasValue
                 ? "Your vote has been recorded."
                 : "Your vote has been removed.";
 
@@ -177,39 +160,39 @@ public partial class ModVoteDialog : Window
 
     private string? PromptForReason(ModVersionVoteOption option, string? existingReason)
     {
-        IReadOnlyList<string> reasons = option switch
+        var reasons = option switch
         {
             ModVersionVoteOption.NotFunctional => NotFunctionalReasons,
             ModVersionVoteOption.CrashesOrFreezesGame => CrashReasons,
             _ => Array.Empty<string>()
         };
 
-        string title = option switch
+        var title = option switch
         {
             ModVersionVoteOption.NotFunctional => "Why is the mod not functional?",
             ModVersionVoteOption.CrashesOrFreezesGame => "Tell us about the crash",
             _ => "Share more details"
         };
 
-        string description = option switch
+        var description = option switch
         {
-            ModVersionVoteOption.NotFunctional => "Pick the option that best matches why the mod isn't working for you.",
-            ModVersionVoteOption.CrashesOrFreezesGame => "Pick the option that best matches the crash or freeze you experienced.",
+            ModVersionVoteOption.NotFunctional =>
+                "Pick the option that best matches why the mod isn't working for you.",
+            ModVersionVoteOption.CrashesOrFreezesGame =>
+                "Pick the option that best matches the crash or freeze you experienced.",
             _ => "Pick the option that best matches your experience."
         };
 
         string? initialSelection = null;
         if (!string.IsNullOrWhiteSpace(existingReason) && reasons.IndexOf(existingReason) >= 0)
-        {
             initialSelection = existingReason;
-        }
 
         ModVoteReasonDialog dialog = new(title, description, reasons, initialSelection)
         {
             Owner = this
         };
 
-        bool? result = dialog.ShowDialog();
+        var result = dialog.ShowDialog();
         return result == true ? dialog.SelectedReason : null;
     }
 }

@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Interop;
@@ -34,7 +30,7 @@ public partial class CompatibilityResultsDialog : Window
     {
         MessageTextBlock.Inlines.Clear();
 
-        string versionText = string.IsNullOrWhiteSpace(targetVersion)
+        var versionText = string.IsNullOrWhiteSpace(targetVersion)
             ? "Vintage Story version: Unknown."
             : $"Vintage Story version: {targetVersion.Trim()}.";
         MessageTextBlock.Inlines.Add(new Run(versionText));
@@ -50,7 +46,7 @@ public partial class CompatibilityResultsDialog : Window
             MessageTextBlock.Inlines.Add(new Run($"Incompatible mods for {targetVersion}:"));
             MessageTextBlock.Inlines.Add(new LineBreak());
 
-            foreach (string mod in incompatibleMods.Where(name => !string.IsNullOrWhiteSpace(name)))
+            foreach (var mod in incompatibleMods.Where(name => !string.IsNullOrWhiteSpace(name)))
             {
                 MessageTextBlock.Inlines.Add(new Run("• "));
                 MessageTextBlock.Inlines.Add(new Bold(new Run(mod.Trim())));
@@ -60,15 +56,12 @@ public partial class CompatibilityResultsDialog : Window
 
         if (unknownMods.Count > 0)
         {
-            if (incompatibleMods.Count > 0)
-            {
-                MessageTextBlock.Inlines.Add(new LineBreak());
-            }
+            if (incompatibleMods.Count > 0) MessageTextBlock.Inlines.Add(new LineBreak());
 
             MessageTextBlock.Inlines.Add(new Run("Compatibility could not be determined for:"));
             MessageTextBlock.Inlines.Add(new LineBreak());
 
-            foreach (string mod in unknownMods.Where(name => !string.IsNullOrWhiteSpace(name)))
+            foreach (var mod in unknownMods.Where(name => !string.IsNullOrWhiteSpace(name)))
             {
                 MessageTextBlock.Inlines.Add(new Run("• "));
                 MessageTextBlock.Inlines.Add(new Run(mod.Trim()));
@@ -79,7 +72,7 @@ public partial class CompatibilityResultsDialog : Window
 
     private void ConfigureIcon(MessageBoxImage icon)
     {
-        ImageSource? source = icon switch
+        var source = icon switch
         {
             MessageBoxImage.Error => ConvertIcon(SystemIcons.Error),
             MessageBoxImage.Warning => ConvertIcon(SystemIcons.Warning),
@@ -102,7 +95,7 @@ public partial class CompatibilityResultsDialog : Window
 
     private static ImageSource? ConvertIcon(Icon icon)
     {
-        BitmapSource source = Imaging.CreateBitmapSourceFromHIcon(
+        var source = Imaging.CreateBitmapSourceFromHIcon(
             icon.Handle,
             Int32Rect.Empty,
             BitmapSizeOptions.FromWidthAndHeight(icon.Width, icon.Height));

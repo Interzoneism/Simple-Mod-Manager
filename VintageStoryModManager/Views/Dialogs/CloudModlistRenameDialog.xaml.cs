@@ -1,4 +1,3 @@
-using System;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -22,10 +21,7 @@ public partial class CloudModlistRenameDialog : Window
 
     private void ConfirmButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(NameTextBox.Text))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(NameTextBox.Text)) return;
 
         DialogResult = true;
     }
@@ -37,12 +33,9 @@ public partial class CloudModlistRenameDialog : Window
 
     private void UpdateConfirmButtonState()
     {
-        if (ConfirmButton is null)
-        {
-            return;
-        }
+        if (ConfirmButton is null) return;
 
-        string? modlistName = NameTextBox?.Text;
+        var modlistName = NameTextBox?.Text;
         ConfirmButton.IsEnabled = !string.IsNullOrWhiteSpace(modlistName);
     }
 

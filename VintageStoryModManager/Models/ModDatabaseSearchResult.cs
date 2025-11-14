@@ -1,10 +1,7 @@
-using System;
-using System.Collections.Generic;
-
 namespace VintageStoryModManager.Models;
 
 /// <summary>
-/// Represents a single search hit returned from the Vintage Story mod database.
+///     Represents a single search hit returned from the Vintage Story mod database.
 /// </summary>
 public sealed class ModDatabaseSearchResult
 {

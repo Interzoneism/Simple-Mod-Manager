@@ -2,7 +2,6 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:converters="clr-namespace:VintageStoryModManager.Converters"
-             xmlns:options="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options"
              xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
              xmlns:ui="http://schemas.modernwpf.com/2019"
              StartupUri="Views/MainWindow.xaml">
@@ -105,23 +104,31 @@
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsOn" Value="True">
-                                    <Setter TargetName="Track" Property="Background" Value="{DynamicResource Brush.ToggleSwitch.Track.Background.On}" />
-                                    <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brush.ToggleSwitch.Track.Background.On}" />
-                                    <Setter TargetName="Thumb" Property="Background" Value="{DynamicResource Brush.ToggleSwitch.Thumb.Background.On}" />
+                                    <Setter TargetName="Track" Property="Background"
+                                            Value="{DynamicResource Brush.ToggleSwitch.Track.Background.On}" />
+                                    <Setter TargetName="Track" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.ToggleSwitch.Track.Background.On}" />
+                                    <Setter TargetName="Thumb" Property="Background"
+                                            Value="{DynamicResource Brush.ToggleSwitch.Thumb.Background.On}" />
                                     <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Opacity" Value="0.5" />
-                                    <Setter TargetName="Track" Property="Background" Value="{DynamicResource Brush.ToggleSwitch.Track.Background.Disabled}" />
-                                    <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brush.ToggleSwitch.Track.Background.Disabled}" />
-                                    <Setter TargetName="Thumb" Property="Background" Value="{DynamicResource Brush.ToggleSwitch.Thumb.Background.Disabled}" />
+                                    <Setter TargetName="Track" Property="Background"
+                                            Value="{DynamicResource Brush.ToggleSwitch.Track.Background.Disabled}" />
+                                    <Setter TargetName="Track" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.ToggleSwitch.Track.Background.Disabled}" />
+                                    <Setter TargetName="Thumb" Property="Background"
+                                            Value="{DynamicResource Brush.ToggleSwitch.Thumb.Background.Disabled}" />
                                     <Setter TargetName="HeaderContent" Property="Opacity" Value="0.6" />
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brush.ToggleSwitch.Hover.Border}" />
+                                    <Setter TargetName="Track" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.ToggleSwitch.Hover.Border}" />
                                 </Trigger>
                                 <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                    <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brush.ToggleSwitch.Focus.Border}" />
+                                    <Setter TargetName="Track" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.ToggleSwitch.Focus.Border}" />
                                 </Trigger>
                                 <Trigger Property="Header" Value="{x:Null}">
                                     <Setter TargetName="HeaderContent" Property="Visibility" Value="Collapsed" />
@@ -154,10 +161,12 @@
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                                    <Setter TargetName="Border" Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
+                                    <Setter TargetName="Border" Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter TargetName="Border" Property="Background" Value="Transparent" />
@@ -188,10 +197,10 @@
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     Padding="{TemplateBinding Padding}">
-                                <ContentPresenter 
-                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                  RecognizesAccessKey="True">
+                                <ContentPresenter
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                    RecognizesAccessKey="True">
                                     <ContentPresenter.Resources>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="TextWrapping" Value="Wrap" />
@@ -205,7 +214,8 @@
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Link}" />
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                                    <Setter TargetName="ButtonBorder" Property="Background"
+                                            Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Placeholder}" />
@@ -265,14 +275,17 @@
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.ScrollBar.Thumb}" />
+                                    <Setter TargetName="Border" Property="Background"
+                                            Value="{DynamicResource Brush.ScrollBar.Thumb}" />
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.ScrollBar.Thumb}" />
+                                    <Setter TargetName="Border" Property="Background"
+                                            Value="{DynamicResource Brush.ScrollBar.Thumb}" />
                                     <Setter TargetName="Border" Property="Opacity" Value="0.85" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
-                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.ScrollBar.Track}" />
+                                    <Setter TargetName="Border" Property="Background"
+                                            Value="{DynamicResource Brush.ScrollBar.Track}" />
                                     <Setter TargetName="Arrow" Property="Opacity" Value="0.4" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
@@ -368,7 +381,8 @@
                                     <Setter TargetName="LineDecreaseButton" Property="Grid.Column" Value="0" />
                                     <Setter TargetName="LineDecreaseButton" Property="Grid.ColumnSpan" Value="1" />
                                     <Setter TargetName="LineDecreaseButton" Property="Tag" Value="270" />
-                                    <Setter TargetName="LineDecreaseButton" Property="Command" Value="{x:Static primitives:ScrollBar.LineLeftCommand}" />
+                                    <Setter TargetName="LineDecreaseButton" Property="Command"
+                                            Value="{x:Static primitives:ScrollBar.LineLeftCommand}" />
                                     <Setter TargetName="TrackHost" Property="Grid.Row" Value="0" />
                                     <Setter TargetName="TrackHost" Property="Grid.RowSpan" Value="3" />
                                     <Setter TargetName="TrackHost" Property="Grid.Column" Value="1" />
@@ -378,9 +392,12 @@
                                     <Setter TargetName="LineIncreaseButton" Property="Grid.Column" Value="2" />
                                     <Setter TargetName="LineIncreaseButton" Property="Grid.ColumnSpan" Value="1" />
                                     <Setter TargetName="LineIncreaseButton" Property="Tag" Value="90" />
-                                    <Setter TargetName="LineIncreaseButton" Property="Command" Value="{x:Static primitives:ScrollBar.LineRightCommand}" />
-                                    <Setter TargetName="DecreasePage" Property="Command" Value="{x:Static primitives:ScrollBar.PageLeftCommand}" />
-                                    <Setter TargetName="IncreasePage" Property="Command" Value="{x:Static primitives:ScrollBar.PageRightCommand}" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Command"
+                                            Value="{x:Static primitives:ScrollBar.LineRightCommand}" />
+                                    <Setter TargetName="DecreasePage" Property="Command"
+                                            Value="{x:Static primitives:ScrollBar.PageLeftCommand}" />
+                                    <Setter TargetName="IncreasePage" Property="Command"
+                                            Value="{x:Static primitives:ScrollBar.PageRightCommand}" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter TargetName="LineDecreaseButton" Property="IsEnabled" Value="False" />
@@ -425,28 +442,37 @@
                                                 CornerRadius="{TemplateBinding ui:ControlHelper.CornerRadius}"
                                                 Padding="{TemplateBinding Padding}"
                                                 SnapsToDevicePixels="True">
-                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                                              RecognizesAccessKey="True"
-                                                              SnapsToDevicePixels="True" />
+                                            <ContentPresenter
+                                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                RecognizesAccessKey="True"
+                                                SnapsToDevicePixels="True" />
                                         </Border>
                                     </Border>
                                 </Border>
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
-                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Border.Hover}" />
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
-                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.Primary}" />
-                                    <Setter TargetName="TopAndLeft" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Dark}" />
-                                    <Setter TargetName="BottomAndRight" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Light}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Accent.Primary}" />
+                                    <Setter TargetName="TopAndLeft" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Button.Bevel.Dark}" />
+                                    <Setter TargetName="BottomAndRight" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Button.Bevel.Light}" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
-                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
-                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Border.Default}" />
                                     <Setter TargetName="LayoutRoot" Property="Opacity" Value="0.55" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
@@ -468,7 +494,8 @@
                 <Setter Property="SelectionTextBrush" Value="{DynamicResource Brush.Text.SelectionForeground}" />
                 <Setter Property="CaretBrush" Value="{DynamicResource Brush.Text.Caret}" />
                 <Setter Property="ui:ControlHelper.CornerRadius" Value="6" />
-                <Setter Property="ui:ControlHelper.PlaceholderForeground" Value="{DynamicResource Brush.Text.Placeholder}" />
+                <Setter Property="ui:ControlHelper.PlaceholderForeground"
+                        Value="{DynamicResource Brush.Text.Placeholder}" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="TextBox">
@@ -535,13 +562,15 @@
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsEnabled" Value="False">
-                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
                                     <Setter Property="Opacity" Value="0.6" />
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="Transparent" />
-                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
                                 </Trigger>
                                 <Trigger Property="Text" Value="">
                                     <Setter TargetName="PlaceholderTextBlock" Property="Visibility" Value="Visible" />
@@ -599,15 +628,18 @@
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsEnabled" Value="False">
-                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Placeholder}" />
                                     <Setter Property="Opacity" Value="0.6" />
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Border.Hover}" />
                                 </Trigger>
                                 <Trigger Property="IsKeyboardFocused" Value="True">
-                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Border.Default}" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -616,11 +648,8 @@
             </Style>
 
             <Style TargetType="{x:Type Button}" BasedOn="{StaticResource IMM.ButtonBaseStyle}">
-                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
-                <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.Button.Primary.Border.Normal}" />
                 <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="ui:ControlHelper.CornerRadius" Value="6" />
                 <Setter Property="Padding" Value="8,4" />
                 <Style.Triggers>
                     <Trigger Property="IsMouseOver" Value="True">
@@ -632,7 +661,8 @@
                         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Button.Primary.Border.Normal}" />
                     </Trigger>
                     <Trigger Property="IsEnabled" Value="False">
-                        <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
+                        <Setter Property="Background"
+                                Value="{DynamicResource Brush.Button.Primary.Background.Disabled}" />
                         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Button.Primary.Border.Normal}" />
                         <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Placeholder}" />
                     </Trigger>
@@ -650,14 +680,17 @@
                     <Setter.Value>
                         <Style TargetType="ComboBoxItem">
                             <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
-                            <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Item.Background.Normal}" />
+                            <Setter Property="Background"
+                                    Value="{DynamicResource Brush.ComboBox.Item.Background.Normal}" />
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Style.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Item.Background.Hover}" />
+                                    <Setter Property="Background"
+                                            Value="{DynamicResource Brush.ComboBox.Item.Background.Hover}" />
                                 </Trigger>
                                 <Trigger Property="IsSelected" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Item.Background.Selected}" />
+                                    <Setter Property="Background"
+                                            Value="{DynamicResource Brush.ComboBox.Item.Background.Selected}" />
                                 </Trigger>
                             </Style.Triggers>
                         </Style>
@@ -739,17 +772,23 @@
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsDropDownOpen" Value="True">
-                                    <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource Brush.ComboBox.Border.Open}" />
-                                    <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Open}" />
+                                    <Setter TargetName="BackgroundBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.ComboBox.Border.Open}" />
+                                    <Setter TargetName="BackgroundBorder" Property="Background"
+                                            Value="{DynamicResource Brush.ComboBox.Background.Open}" />
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Hover}" />
-                                    <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource Brush.ComboBox.Border.Hover}" />
+                                    <Setter TargetName="BackgroundBorder" Property="Background"
+                                            Value="{DynamicResource Brush.ComboBox.Background.Hover}" />
+                                    <Setter TargetName="BackgroundBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.ComboBox.Border.Hover}" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Placeholder}" />
-                                    <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Disabled}" />
-                                    <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource Brush.ComboBox.Border.Disabled}" />
+                                    <Setter TargetName="BackgroundBorder" Property="Background"
+                                            Value="{DynamicResource Brush.ComboBox.Background.Disabled}" />
+                                    <Setter TargetName="BackgroundBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.ComboBox.Border.Disabled}" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -782,8 +821,10 @@
                                     <Setter TargetName="Root" Property="Opacity" Value="0.6" />
                                 </Trigger>
                                 <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brush.TextInput.Border.Focused}" />
-                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.TextInput.Background.Focused}" />
+                                    <Setter TargetName="Root" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.TextInput.Border.Focused}" />
+                                    <Setter TargetName="Root" Property="Background"
+                                            Value="{DynamicResource Brush.TextInput.Background.Focused}" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -839,32 +880,47 @@
                                         <Condition Property="IsMouseOver" Value="True" />
                                         <Condition Property="IsChecked" Value="False" />
                                     </MultiTrigger.Conditions>
-                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
-                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Border.Hover}" />
                                 </MultiTrigger>
                                 <MultiTrigger>
                                     <MultiTrigger.Conditions>
                                         <Condition Property="IsPressed" Value="True" />
                                         <Condition Property="IsChecked" Value="False" />
                                     </MultiTrigger.Conditions>
-                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
-                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.Primary}" />
-                                    <Setter TargetName="TopAndLeft" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Dark}" />
-                                    <Setter TargetName="BottomAndRight" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Light}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Accent.Primary}" />
+                                    <Setter TargetName="TopAndLeft" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Button.Bevel.Dark}" />
+                                    <Setter TargetName="BottomAndRight" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Button.Bevel.Light}" />
                                 </MultiTrigger>
                                 <Trigger Property="IsChecked" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.SelectionForeground}" />
-                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.ToggleButton.Background.Checked}" />
-                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.ToggleButton.Border.Checked}" />
-                                    <Setter TargetName="TopAndLeft" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Dark}" />
-                                    <Setter TargetName="BottomAndRight" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Light}" />
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource Brush.Text.SelectionForeground}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background"
+                                            Value="{DynamicResource Brush.ToggleButton.Background.Checked}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.ToggleButton.Border.Checked}" />
+                                    <Setter TargetName="TopAndLeft" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Button.Bevel.Dark}" />
+                                    <Setter TargetName="BottomAndRight" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Button.Bevel.Light}" />
                                 </Trigger>
                                 <Trigger Property="IsChecked" Value="False">
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
-                                    <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
-                                    <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
-                                    <Setter TargetName="TopAndLeft" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Light}" />
-                                    <Setter TargetName="BottomAndRight" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Dark}" />
+                                    <Setter TargetName="ChromeBorder" Property="Background"
+                                            Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
+                                    <Setter TargetName="ChromeBorder" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Border.Default}" />
+                                    <Setter TargetName="TopAndLeft" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Button.Bevel.Light}" />
+                                    <Setter TargetName="BottomAndRight" Property="BorderBrush"
+                                            Value="{DynamicResource Brush.Button.Bevel.Dark}" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>

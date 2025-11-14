@@ -1,0 +1,149 @@
+<Window x:Class="VintageStoryModManager.Views.Dialogs.ModConfigSelectionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dialogs="clr-namespace:VintageStoryModManager.Views.Dialogs"
+        Title="Select Configurations"
+        SizeToContent="WidthAndHeight"
+        MinWidth="480"
+        MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="SingleBorderWindow"
+        ShowInTaskbar="False"
+        Loaded="Window_OnLoaded"
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </Window.Resources>
+    <Grid Margin="20"
+          Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+          TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Margin="0,0,0,12"
+                   TextWrapping="Wrap"
+                   Text="Select which configuration files should be included." />
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Left"
+                    Margin="0,0,0,8">
+            <TextBlock Text="Configurations"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center" />
+            <CheckBox x:Name="SelectAllCheckBox"
+                      Margin="12,0,0,0"
+                      VerticalAlignment="Center"
+                      IsThreeState="True"
+                      Click="SelectAllCheckBox_OnClick"
+                      ToolTip="Select all or deselect all configuration options"
+                      Visibility="{Binding HasConfigOptions, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <CheckBox.LayoutTransform>
+                    <ScaleTransform ScaleX="1.2" ScaleY="1.2" />
+                </CheckBox.LayoutTransform>
+                <CheckBox.Content>
+                    <TextBlock Text="Select all">
+                        <TextBlock.LayoutTransform>
+                            <ScaleTransform ScaleX="0.8333" ScaleY="0.8333" />
+                        </TextBlock.LayoutTransform>
+                    </TextBlock>
+                </CheckBox.Content>
+            </CheckBox>
+        </StackPanel>
+
+        <Border Grid.Row="2"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                Padding="6">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <ListBox Grid.Row="0"
+                         ItemsSource="{Binding ConfigOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                         Visibility="{Binding HasConfigOptions, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}"
+                         Height="220"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                         BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                         Foreground="{DynamicResource Brush.Text.Primary}">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="MinHeight" Value="26" />
+                            <Setter Property="Padding" Value="6,0" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type dialogs:ModConfigOption}">
+                            <CheckBox
+                                IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                ToolTip="{Binding ConfigPath}"
+                                Margin="0"
+                                VerticalAlignment="Center">
+                                <CheckBox.LayoutTransform>
+                                    <ScaleTransform ScaleX="1.2" ScaleY="1.2" />
+                                </CheckBox.LayoutTransform>
+                                <CheckBox.Content>
+                                    <TextBlock Text="{Binding DisplayName}">
+                                        <TextBlock.LayoutTransform>
+                                            <ScaleTransform ScaleX="0.8333" ScaleY="0.8333" />
+                                        </TextBlock.LayoutTransform>
+                                    </TextBlock>
+                                </CheckBox.Content>
+                            </CheckBox>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <TextBlock Grid.Row="1"
+                           Margin="0,8,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource Brush.Text.Primary}"
+                           Opacity="0.6"
+                           Text="No mods with saved configuration paths were found."
+                           Visibility="Collapsed">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding HasConfigOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    Value="False">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+        </Border>
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,18,0,0">
+            <Button x:Name="ConfirmButton"
+                    Content="Continue"
+                    MinWidth="88"
+                    Margin="0,0,12,0"
+                    IsDefault="True"
+                    Click="ConfirmButton_OnClick" />
+            <Button Content="Cancel"
+                    MinWidth="88"
+                    IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

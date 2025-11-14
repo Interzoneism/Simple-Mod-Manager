@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -23,11 +21,8 @@ public partial class ModVoteReasonDialog : Window
 
         if (!string.IsNullOrWhiteSpace(selectedReason))
         {
-            int index = _reasons.IndexOf(selectedReason);
-            if (index >= 0)
-            {
-                ReasonComboBox.SelectedIndex = index;
-            }
+            var index = _reasons.IndexOf(selectedReason);
+            if (index >= 0) ReasonComboBox.SelectedIndex = index;
         }
 
         Loaded += (_, _) => ReasonComboBox.Focus();
@@ -37,10 +32,7 @@ public partial class ModVoteReasonDialog : Window
 
     private void SubmitButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedReason is null)
-        {
-            return;
-        }
+        if (SelectedReason is null) return;
 
         DialogResult = true;
     }
@@ -60,13 +52,9 @@ internal static class ReasonListExtensions
 {
     public static int IndexOf(this IReadOnlyList<string> source, string value)
     {
-        for (int i = 0; i < source.Count; i++)
-        {
+        for (var i = 0; i < source.Count; i++)
             if (string.Equals(source[i], value, StringComparison.Ordinal))
-            {
                 return i;
-            }
-        }
 
         return -1;
     }

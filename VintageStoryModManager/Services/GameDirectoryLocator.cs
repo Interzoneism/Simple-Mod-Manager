@@ -1,11 +1,9 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
 
 namespace VintageStoryModManager.Services;
 
 /// <summary>
-/// Attempts to locate the Vintage Story installation directory and executable.
+///     Attempts to locate the Vintage Story installation directory and executable.
 /// </summary>
 public static class GameDirectoryLocator
 {
@@ -17,47 +15,34 @@ public static class GameDirectoryLocator
     };
 
     /// <summary>
-    /// Attempts to resolve the installation directory of Vintage Story.
+    ///     Attempts to resolve the installation directory of Vintage Story.
     /// </summary>
-    /// <returns>The absolute path to the game directory or <see cref="string.Empty"/> if it cannot be located.</returns>
+    /// <returns>The absolute path to the game directory or <see cref="string.Empty" /> if it cannot be located.</returns>
     public static string Resolve()
     {
-        foreach (string candidate in EnumerateCandidates())
-        {
+        foreach (var candidate in EnumerateCandidates())
             if (IsValidGameDirectory(candidate))
-            {
                 return candidate;
-            }
-        }
 
         return string.Empty;
     }
 
     /// <summary>
-    /// Attempts to locate the Vintage Story executable inside the provided directory.
+    ///     Attempts to locate the Vintage Story executable inside the provided directory.
     /// </summary>
     /// <param name="gameDirectory">The candidate game directory.</param>
     /// <returns>The absolute path to the executable or <c>null</c> when none of the known candidates are present.</returns>
     public static string? FindExecutable(string? gameDirectory)
     {
-        if (string.IsNullOrWhiteSpace(gameDirectory))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(gameDirectory)) return null;
 
-        string? fullDirectory = NormalizePath(gameDirectory);
-        if (string.IsNullOrWhiteSpace(fullDirectory) || !Directory.Exists(fullDirectory))
-        {
-            return null;
-        }
+        var fullDirectory = NormalizePath(gameDirectory);
+        if (string.IsNullOrWhiteSpace(fullDirectory) || !Directory.Exists(fullDirectory)) return null;
 
-        foreach (string candidate in ExecutableCandidates)
+        foreach (var candidate in ExecutableCandidates)
         {
-            string path = Path.Combine(fullDirectory, candidate);
-            if (File.Exists(path))
-            {
-                return Path.GetFullPath(path);
-            }
+            var path = Path.Combine(fullDirectory, candidate);
+            if (File.Exists(path)) return Path.GetFullPath(path);
         }
 
         return null;
@@ -67,38 +52,27 @@ public static class GameDirectoryLocator
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        string? baseDirectory = TryNormalize(AppContext.BaseDirectory);
-        if (baseDirectory != null && seen.Add(baseDirectory))
-        {
-            yield return baseDirectory;
-        }
+        var baseDirectory = TryNormalize(AppContext.BaseDirectory);
+        if (baseDirectory != null && seen.Add(baseDirectory)) yield return baseDirectory;
 
-        string vsFolder = Path.Combine(AppContext.BaseDirectory, "VSFOLDER");
-        string? normalizedVsFolder = TryNormalize(vsFolder);
+        var vsFolder = Path.Combine(AppContext.BaseDirectory, "VSFOLDER");
+        var normalizedVsFolder = TryNormalize(vsFolder);
         if (normalizedVsFolder != null && Directory.Exists(normalizedVsFolder) && seen.Add(normalizedVsFolder))
-        {
             yield return normalizedVsFolder;
-        }
 
-        string? currentDirectory = TryNormalize(Directory.GetCurrentDirectory());
-        if (currentDirectory != null && seen.Add(currentDirectory))
-        {
-            yield return currentDirectory;
-        }
+        var currentDirectory = TryNormalize(Directory.GetCurrentDirectory());
+        if (currentDirectory != null && seen.Add(currentDirectory)) yield return currentDirectory;
 
-        foreach (string defaultPath in EnumerateDefaultInstallPaths())
+        foreach (var defaultPath in EnumerateDefaultInstallPaths())
         {
-            string? normalized = TryNormalize(defaultPath);
-            if (normalized != null && seen.Add(normalized))
-            {
-                yield return normalized;
-            }
+            var normalized = TryNormalize(defaultPath);
+            if (normalized != null && seen.Add(normalized)) yield return normalized;
         }
     }
 
     private static IEnumerable<string> EnumerateDefaultInstallPaths()
     {
-        foreach (Environment.SpecialFolder folder in new[]
+        foreach (var folder in new[]
                  {
                      Environment.SpecialFolder.ProgramFiles,
                      Environment.SpecialFolder.ProgramFilesX86,
@@ -106,31 +80,19 @@ public static class GameDirectoryLocator
                      Environment.SpecialFolder.LocalApplicationData
                  })
         {
-            string? root = TryGetFolder(folder);
-            if (!string.IsNullOrWhiteSpace(root))
-            {
-                yield return Path.Combine(root!, "Vintagestory");
-            }
+            var root = TryGetFolder(folder);
+            if (!string.IsNullOrWhiteSpace(root)) yield return Path.Combine(root!, "Vintagestory");
         }
 
-        foreach (string root in EnumerateAdditionalWindowsRoots())
-        {
-            yield return Path.Combine(root, "Vintagestory");
-        }
+        foreach (var root in EnumerateAdditionalWindowsRoots()) yield return Path.Combine(root, "Vintagestory");
     }
 
     private static bool IsValidGameDirectory(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(path)) return false;
 
-        string? fullPath = NormalizePath(path);
-        if (string.IsNullOrWhiteSpace(fullPath) || !Directory.Exists(fullPath))
-        {
-            return false;
-        }
+        var fullPath = NormalizePath(path);
+        if (string.IsNullOrWhiteSpace(fullPath) || !Directory.Exists(fullPath)) return false;
 
         return FindExecutable(fullPath) != null;
     }
@@ -149,10 +111,7 @@ public static class GameDirectoryLocator
 
     private static string? TryNormalize(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(path)) return null;
 
         return NormalizePath(path);
     }
@@ -161,11 +120,8 @@ public static class GameDirectoryLocator
     {
         try
         {
-            string? path = Environment.GetFolderPath(folder, Environment.SpecialFolderOption.DoNotVerify);
-            if (!string.IsNullOrWhiteSpace(path))
-            {
-                return path;
-            }
+            var path = Environment.GetFolderPath(folder, Environment.SpecialFolderOption.DoNotVerify);
+            if (!string.IsNullOrWhiteSpace(path)) return path;
         }
         catch (PlatformNotSupportedException)
         {
@@ -177,7 +133,7 @@ public static class GameDirectoryLocator
 
     private static IEnumerable<string> EnumerateAdditionalWindowsRoots()
     {
-        foreach (string root in new[]
+        foreach (var root in new[]
                  {
                      @"C:\\Games",
                      @"D:\\Games",
@@ -185,11 +141,8 @@ public static class GameDirectoryLocator
                      @"C:\\Program Files (x86)"
                  })
         {
-            string? normalized = TryNormalize(root);
-            if (!string.IsNullOrWhiteSpace(normalized))
-            {
-                yield return normalized!;
-            }
+            var normalized = TryNormalize(root);
+            if (!string.IsNullOrWhiteSpace(normalized)) yield return normalized!;
         }
     }
 }

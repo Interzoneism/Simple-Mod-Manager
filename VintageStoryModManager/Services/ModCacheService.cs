@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -7,7 +6,7 @@ using VintageStoryModManager.Models;
 namespace VintageStoryModManager.Services;
 
 /// <summary>
-/// Provides helpers for ensuring installed mods are cached on disk.
+///     Provides helpers for ensuring installed mods are cached on disk.
 /// </summary>
 internal static class ModCacheService
 {
@@ -16,44 +15,29 @@ internal static class ModCacheService
         if (string.IsNullOrWhiteSpace(modId)
             || string.IsNullOrWhiteSpace(version)
             || string.IsNullOrWhiteSpace(sourcePath))
-        {
             return;
-        }
 
-        string? cacheFileName = Path.GetFileName(sourcePath);
-        string? cachePath = ModCacheLocator.GetModCachePath(modId, version, cacheFileName);
-        if (string.IsNullOrWhiteSpace(cachePath))
-        {
-            return;
-        }
+        var cacheFileName = Path.GetFileName(sourcePath);
+        var cachePath = ModCacheLocator.GetModCachePath(modId, version, cacheFileName);
+        if (string.IsNullOrWhiteSpace(cachePath)) return;
 
         if (ModCacheLocator.TryPromoteLegacyCacheFile(modId, version, cacheFileName, cachePath)
             && File.Exists(cachePath))
-        {
             return;
-        }
 
-        if (string.Equals(sourcePath, cachePath, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
+        if (string.Equals(sourcePath, cachePath, StringComparison.OrdinalIgnoreCase)) return;
 
-        if (File.Exists(cachePath))
-        {
-            return;
-        }
+        if (File.Exists(cachePath)) return;
 
-        if (ModCacheLocator.TryLocateCachedModFile(modId, version, cacheFileName, out string? existingCacheFile)
+        if (ModCacheLocator.TryLocateCachedModFile(modId, version, cacheFileName, out var existingCacheFile)
             && existingCacheFile is not null)
         {
-            string? existingDirectory = Path.GetDirectoryName(existingCacheFile);
-            string? cacheDirectory = Path.GetDirectoryName(cachePath);
+            var existingDirectory = Path.GetDirectoryName(existingCacheFile);
+            var cacheDirectory = Path.GetDirectoryName(cachePath);
             if (!string.IsNullOrWhiteSpace(existingDirectory)
                 && !string.IsNullOrWhiteSpace(cacheDirectory)
                 && string.Equals(existingDirectory, cacheDirectory, StringComparison.OrdinalIgnoreCase))
-            {
                 return;
-            }
         }
 
         try
@@ -71,7 +55,8 @@ internal static class ModCacheService
                     break;
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidDataException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
+                                       or InvalidDataException)
         {
             Trace.TraceWarning("Failed to cache mod {0} {1}: {2}", modId, version, ex.Message);
             TryDelete(cachePath);
@@ -80,54 +65,36 @@ internal static class ModCacheService
 
     private static void CacheFile(string sourcePath, string cachePath)
     {
-        if (!File.Exists(sourcePath))
-        {
-            return;
-        }
+        if (!File.Exists(sourcePath)) return;
 
-        string? cacheDirectory = Path.GetDirectoryName(cachePath);
-        if (!string.IsNullOrWhiteSpace(cacheDirectory))
-        {
-            Directory.CreateDirectory(cacheDirectory);
-        }
+        var cacheDirectory = Path.GetDirectoryName(cachePath);
+        if (!string.IsNullOrWhiteSpace(cacheDirectory)) Directory.CreateDirectory(cacheDirectory);
 
         try
         {
-            File.Copy(sourcePath, cachePath, overwrite: false);
+            File.Copy(sourcePath, cachePath, false);
         }
         catch (IOException ex)
         {
             // If the cache file was created concurrently we can ignore the failure.
-            if (!File.Exists(cachePath))
-            {
-                throw new IOException(ex.Message, ex);
-            }
+            if (!File.Exists(cachePath)) throw new IOException(ex.Message, ex);
         }
     }
 
     private static void CacheDirectory(string sourceDirectory, string cachePath)
     {
-        if (!Directory.Exists(sourceDirectory))
-        {
-            return;
-        }
+        if (!Directory.Exists(sourceDirectory)) return;
 
-        string? cacheDirectory = Path.GetDirectoryName(cachePath);
-        if (!string.IsNullOrWhiteSpace(cacheDirectory))
-        {
-            Directory.CreateDirectory(cacheDirectory);
-        }
+        var cacheDirectory = Path.GetDirectoryName(cachePath);
+        if (!string.IsNullOrWhiteSpace(cacheDirectory)) Directory.CreateDirectory(cacheDirectory);
 
         try
         {
-            ZipFile.CreateFromDirectory(sourceDirectory, cachePath, CompressionLevel.Optimal, includeBaseDirectory: false);
+            ZipFile.CreateFromDirectory(sourceDirectory, cachePath, CompressionLevel.Optimal, false);
         }
         catch (IOException ex)
         {
-            if (!File.Exists(cachePath))
-            {
-                throw new IOException(ex.Message, ex);
-            }
+            if (!File.Exists(cachePath)) throw new IOException(ex.Message, ex);
         }
     }
 
@@ -135,10 +102,7 @@ internal static class ModCacheService
     {
         try
         {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
+            if (File.Exists(path)) File.Delete(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

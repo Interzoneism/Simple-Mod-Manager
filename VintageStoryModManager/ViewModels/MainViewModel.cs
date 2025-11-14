@@ -1,19 +1,12 @@
-using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows;
 using System.Windows.Data;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -21,113 +14,131 @@ using CommunityToolkit.Mvvm.Input;
 using SimpleVsManager.Cloud;
 using VintageStoryModManager.Models;
 using VintageStoryModManager.Services;
+using Application = System.Windows.Application;
+using Timer = System.Threading.Timer;
 
 namespace VintageStoryModManager.ViewModels;
 
 /// <summary>
-/// Main view model that coordinates mod discovery and activation.
+///     Main view model that coordinates mod discovery and activation.
 /// </summary>
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
-    private static readonly TimeSpan ModDatabaseSearchDebounce = TimeSpan.FromMilliseconds(320);
-    private static readonly TimeSpan BusyStateReleaseDelay = TimeSpan.FromMilliseconds(600);
     private const string InternetAccessDisabledStatusMessage = "Enable Internet Access in the File menu to use.";
     private const string NoCompatibleModDatabaseResultsStatusMessage = "No compatible mods found in the mod database.";
+    private const string UserReportsLoadingStatusMessage = "Loading user reports...";
+    private const string UserReportsLoadedStatusMessage = "User reports loaded.";
+    private const string TagsColumnName = "Tags";
+    private const string UserReportsColumnName = "UserReports";
+    private static readonly TimeSpan ModDatabaseSearchDebounce = TimeSpan.FromMilliseconds(320);
+    private static readonly TimeSpan BusyStateReleaseDelay = TimeSpan.FromMilliseconds(600);
+    private static readonly TimeSpan FastCheckInterval = TimeSpan.FromMinutes(2);
     private static readonly int MaxConcurrentDatabaseRefreshes = DevConfig.MaxConcurrentDatabaseRefreshes;
+    private static readonly int MaxConcurrentUserReportRefreshes = DevConfig.MaxConcurrentUserReportRefreshes;
     private static readonly int MaxNewModsRecentMonths = DevConfig.MaxNewModsRecentMonths;
     private static readonly int InstalledModsIncrementalBatchSize = DevConfig.InstalledModsIncrementalBatchSize;
     private static readonly int MaxModDatabaseResultLimit = DevConfig.MaxModDatabaseResultLimit;
-
-    private enum ViewSection
-    {
-        InstalledMods,
-        ModDatabase,
-        CloudModlists
-    }
+    private readonly object _busyStateLock = new();
+    private readonly RelayCommand _clearSearchCommand;
+    private readonly ClientSettingsWatcher _clientSettingsWatcher;
+    private readonly ObservableCollection<CloudModlistListEntry> _cloudModlists = new();
+    private readonly UserConfigurationService _configuration;
+    private readonly ModDatabaseService _databaseService;
+    private readonly ModDiscoveryService _discoveryService;
+    private readonly object _fastCheckTimerLock = new();
+    private readonly HashSet<ModListItemViewModel> _installedModSubscriptions = new();
+    private readonly ObservableCollection<TagFilterOptionViewModel> _installedTagFilters = new();
+    private readonly Dictionary<string, string> _latestReleaseUserReportEtags = new(StringComparer.OrdinalIgnoreCase);
+    private readonly RelayCommand _loadMoreModDatabaseResultsCommand;
+    private readonly ObservableCollection<int> _modDatabaseFetchLimitOptions;
+    private readonly int _modDatabaseSearchResultLimit;
+    private readonly ObservableCollection<TagFilterOptionViewModel> _modDatabaseTagFilters = new();
+    private readonly object _modDetailsBusyScopeLock = new();
+    private readonly Dictionary<string, ModEntry> _modEntriesBySourcePath = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly ObservableCollection<ModListItemViewModel> _mods = new();
-    private readonly Dictionary<string, ModEntry> _modEntriesBySourcePath = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, ModListItemViewModel> _modViewModelsBySourcePath = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ObservableCollection<ModListItemViewModel> _searchResults = new();
-    private readonly ObservableCollection<CloudModlistListEntry> _cloudModlists = new();
-    private readonly ClientSettingsStore _settingsStore;
-    private readonly ModDiscoveryService _discoveryService;
-    private readonly ModDatabaseService _databaseService;
-    private readonly ModVersionVoteService _voteService = new();
-    private readonly UserConfigurationService _configuration;
-    private readonly int _modDatabaseSearchResultLimit;
-    private int _modDatabaseCurrentResultLimit;
-    private int _selectedModDatabaseFetchLimit;
-    private readonly ObservableCollection<int> _modDatabaseFetchLimitOptions;
-    private readonly ObservableCollection<SortOption> _sortOptions;
-    private readonly string? _installedGameVersion;
     private readonly object _modsStateLock = new();
     private readonly ModDirectoryWatcher _modsWatcher;
-    private readonly ClientSettingsWatcher _clientSettingsWatcher;
-    private readonly int _newModsRecentMonths;
-    private volatile bool _hasPendingLightweightModUpdateCheck;
-    private int _isLightweightModUpdateCheckRunning;
 
-    private SortOption? _selectedSortOption;
-    private bool _isBusy;
-    private bool _isCompactView;
-    private bool _useModDbDesignView;
-    private bool _isModInfoExpanded = true;
-    private string _statusMessage = string.Empty;
-    private bool _isErrorStatus;
-    private int _totalMods;
-    private int _activeMods;
-    private int _updatableModsCount;
-    private string? _modsStateFingerprint;
-    private ModListItemViewModel? _selectedMod;
-    private bool _hasSelectedMods;
-    private bool _hasMultipleSelectedMods;
-    private string _searchText = string.Empty;
-    private string[] _searchTokens = Array.Empty<string>();
-    private ViewSection _viewSection = ViewSection.InstalledMods;
-    private CancellationTokenSource? _modDatabaseSearchCts;
-    private readonly RelayCommand _clearSearchCommand;
-    private readonly RelayCommand _showInstalledModsCommand;
-    private readonly RelayCommand _showModDatabaseCommand;
-    private readonly RelayCommand _showCloudModlistsCommand;
-    private readonly RelayCommand _loadMoreModDatabaseResultsCommand;
-    private readonly RelayCommand _showDownloadsSortingOptionsCommand;
-    private readonly RelayCommand _showActivitySortingOptionsCommand;
-    private ModDatabaseAutoLoadMode _modDatabaseAutoLoadMode = ModDatabaseAutoLoadMode.TotalDownloads;
-    private ModDatabaseAutoLoadMode _lastDownloadsAutoLoadMode = ModDatabaseAutoLoadMode.TotalDownloads;
-    private ModDatabaseAutoLoadMode _lastActivityAutoLoadMode = ModDatabaseAutoLoadMode.RecentlyAdded;
-    private readonly object _busyStateLock = new();
-    private int _busyOperationCount;
-    private bool _hasActiveBusyScope;
-    private CancellationTokenSource? _busyReleaseCts;
-    private bool _isLoadingMods;
-    private bool _isLoadingModDetails;
-    private int _pendingModDetailsRefreshCount;
-    private readonly object _modDetailsBusyScopeLock = new();
-    private IDisposable? _modDetailsBusyScope;
-    private bool _isModDetailsStatusActive;
-    private bool _hasShownModDetailsLoadingStatus;
-    private readonly ObservableCollection<TagFilterOptionViewModel> _installedTagFilters = new();
-    private readonly ObservableCollection<TagFilterOptionViewModel> _modDatabaseTagFilters = new();
-    private readonly HashSet<ModListItemViewModel> _installedModSubscriptions = new();
+    private readonly Dictionary<string, ModListItemViewModel> _modViewModelsBySourcePath =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly int _newModsRecentMonths;
+    private readonly ObservableCollection<ModListItemViewModel> _searchResults = new();
     private readonly HashSet<ModListItemViewModel> _searchResultSubscriptions = new();
     private readonly List<string> _selectedInstalledTags = new();
     private readonly List<string> _selectedModDatabaseTags = new();
-    private bool _suppressInstalledTagFilterSelectionChanges;
-    private bool _suppressModDatabaseTagFilterSelectionChanges;
-    private IReadOnlyList<string> _modDatabaseAvailableTags = Array.Empty<string>();
-    private bool _isInstalledTagRefreshPending;
-    private bool _isModDatabaseTagRefreshPending;
-    private bool _excludeInstalledModDatabaseResults;
+    private readonly ClientSettingsStore _settingsStore;
+    private readonly RelayCommand _showActivitySortingOptionsCommand;
+    private readonly RelayCommand _showCloudModlistsCommand;
+    private readonly RelayCommand _showDownloadsSortingOptionsCommand;
+    private readonly RelayCommand _showInstalledModsCommand;
+    private readonly RelayCommand _showModDatabaseCommand;
+    private readonly ObservableCollection<SortOption> _sortOptions;
+    private readonly HashSet<string> _suppressedTagEntries = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _userReportEtags = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _userReportOperationLock = new();
+
+    private readonly SemaphoreSlim _userReportRefreshLimiter =
+        new(MaxConcurrentUserReportRefreshes, MaxConcurrentUserReportRefreshes);
+
+    private readonly ModVersionVoteService _voteService = new();
+    private int _activeMods;
+    private int _activeUserReportOperations;
+    private bool _allowModDetailsRefresh = true;
+    private bool _areUserReportsVisible = true;
+    private int _busyOperationCount;
+    private CancellationTokenSource? _busyReleaseCts;
     private bool _canLoadMoreModDatabaseResults;
+    private bool _disposed;
+    private bool _excludeInstalledModDatabaseResults;
+    private Timer? _fastCheckTimer;
+    private bool _hasActiveBusyScope;
+    private bool _hasEnabledUserReportFetching;
+    private bool _hasMultipleSelectedMods;
+    private volatile bool _hasPendingFastCheck;
+    private bool _hasRequestedAdditionalModDatabaseResults;
+    private bool _hasSelectedMods;
+    private bool _hasSelectedTags;
+    private bool _hasShownModDetailsLoadingStatus;
+    private bool _isAutoRefreshDisabled;
+    private bool _isBusy;
+    private bool _isCompactView;
+    private bool _isErrorStatus;
+    private int _isFastCheckRunning;
+    private bool _isInstalledTagRefreshPending;
+    private bool _isLoadingModDetails;
+    private bool _isLoadingMods;
     private bool _isLoadMoreModDatabaseButtonVisible;
     private bool _isLoadMoreModDatabaseScrollThresholdReached;
     private bool _isModDatabaseLoading;
-    private bool _hasRequestedAdditionalModDatabaseResults;
-    private bool _hasSelectedTags;
-    private bool _disposed;
+    private bool _isModDatabaseTagRefreshPending;
+    private bool _isModDetailsRefreshForced;
+    private bool _isModDetailsStatusActive;
+    private bool _isModInfoExpanded = true;
+    private bool _isTagsColumnVisible = true;
+    private ModDatabaseAutoLoadMode _lastActivityAutoLoadMode = ModDatabaseAutoLoadMode.RecentlyAdded;
+    private ModDatabaseAutoLoadMode _lastDownloadsAutoLoadMode = ModDatabaseAutoLoadMode.TotalDownloads;
+    private IReadOnlyList<string> _modDatabaseAvailableTags = Array.Empty<string>();
+    private int _modDatabaseCurrentResultLimit;
+    private CancellationTokenSource? _modDatabaseSearchCts;
+    private IDisposable? _modDetailsBusyScope;
+    private string? _modsStateFingerprint;
     private bool _onlyShowCompatibleModDatabaseResults;
-    private bool _hasEnabledUserReportFetching;
+    private int _pendingModDetailsRefreshCount;
+    private string _searchText = string.Empty;
+    private string[] _searchTokens = Array.Empty<string>();
+    private ModListItemViewModel? _selectedMod;
+    private int _selectedModDatabaseFetchLimit;
+
+    private SortOption? _selectedSortOption;
+    private string _statusMessage = string.Empty;
+    private bool _suppressInstalledTagFilterSelectionChanges;
+    private bool _suppressModDatabaseTagFilterSelectionChanges;
+    private int _totalMods;
+    private int _updatableModsCount;
+    private bool _useModDbDesignView;
+    private ViewSection _viewSection = ViewSection.InstalledMods;
 
     public MainViewModel(
         string dataDirectory,
@@ -152,10 +163,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _modDatabaseCurrentResultLimit = _modDatabaseSearchResultLimit;
         _modDatabaseFetchLimitOptions = new ObservableCollection<int> { 30, 60, 120, 200 };
         _selectedModDatabaseFetchLimit = _modDatabaseSearchResultLimit;
-        _newModsRecentMonths = Math.Clamp(newModsRecentMonths <= 0 ? 1 : newModsRecentMonths, 1, MaxNewModsRecentMonths);
-        _modDatabaseAutoLoadMode = NormalizeModDatabaseAutoLoadMode(initialModDatabaseAutoLoadMode);
-        UpdateLastSelectedSortModes(_modDatabaseAutoLoadMode);
-        _installedGameVersion = VintageStoryVersionLocator.GetInstalledVersion(gameDirectory);
+        _newModsRecentMonths =
+            Math.Clamp(newModsRecentMonths <= 0 ? 1 : newModsRecentMonths, 1, MaxNewModsRecentMonths);
+        ModDatabaseAutoLoadMode = NormalizeModDatabaseAutoLoadMode(initialModDatabaseAutoLoadMode);
+        UpdateLastSelectedSortModes(ModDatabaseAutoLoadMode);
+        InstalledGameVersion = VintageStoryVersionLocator.GetInstalledVersion(gameDirectory);
         _modsWatcher = new ModDirectoryWatcher(_discoveryService);
         _clientSettingsWatcher = new ClientSettingsWatcher(_settingsStore.SettingsPath);
 
@@ -176,6 +188,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _excludeInstalledModDatabaseResults = excludeInstalledModDatabaseResults;
         _onlyShowCompatibleModDatabaseResults = onlyShowCompatibleModDatabaseResults;
         _hasEnabledUserReportFetching = FirebaseAnonymousAuthenticator.HasPersistedState();
+        _isAutoRefreshDisabled = configuration.DisableAutoRefresh;
+        _allowModDetailsRefresh = !_isAutoRefreshDisabled;
 
         _clearSearchCommand = new RelayCommand(() => SearchText = string.Empty, () => HasSearchText);
         ClearSearchCommand = _clearSearchCommand;
@@ -192,9 +206,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _loadMoreModDatabaseResultsCommand = new RelayCommand(
             LoadMoreModDatabaseResults,
             () => SearchModDatabase
-                && !IsModDatabaseLoading
-                && IsLoadMoreModDatabaseButtonVisible
-                && IsLoadMoreModDatabaseScrollThresholdReached);
+                  && !IsModDatabaseLoading
+                  && IsLoadMoreModDatabaseButtonVisible
+                  && IsLoadMoreModDatabaseScrollThresholdReached);
         ShowInstalledModsCommand = _showInstalledModsCommand;
         ShowModDatabaseCommand = _showModDatabaseCommand;
         ShowCloudModlistsCommand = _showCloudModlistsCommand;
@@ -206,6 +220,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SetStatus("Ready.", false);
 
         InternetAccessManager.InternetAccessChanged += OnInternetAccessChanged;
+
+        ResetFastCheckTimer();
     }
 
     public string DataDirectory { get; }
@@ -231,10 +247,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _selectedModDatabaseFetchLimit;
         set
         {
-            if (SetProperty(ref _selectedModDatabaseFetchLimit, value))
-            {
-                OnModDatabaseFetchLimitChanged();
-            }
+            if (SetProperty(ref _selectedModDatabaseFetchLimit, value)) OnModDatabaseFetchLimitChanged();
         }
     }
 
@@ -254,10 +267,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _selectedSortOption;
         set
         {
-            if (SetProperty(ref _selectedSortOption, value))
-            {
-                value?.Apply(ModsView);
-            }
+            if (SetProperty(ref _selectedSortOption, value)) value?.Apply(ModsView);
         }
     }
 
@@ -267,20 +277,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _isBusy, value);
     }
 
-    public IDisposable EnterBusyScope()
-    {
-        return BeginBusyScope();
-    }
-
     public bool IsLoadingMods
     {
         get => _isLoadingMods;
         private set
         {
-            if (SetProperty(ref _isLoadingMods, value))
-            {
-                RecalculateIsBusy();
-            }
+            if (SetProperty(ref _isLoadingMods, value)) RecalculateIsBusy();
         }
     }
 
@@ -289,10 +291,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _isLoadingModDetails;
         private set
         {
-            if (SetProperty(ref _isLoadingModDetails, value))
-            {
-                RecalculateIsBusy();
-            }
+            if (SetProperty(ref _isLoadingModDetails, value)) RecalculateIsBusy();
         }
     }
 
@@ -313,10 +312,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _hasSelectedTags;
         private set
         {
-            if (SetProperty(ref _hasSelectedTags, value))
-            {
-                OnPropertyChanged(nameof(TagsColumnHeader));
-            }
+            if (SetProperty(ref _hasSelectedTags, value)) OnPropertyChanged(nameof(TagsColumnHeader));
         }
     }
 
@@ -331,10 +327,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 OnPropertyChanged(nameof(IncludeInstalledModDatabaseResults));
 
-                if (_viewSection == ViewSection.ModDatabase)
-                {
-                    TriggerModDatabaseSearch();
-                }
+                if (_viewSection == ViewSection.ModDatabase) TriggerModDatabaseSearch();
             }
         }
     }
@@ -351,12 +344,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set
         {
             if (SetProperty(ref _onlyShowCompatibleModDatabaseResults, value))
-            {
                 if (_viewSection == ViewSection.ModDatabase)
-                {
                     TriggerModDatabaseSearch();
-                }
-            }
         }
     }
 
@@ -371,10 +360,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _statusMessage;
         private set
         {
-            if (SetProperty(ref _statusMessage, value))
-            {
-                OnPropertyChanged(nameof(HasStatusMessage));
-            }
+            if (SetProperty(ref _statusMessage, value)) OnPropertyChanged(nameof(HasStatusMessage));
         }
     }
 
@@ -385,10 +371,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _selectedMod;
         private set
         {
-            if (SetProperty(ref _selectedMod, value))
-            {
-                OnPropertyChanged(nameof(HasSelectedMod));
-            }
+            if (SetProperty(ref _selectedMod, value)) OnPropertyChanged(nameof(HasSelectedMod));
         }
     }
 
@@ -418,13 +401,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set
         {
             if (value)
-            {
                 SetViewSection(ViewSection.ModDatabase);
-            }
-            else if (_viewSection == ViewSection.ModDatabase)
-            {
-                SetViewSection(ViewSection.InstalledMods);
-            }
+            else if (_viewSection == ViewSection.ModDatabase) SetViewSection(ViewSection.InstalledMods);
         }
     }
 
@@ -451,10 +429,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _canLoadMoreModDatabaseResults;
         private set
         {
-            if (SetProperty(ref _canLoadMoreModDatabaseResults, value))
-            {
-                NotifyLoadMoreCommandCanExecuteChanged();
-            }
+            if (SetProperty(ref _canLoadMoreModDatabaseResults, value)) NotifyLoadMoreCommandCanExecuteChanged();
         }
     }
 
@@ -466,9 +441,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _isLoadMoreModDatabaseButtonVisible, value))
             {
                 if (!value && _isLoadMoreModDatabaseScrollThresholdReached)
-                {
                     IsLoadMoreModDatabaseScrollThresholdReached = false;
-                }
 
                 NotifyLoadMoreCommandCanExecuteChanged();
             }
@@ -481,9 +454,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set
         {
             if (SetProperty(ref _isLoadMoreModDatabaseScrollThresholdReached, value))
-            {
                 NotifyLoadMoreCommandCanExecuteChanged();
-            }
         }
     }
 
@@ -500,129 +471,105 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool IsModDatabaseDownloadsTabSelected => IsDownloadsAutoLoadMode(_modDatabaseAutoLoadMode);
+    public bool IsModDatabaseDownloadsTabSelected => IsDownloadsAutoLoadMode(ModDatabaseAutoLoadMode);
 
-    public bool IsModDatabaseActivityTabSelected => IsActivityAutoLoadMode(_modDatabaseAutoLoadMode);
+    public bool IsModDatabaseActivityTabSelected => IsActivityAutoLoadMode(ModDatabaseAutoLoadMode);
 
     public bool IsTotalDownloadsMode
     {
-        get => _modDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.TotalDownloads;
+        get => ModDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.TotalDownloads;
         set
         {
-            if (value)
-            {
-                SetAutoLoadMode(ModDatabaseAutoLoadMode.TotalDownloads);
-            }
+            if (value) SetAutoLoadMode(ModDatabaseAutoLoadMode.TotalDownloads);
         }
     }
 
     public bool IsDownloadsLastThirtyDaysMode
     {
-        get => _modDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.DownloadsLastThirtyDays;
+        get => ModDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.DownloadsLastThirtyDays;
         set
         {
-            if (value)
-            {
-                SetAutoLoadMode(ModDatabaseAutoLoadMode.DownloadsLastThirtyDays);
-            }
+            if (value) SetAutoLoadMode(ModDatabaseAutoLoadMode.DownloadsLastThirtyDays);
         }
     }
 
     public bool IsDownloadsNewModsRecentMonthsMode
     {
-        get => _modDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.DownloadsNewModsRecentMonths;
+        get => ModDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.DownloadsNewModsRecentMonths;
         set
         {
-            if (value)
-            {
-                SetAutoLoadMode(ModDatabaseAutoLoadMode.DownloadsNewModsRecentMonths);
-            }
+            if (value) SetAutoLoadMode(ModDatabaseAutoLoadMode.DownloadsNewModsRecentMonths);
         }
     }
 
     public bool IsDownloadsLastTenDaysMode
     {
-        get => _modDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.DownloadsLastTenDays;
+        get => ModDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.DownloadsLastTenDays;
         set
         {
-            if (value)
-            {
-                SetAutoLoadMode(ModDatabaseAutoLoadMode.DownloadsLastTenDays);
-            }
+            if (value) SetAutoLoadMode(ModDatabaseAutoLoadMode.DownloadsLastTenDays);
         }
     }
 
     public bool IsRecentlyUpdatedMode
     {
-        get => _modDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.RecentlyUpdated;
+        get => ModDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.RecentlyUpdated;
         set
         {
-            if (value)
-            {
-                SetAutoLoadMode(ModDatabaseAutoLoadMode.RecentlyUpdated);
-            }
+            if (value) SetAutoLoadMode(ModDatabaseAutoLoadMode.RecentlyUpdated);
         }
     }
 
     public bool IsRecentlyAddedMode
     {
-        get => _modDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.RecentlyAdded;
+        get => ModDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.RecentlyAdded;
         set
         {
-            if (value)
-            {
-                SetAutoLoadMode(ModDatabaseAutoLoadMode.RecentlyAdded);
-            }
+            if (value) SetAutoLoadMode(ModDatabaseAutoLoadMode.RecentlyAdded);
         }
     }
 
     public bool IsMostTrendingMode
     {
-        get => _modDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.MostTrending;
+        get => ModDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.MostTrending;
         set
         {
-            if (value)
-            {
-                SetAutoLoadMode(ModDatabaseAutoLoadMode.MostTrending);
-            }
+            if (value) SetAutoLoadMode(ModDatabaseAutoLoadMode.MostTrending);
         }
     }
 
     public bool IsAddedLast30DaysMode
     {
-        get => _modDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.AddedLast30Days;
+        get => ModDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.AddedLast30Days;
         set
         {
-            if (value)
-            {
-                SetAutoLoadMode(ModDatabaseAutoLoadMode.AddedLast30Days);
-            }
+            if (value) SetAutoLoadMode(ModDatabaseAutoLoadMode.AddedLast30Days);
         }
     }
 
     public bool IsRandomMode
     {
-        get => _modDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.Random;
+        get => ModDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.Random;
         set
         {
-            if (value)
-            {
-                SetAutoLoadMode(ModDatabaseAutoLoadMode.Random);
-            }
+            if (value) SetAutoLoadMode(ModDatabaseAutoLoadMode.Random);
         }
     }
 
-    public ModDatabaseAutoLoadMode ModDatabaseAutoLoadMode => _modDatabaseAutoLoadMode;
+    public ModDatabaseAutoLoadMode ModDatabaseAutoLoadMode { get; private set; } =
+        ModDatabaseAutoLoadMode.TotalDownloads;
 
     public string DownloadsNewModsRecentMonthsLabel =>
         $"Created {BuildRecentMonthsPhrase()}";
 
     public bool IsShowingRecentDownloadMetric => SearchModDatabase && !HasSearchText
-        && (_modDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.DownloadsLastThirtyDays
-            || _modDatabaseAutoLoadMode == ModDatabaseAutoLoadMode.DownloadsLastTenDays);
+                                                                   && (ModDatabaseAutoLoadMode ==
+                                                                       ModDatabaseAutoLoadMode.DownloadsLastThirtyDays
+                                                                       || ModDatabaseAutoLoadMode ==
+                                                                       ModDatabaseAutoLoadMode.DownloadsLastTenDays);
 
     public string DownloadsColumnHeader => SearchModDatabase && !HasSearchText
-        ? _modDatabaseAutoLoadMode switch
+        ? ModDatabaseAutoLoadMode switch
         {
             ModDatabaseAutoLoadMode.DownloadsLastThirtyDays => "Downloads (30 days)",
             ModDatabaseAutoLoadMode.DownloadsLastTenDays => "Downloads (10 days)",
@@ -630,12 +577,139 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         : "Downloads";
 
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            var newValue = value ?? string.Empty;
+            if (!SetProperty(ref _searchText, newValue)) return;
+
+            var hadSearchTokens = _searchTokens.Length > 0;
+            _searchTokens = CreateSearchTokens(newValue);
+            var hasSearchTokens = _searchTokens.Length > 0;
+
+            OnPropertyChanged(nameof(HasSearchText));
+            OnPropertyChanged(nameof(IsShowingRecentDownloadMetric));
+            OnPropertyChanged(nameof(DownloadsColumnHeader));
+            _clearSearchCommand.NotifyCanExecuteChanged();
+            if (SearchModDatabase)
+            {
+                if (!hasSearchTokens && hadSearchTokens) ClearSearchResults();
+
+                TriggerModDatabaseSearch();
+            }
+            else
+            {
+                ModsView.Refresh();
+            }
+        }
+    }
+
+    public bool HasSearchText => _searchTokens.Length > 0;
+
+    public int TotalMods
+    {
+        get => _totalMods;
+        private set
+        {
+            if (SetProperty(ref _totalMods, value)) OnPropertyChanged(nameof(SummaryText));
+        }
+    }
+
+    public int ActiveMods
+    {
+        get => _activeMods;
+        private set
+        {
+            if (SetProperty(ref _activeMods, value)) OnPropertyChanged(nameof(SummaryText));
+        }
+    }
+
+    public int UpdatableModsCount
+    {
+        get => _updatableModsCount;
+        private set
+        {
+            if (SetProperty(ref _updatableModsCount, value))
+            {
+                OnPropertyChanged(nameof(UpdateAllButtonLabel));
+                OnPropertyChanged(nameof(UpdateAllModsMenuHeader));
+            }
+        }
+    }
+
+    public string SummaryText => TotalMods == 0
+        ? "No mods found."
+        : $"{ActiveMods} active of {TotalMods} mods";
+
+    public string UpdateAllButtonLabel => UpdatableModsCount == 0
+        ? "Manage Updates"
+        : $"Manage Updates ({UpdatableModsCount})";
+
+    public string UpdateAllModsMenuHeader => UpdatableModsCount == 0
+        ? "_Update All Mods"
+        : $"_Update All Mods ({UpdatableModsCount})";
+
+    public string NoModsFoundMessage =>
+        $"No mods found. If this is unexpected, verify that your VintageStoryData folder is correctly set: {DataDirectory}. You can change it in the File Menu.";
+
+    public IRelayCommand ClearSearchCommand { get; }
+
+    public IAsyncRelayCommand RefreshCommand { get; }
+
+    public string? InstalledGameVersion { get; }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+
+        _disposed = true;
+
+        InternetAccessManager.InternetAccessChanged -= OnInternetAccessChanged;
+        _mods.CollectionChanged -= OnModsCollectionChanged;
+        _searchResults.CollectionChanged -= OnSearchResultsCollectionChanged;
+
+        DetachAllInstalledMods();
+        DetachAllSearchResults();
+
+        foreach (var filter in _installedTagFilters) filter.PropertyChanged -= OnInstalledTagFilterPropertyChanged;
+
+        foreach (var filter in _modDatabaseTagFilters) filter.PropertyChanged -= OnModDatabaseTagFilterPropertyChanged;
+
+        _installedTagFilters.Clear();
+        _modDatabaseTagFilters.Clear();
+
+        lock (_fastCheckTimerLock)
+        {
+            _fastCheckTimer?.Dispose();
+            _fastCheckTimer = null;
+        }
+
+        _clientSettingsWatcher.Dispose();
+        _modDetailsBusyScope?.Dispose();
+        _modDetailsBusyScope = null;
+        _userReportRefreshLimiter.Dispose();
+    }
+
+    public IDisposable EnterBusyScope()
+    {
+        return BeginBusyScope();
+    }
+
+    public void SetInstalledColumnVisibility(string columnName, bool isVisible)
+    {
+        if (string.IsNullOrWhiteSpace(columnName)) return;
+
+        if (string.Equals(columnName, TagsColumnName, StringComparison.OrdinalIgnoreCase))
+            SetTagsColumnVisibility(isVisible);
+        else if (string.Equals(columnName, UserReportsColumnName, StringComparison.OrdinalIgnoreCase))
+            SetUserReportsColumnVisibility(isVisible);
+    }
+
     private void SetViewSection(ViewSection section)
     {
-        if (_viewSection == section)
-        {
-            return;
-        }
+        if (_viewSection == section) return;
 
         if (section == ViewSection.ModDatabase && InternetAccessManager.IsInternetAccessDisabled)
         {
@@ -651,16 +725,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _modDatabaseSearchCts?.Cancel();
 
-        bool hadSearchText = !string.IsNullOrEmpty(SearchText);
-        bool modDatabaseSearchTriggeredByClearing = false;
-
         _viewSection = section;
 
-        if (hadSearchText)
-        {
-            SearchText = string.Empty;
-            modDatabaseSearchTriggeredByClearing = section == ViewSection.ModDatabase;
-        }
+        if (!string.IsNullOrEmpty(_searchText)) SearchText = string.Empty;
 
         CanLoadMoreModDatabaseResults = false;
 
@@ -673,22 +740,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         switch (section)
         {
             case ViewSection.ModDatabase:
-                ClearSearchResults();
                 SelectedMod = null;
-                if (!modDatabaseSearchTriggeredByClearing)
-                {
+                if (_searchResults.Count == 0)
                     TriggerModDatabaseSearch();
-                }
+                else
+                    SetStatus("Showing mod database.", false);
                 break;
             case ViewSection.InstalledMods:
-                ClearSearchResults();
                 SelectedMod = null;
-                SelectedSortOption?.Apply(ModsView);
-                ModsView.Refresh();
                 SetStatus("Showing installed mods.", false);
                 break;
             case ViewSection.CloudModlists:
-                ClearSearchResults();
                 SelectedMod = null;
                 SetStatus("Showing cloud modlists.", false);
                 break;
@@ -703,7 +765,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         NotifyLoadMoreCommandCanExecuteChanged();
 
-        TriggerLightweightModUpdateCheck();
+        FastCheck();
     }
 
     private void NotifyLoadMoreCommandCanExecuteChanged()
@@ -711,41 +773,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _loadMoreModDatabaseResultsCommand?.NotifyCanExecuteChanged();
     }
 
-    public void TriggerLightweightModUpdateCheck()
+    public void FastCheck()
     {
-        if (InternetAccessManager.IsInternetAccessDisabled)
-        {
-            return;
-        }
+        ResetFastCheckTimer();
 
-        _hasPendingLightweightModUpdateCheck = true;
+        if (InternetAccessManager.IsInternetAccessDisabled) return;
 
-        if (Interlocked.CompareExchange(ref _isLightweightModUpdateCheckRunning, 1, 0) == 0)
-        {
-            _ = Task.Run(RunLightweightModUpdateCheckAsync);
-        }
+        _hasPendingFastCheck = true;
+
+        if (Interlocked.CompareExchange(ref _isFastCheckRunning, 1, 0) == 0) _ = Task.Run(RunFastCheckAsync);
     }
 
-    private async Task RunLightweightModUpdateCheckAsync()
+    private async Task RunFastCheckAsync()
     {
         try
         {
-            while (_hasPendingLightweightModUpdateCheck)
+            while (_hasPendingFastCheck)
             {
-                _hasPendingLightweightModUpdateCheck = false;
+                _hasPendingFastCheck = false;
 
-                if (InternetAccessManager.IsInternetAccessDisabled)
-                {
-                    break;
-                }
+                if (InternetAccessManager.IsInternetAccessDisabled) break;
 
-                bool hasUpdates = await CheckForNewModReleasesAsync(CancellationToken.None).ConfigureAwait(false);
-                if (hasUpdates)
-                {
-                    await InvokeOnDispatcherAsync(() => RefreshCommand.Execute(null), CancellationToken.None)
-                        .ConfigureAwait(false);
-                    break;
-                }
+                var updateCandidates = await CheckForNewModReleasesAsync(CancellationToken.None)
+                    .ConfigureAwait(false);
+
+                if (updateCandidates.Count > 0) QueueDatabaseInfoRefresh(updateCandidates, true);
+
+                await CheckForVoteChangesAsync(CancellationToken.None).ConfigureAwait(false);
             }
         }
         catch
@@ -754,100 +808,274 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            Interlocked.Exchange(ref _isLightweightModUpdateCheckRunning, 0);
+            Interlocked.Exchange(ref _isFastCheckRunning, 0);
 
-            if (_hasPendingLightweightModUpdateCheck && !InternetAccessManager.IsInternetAccessDisabled)
-            {
-                TriggerLightweightModUpdateCheck();
-            }
+            if (_hasPendingFastCheck && !InternetAccessManager.IsInternetAccessDisabled) FastCheck();
         }
     }
 
-    private async Task<bool> CheckForNewModReleasesAsync(CancellationToken cancellationToken)
+    private void ResetFastCheckTimer()
+    {
+        if (_disposed || _isAutoRefreshDisabled) return;
+
+        lock (_fastCheckTimerLock)
+        {
+            _fastCheckTimer ??= new Timer(OnFastCheckTimerElapsed, null, Timeout.InfiniteTimeSpan,
+                Timeout.InfiniteTimeSpan);
+            _fastCheckTimer.Change(FastCheckInterval, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void StopFastCheckTimer()
+    {
+        lock (_fastCheckTimerLock)
+        {
+            _fastCheckTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void OnFastCheckTimerElapsed(object? state)
+    {
+        if (_disposed || _isAutoRefreshDisabled) return;
+
+        FastCheck();
+    }
+
+    private async Task<IReadOnlyList<ModEntry>> CheckForNewModReleasesAsync(CancellationToken cancellationToken)
     {
         try
         {
-            List<(string ModId, string? InstalledVersion)> mods = await InvokeOnDispatcherAsync(
+            var entries = await InvokeOnDispatcherAsync(
                 () =>
                 {
-                    var snapshot = new List<(string, string?)>(_modEntriesBySourcePath.Count);
-                    foreach (ModEntry entry in _modEntriesBySourcePath.Values)
+                    var snapshot = new List<ModEntry>(_modEntriesBySourcePath.Count);
+                    foreach (var entry in _modEntriesBySourcePath.Values)
                     {
-                        if (entry is null || string.IsNullOrWhiteSpace(entry.ModId))
-                        {
-                            continue;
-                        }
+                        if (entry is null || string.IsNullOrWhiteSpace(entry.ModId)) continue;
 
-                        snapshot.Add((entry.ModId, entry.Version));
+                        snapshot.Add(entry);
                     }
 
                     return snapshot;
                 },
                 cancellationToken).ConfigureAwait(false);
 
-            if (mods.Count == 0)
-            {
-                return false;
-            }
+            if (entries.Count == 0) return Array.Empty<ModEntry>();
 
-            foreach ((string ModId, string? InstalledVersion) mod in mods)
+            var updateCandidates = new List<ModEntry>();
+            var processed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var entry in entries)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                string? latestVersion = await _databaseService
-                    .TryFetchLatestReleaseVersionAsync(mod.ModId, cancellationToken)
+                var modId = entry.ModId;
+                if (!processed.Add(modId)) continue;
+
+                var latestVersion = await _databaseService
+                    .TryFetchLatestReleaseVersionAsync(modId, cancellationToken)
                     .ConfigureAwait(false);
 
-                if (string.IsNullOrWhiteSpace(latestVersion))
-                {
-                    continue;
-                }
+                if (string.IsNullOrWhiteSpace(latestVersion)) continue;
 
-                if (IsDifferentVersion(mod.InstalledVersion, latestVersion))
-                {
-                    return true;
-                }
+                if (!IsDifferentVersion(entry.Version, latestVersion)) continue;
+
+                var knownLatest = entry.DatabaseInfo?.LatestRelease?.Version
+                                  ?? entry.DatabaseInfo?.LatestVersion;
+
+                if (string.Equals(knownLatest, latestVersion, StringComparison.OrdinalIgnoreCase)) continue;
+
+                updateCandidates.Add(entry);
             }
 
-            return false;
+            return updateCandidates.Count == 0
+                ? Array.Empty<ModEntry>()
+                : updateCandidates;
         }
         catch (OperationCanceledException)
         {
-            return false;
+            return Array.Empty<ModEntry>();
         }
         catch
         {
-            return false;
+            return Array.Empty<ModEntry>();
         }
+    }
+
+    private async Task CheckForVoteChangesAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(InstalledGameVersion)) return;
+
+        var targets = await InvokeOnDispatcherAsync(
+            () =>
+            {
+                var list = new List<VoteCheckTarget>(_mods.Count);
+                foreach (var mod in _mods)
+                {
+                    var hasUserReportSummary = mod.UserReportSummary is not null;
+                    var hasLatestReleaseSummary = mod.LatestReleaseUserReportSummary is not null;
+
+                    if (!hasUserReportSummary && !hasLatestReleaseSummary) continue;
+
+                    var latestReleaseVersion = hasLatestReleaseSummary ? mod.LatestRelease?.Version : null;
+                    list.Add(new VoteCheckTarget(
+                        mod,
+                        hasUserReportSummary ? mod.UserReportModVersion : null,
+                        hasUserReportSummary,
+                        latestReleaseVersion,
+                        hasLatestReleaseSummary));
+                }
+
+                return list;
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (targets.Count == 0) return;
+
+        using var limiter = new SemaphoreSlim(MaxConcurrentUserReportRefreshes, MaxConcurrentUserReportRefreshes);
+        var tasks = targets
+            .Select(target => CheckVoteChangesForModAsync(target, limiter, cancellationToken))
+            .ToArray();
+
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private async Task CheckVoteChangesForModAsync(
+        VoteCheckTarget target,
+        SemaphoreSlim limiter,
+        CancellationToken cancellationToken)
+    {
+        await limiter.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            if (target.HasUserReportSummary
+                && !string.IsNullOrWhiteSpace(target.UserReportVersion)
+                && !string.IsNullOrWhiteSpace(InstalledGameVersion))
+            {
+                var key = BuildVoteEtagKey("current", target.Mod.ModId, target.UserReportVersion, InstalledGameVersion);
+                _userReportEtags.TryGetValue(key, out var etag);
+
+                var result = await _voteService
+                    .GetVoteSummaryIfChangedAsync(target.Mod.ModId, target.UserReportVersion, InstalledGameVersion!,
+                        etag, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!result.IsNotModified)
+                {
+                    if (result.Summary is not null)
+                        await InvokeOnDispatcherAsync(
+                            () => target.Mod.ApplyUserReportSummary(result.Summary!),
+                            cancellationToken,
+                            DispatcherPriority.Background).ConfigureAwait(false);
+
+                    StoreUserReportEtag(target.Mod.ModId, target.UserReportVersion, result.ETag);
+                }
+                else if (string.IsNullOrEmpty(etag) && !string.IsNullOrEmpty(result.ETag))
+                {
+                    StoreUserReportEtag(target.Mod.ModId, target.UserReportVersion, result.ETag);
+                }
+            }
+
+            if (target.HasLatestReleaseSummary
+                && !string.IsNullOrWhiteSpace(target.LatestReleaseVersion)
+                && !string.IsNullOrWhiteSpace(InstalledGameVersion))
+            {
+                var key = BuildVoteEtagKey("latest", target.Mod.ModId, target.LatestReleaseVersion,
+                    InstalledGameVersion);
+                _latestReleaseUserReportEtags.TryGetValue(key, out var etag);
+
+                var result = await _voteService
+                    .GetVoteSummaryIfChangedAsync(target.Mod.ModId, target.LatestReleaseVersion, InstalledGameVersion!,
+                        etag, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!result.IsNotModified)
+                {
+                    if (result.Summary is not null)
+                        await InvokeOnDispatcherAsync(
+                            () => target.Mod.ApplyLatestReleaseUserReportSummary(result.Summary!),
+                            cancellationToken,
+                            DispatcherPriority.Background).ConfigureAwait(false);
+
+                    StoreLatestReleaseUserReportEtag(target.Mod.ModId, target.LatestReleaseVersion, result.ETag);
+                }
+                else if (string.IsNullOrEmpty(etag) && !string.IsNullOrEmpty(result.ETag))
+                {
+                    StoreLatestReleaseUserReportEtag(target.Mod.ModId, target.LatestReleaseVersion, result.ETag);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // Swallow unexpected failures for individual mods to allow other checks to continue.
+        }
+        finally
+        {
+            limiter.Release();
+        }
+    }
+
+    private void StoreUserReportEtag(string modId, string? modVersion, string? etag)
+    {
+        UpdateVoteEtag(_userReportEtags, "current", modId, modVersion, etag);
+    }
+
+    private void StoreLatestReleaseUserReportEtag(string modId, string? modVersion, string? etag)
+    {
+        UpdateVoteEtag(_latestReleaseUserReportEtags, "latest", modId, modVersion, etag);
+    }
+
+    private void UpdateVoteEtag(
+        Dictionary<string, string> target,
+        string prefix,
+        string modId,
+        string? modVersion,
+        string? etag)
+    {
+        if (string.IsNullOrWhiteSpace(modId)
+            || string.IsNullOrWhiteSpace(modVersion)
+            || string.IsNullOrWhiteSpace(InstalledGameVersion))
+            return;
+
+        var key = BuildVoteEtagKey(prefix, modId, modVersion, InstalledGameVersion);
+        if (string.IsNullOrEmpty(etag))
+        {
+            target.Remove(key);
+            return;
+        }
+
+        target[key] = etag;
+    }
+
+    private static string BuildVoteEtagKey(string prefix, string modId, string modVersion, string? gameVersion)
+    {
+        return string.Concat(prefix, '|', modId, '|', modVersion, '|', gameVersion ?? string.Empty);
     }
 
     private static bool IsDifferentVersion(string? installedVersion, string? latestVersion)
     {
-        if (string.IsNullOrWhiteSpace(latestVersion) || string.IsNullOrWhiteSpace(installedVersion))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(latestVersion) || string.IsNullOrWhiteSpace(installedVersion)) return false;
 
-        string? normalizedInstalled = VersionStringUtility.Normalize(installedVersion);
-        string? normalizedLatest = VersionStringUtility.Normalize(latestVersion);
+        var normalizedInstalled = VersionStringUtility.Normalize(installedVersion);
+        var normalizedLatest = VersionStringUtility.Normalize(latestVersion);
 
         if (!string.IsNullOrWhiteSpace(normalizedInstalled) && !string.IsNullOrWhiteSpace(normalizedLatest))
-        {
             return !string.Equals(normalizedInstalled, normalizedLatest, StringComparison.OrdinalIgnoreCase);
-        }
 
         return !string.Equals(installedVersion.Trim(), latestVersion.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     private void SetAutoLoadMode(ModDatabaseAutoLoadMode mode)
     {
-        if (_modDatabaseAutoLoadMode == mode)
-        {
-            return;
-        }
+        if (ModDatabaseAutoLoadMode == mode) return;
 
-        _modDatabaseAutoLoadMode = mode;
-        UpdateLastSelectedSortModes(_modDatabaseAutoLoadMode);
+        ModDatabaseAutoLoadMode = mode;
+        UpdateLastSelectedSortModes(ModDatabaseAutoLoadMode);
         OnPropertyChanged(nameof(ModDatabaseAutoLoadMode));
         OnPropertyChanged(nameof(IsTotalDownloadsMode));
         OnPropertyChanged(nameof(IsDownloadsLastThirtyDaysMode));
@@ -890,31 +1118,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void UpdateLastSelectedSortModes(ModDatabaseAutoLoadMode mode)
     {
         if (IsDownloadsAutoLoadMode(mode))
-        {
             _lastDownloadsAutoLoadMode = mode;
-        }
-        else if (IsActivityAutoLoadMode(mode))
-        {
-            _lastActivityAutoLoadMode = mode;
-        }
+        else if (IsActivityAutoLoadMode(mode)) _lastActivityAutoLoadMode = mode;
     }
 
     private void ShowDownloadsSortingOptions()
     {
-        if (IsDownloadsAutoLoadMode(_modDatabaseAutoLoadMode))
-        {
-            return;
-        }
+        if (IsDownloadsAutoLoadMode(ModDatabaseAutoLoadMode)) return;
 
         SetAutoLoadMode(_lastDownloadsAutoLoadMode);
     }
 
     private void ShowActivitySortingOptions()
     {
-        if (IsActivityAutoLoadMode(_modDatabaseAutoLoadMode))
-        {
-            return;
-        }
+        if (IsActivityAutoLoadMode(ModDatabaseAutoLoadMode)) return;
 
         SetAutoLoadMode(_lastActivityAutoLoadMode);
     }
@@ -926,115 +1143,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             : ModDatabaseAutoLoadMode.TotalDownloads;
     }
 
-    public string SearchText
+    public Task InitializeAsync()
     {
-        get => _searchText;
-        set
-        {
-            string newValue = value ?? string.Empty;
-            if (!SetProperty(ref _searchText, newValue))
-            {
-                return;
-            }
-
-            bool hadSearchTokens = _searchTokens.Length > 0;
-            _searchTokens = CreateSearchTokens(newValue);
-            bool hasSearchTokens = _searchTokens.Length > 0;
-
-            OnPropertyChanged(nameof(HasSearchText));
-            OnPropertyChanged(nameof(IsShowingRecentDownloadMetric));
-            OnPropertyChanged(nameof(DownloadsColumnHeader));
-            _clearSearchCommand.NotifyCanExecuteChanged();
-            if (SearchModDatabase)
-            {
-                if (!hasSearchTokens && hadSearchTokens)
-                {
-                    ClearSearchResults();
-                }
-
-                TriggerModDatabaseSearch();
-            }
-            else
-            {
-                ModsView.Refresh();
-            }
-        }
+        return LoadModsAsync();
     }
-
-    public bool HasSearchText => _searchTokens.Length > 0;
-
-    public int TotalMods
-    {
-        get => _totalMods;
-        private set
-        {
-            if (SetProperty(ref _totalMods, value))
-            {
-                OnPropertyChanged(nameof(SummaryText));
-            }
-        }
-    }
-
-    public int ActiveMods
-    {
-        get => _activeMods;
-        private set
-        {
-            if (SetProperty(ref _activeMods, value))
-            {
-                OnPropertyChanged(nameof(SummaryText));
-            }
-        }
-    }
-
-    public int UpdatableModsCount
-    {
-        get => _updatableModsCount;
-        private set
-        {
-            if (SetProperty(ref _updatableModsCount, value))
-            {
-                OnPropertyChanged(nameof(UpdateAllButtonLabel));
-                OnPropertyChanged(nameof(UpdateAllModsMenuHeader));
-            }
-        }
-    }
-
-    public string SummaryText => TotalMods == 0
-        ? "No mods found."
-        : $"{ActiveMods} active of {TotalMods} mods";
-
-    public string UpdateAllButtonLabel => UpdatableModsCount == 0
-        ? "Manage Updates"
-        : $"Manage Updates ({UpdatableModsCount})";
-
-    public string UpdateAllModsMenuHeader => UpdatableModsCount == 0
-        ? "_Update All Mods"
-        : $"_Update All Mods ({UpdatableModsCount})";
-
-    public string NoModsFoundMessage =>
-        $"No mods found. If this is unexpected, verify that your VintageStoryData folder is correctly set: {DataDirectory}. You can change it in the File Menu.";
-
-    public IRelayCommand ClearSearchCommand { get; }
-
-    public IAsyncRelayCommand RefreshCommand { get; }
-
-    public Task InitializeAsync() => LoadModsAsync();
 
     public void ReplaceCloudModlists(IEnumerable<CloudModlistListEntry>? entries)
     {
         _cloudModlists.Clear();
 
         if (entries is not null)
-        {
             foreach (var entry in entries)
-            {
                 if (entry is not null)
-                {
                     _cloudModlists.Add(entry);
-                }
-            }
-        }
 
         CloudModlistsView.Refresh();
         OnPropertyChanged(nameof(HasCloudModlists));
@@ -1061,34 +1182,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var result = new List<ModUsageTrackingEntry>();
 
-        if (string.IsNullOrWhiteSpace(_installedGameVersion))
-        {
-            return result;
-        }
+        if (string.IsNullOrWhiteSpace(InstalledGameVersion)) return result;
 
-        string gameVersion = _installedGameVersion.Trim();
+        var gameVersion = InstalledGameVersion.Trim();
         var distinct = new HashSet<ModUsageTrackingKey>();
 
-        foreach (ModListItemViewModel mod in _mods)
+        foreach (var mod in _mods)
         {
-            if (mod is null || !mod.IsActive)
-            {
-                continue;
-            }
+            if (mod is null || !mod.IsActive) continue;
 
-            if (string.IsNullOrWhiteSpace(mod.ModId) || string.IsNullOrWhiteSpace(mod.Version))
-            {
-                continue;
-            }
+            if (string.IsNullOrWhiteSpace(mod.ModId) || string.IsNullOrWhiteSpace(mod.Version)) continue;
 
-            string modId = mod.ModId.Trim();
-            string modVersion = mod.Version.Trim();
+            var modId = mod.ModId.Trim();
+            var modVersion = mod.Version.Trim();
 
             var key = new ModUsageTrackingKey(modId, modVersion, gameVersion);
-            if (!distinct.Add(key))
-            {
-                continue;
-            }
+            if (!distinct.Add(key)) continue;
 
             result.Add(new ModUsageTrackingEntry(
                 modId,
@@ -1106,23 +1215,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var distinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var result = new List<string>();
 
-        foreach (ModListItemViewModel mod in _mods)
+        foreach (var mod in _mods)
         {
-            if (mod is null || !mod.IsActive || string.IsNullOrWhiteSpace(mod.ModId))
-            {
-                continue;
-            }
+            if (mod is null || !mod.IsActive || string.IsNullOrWhiteSpace(mod.ModId)) continue;
 
-            string trimmed = mod.ModId.Trim();
-            if (trimmed.Length == 0)
-            {
-                continue;
-            }
+            var trimmed = mod.ModId.Trim();
+            if (trimmed.Length == 0) continue;
 
-            if (distinct.Add(trimmed))
-            {
-                result.Add(trimmed);
-            }
+            if (distinct.Add(trimmed)) result.Add(trimmed);
         }
 
         return result;
@@ -1132,17 +1232,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         displayName = null;
 
-        if (string.IsNullOrWhiteSpace(modId))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(modId)) return false;
 
-        foreach (ModListItemViewModel mod in _mods)
+        foreach (var mod in _mods)
         {
-            if (mod is null || string.IsNullOrWhiteSpace(mod.ModId))
-            {
-                continue;
-            }
+            if (mod is null || string.IsNullOrWhiteSpace(mod.ModId)) continue;
 
             if (string.Equals(mod.ModId, modId, StringComparison.OrdinalIgnoreCase))
             {
@@ -1164,15 +1258,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var installedMods = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             foreach (var mod in _mods)
             {
-                if (mod is null || string.IsNullOrWhiteSpace(mod.ModId))
-                {
-                    continue;
-                }
+                if (mod is null || string.IsNullOrWhiteSpace(mod.ModId)) continue;
 
-                string normalizedId = mod.ModId.Trim();
+                var normalizedId = mod.ModId.Trim();
                 if (!installedMods.ContainsKey(normalizedId))
                 {
-                    string? version = string.IsNullOrWhiteSpace(mod.Version) ? null : mod.Version!.Trim();
+                    var version = string.IsNullOrWhiteSpace(mod.Version) ? null : mod.Version!.Trim();
                     installedMods.Add(normalizedId, version);
                 }
             }
@@ -1181,18 +1272,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 foreach (var state in preset.ModStates)
                 {
-                    if (state is null || string.IsNullOrWhiteSpace(state.ModId) || state.IsActive is not bool desiredState)
-                    {
-                        continue;
-                    }
+                    if (state is null || string.IsNullOrWhiteSpace(state.ModId) ||
+                        state.IsActive is not bool desiredState) continue;
 
-                    string normalizedId = state.ModId.Trim();
-                    if (!installedMods.TryGetValue(normalizedId, out string? installedVersion))
-                    {
-                        continue;
-                    }
+                    var normalizedId = state.ModId.Trim();
+                    if (!installedMods.TryGetValue(normalizedId, out var installedVersion)) continue;
 
-                    string? recordedVersion = string.IsNullOrWhiteSpace(state.Version)
+                    var recordedVersion = string.IsNullOrWhiteSpace(state.Version)
                         ? null
                         : state.Version!.Trim();
 
@@ -1203,28 +1289,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                             null
                         };
 
-                        if (!string.IsNullOrWhiteSpace(installedVersion))
-                        {
-                            versionsToActivate.Add(installedVersion);
-                        }
+                        if (!string.IsNullOrWhiteSpace(installedVersion)) versionsToActivate.Add(installedVersion);
 
-                        if (!string.IsNullOrWhiteSpace(recordedVersion))
-                        {
-                            versionsToActivate.Add(recordedVersion);
-                        }
+                        if (!string.IsNullOrWhiteSpace(recordedVersion)) versionsToActivate.Add(recordedVersion);
 
-                        foreach (string? versionKey in versionsToActivate)
-                        {
-                            if (!_settingsStore.TrySetActive(normalizedId, versionKey, true, out string? error))
+                        foreach (var versionKey in versionsToActivate)
+                            if (!_settingsStore.TrySetActive(normalizedId, versionKey, true, out var error))
                             {
                                 localError = error;
                                 return false;
                             }
-                        }
                     }
                     else
                     {
-                        if (!_settingsStore.TrySetActive(normalizedId, null, false, out string? error))
+                        if (!_settingsStore.TrySetActive(normalizedId, null, false, out var error))
                         {
                             localError = error;
                             return false;
@@ -1238,11 +1316,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         else
         {
-            IReadOnlyList<string> entries = preset.DisabledEntries ?? Array.Empty<string>();
+            var entries = preset.DisabledEntries ?? Array.Empty<string>();
 
             success = await Task.Run(() =>
             {
-                bool result = _settingsStore.TryApplyDisabledEntries(entries, out var error);
+                var result = _settingsStore.TryApplyDisabledEntries(entries, out var error);
                 localError = error;
                 return result;
             });
@@ -1250,7 +1328,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (!success)
         {
-            string message = string.IsNullOrWhiteSpace(localError)
+            var message = string.IsNullOrWhiteSpace(localError)
                 ? $"Failed to apply preset \"{preset.Name}\"."
                 : localError!;
             SetStatus(message, true);
@@ -1259,7 +1337,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         foreach (var mod in _mods)
         {
-            bool isDisabled = _settingsStore.IsDisabled(mod.ModId, mod.Version);
+            var isDisabled = _settingsStore.IsDisabled(mod.ModId, mod.Version);
             mod.SetIsActiveSilently(!isDisabled);
         }
 
@@ -1292,10 +1370,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
         }
 
-        if (_modEntriesBySourcePath.Count > 0)
-        {
+        if (_allowModDetailsRefresh && _modEntriesBySourcePath.Count > 0)
             QueueDatabaseInfoRefresh(_modEntriesBySourcePath.Values.ToArray());
-        }
+    }
+
+    internal void SetAutoRefreshDisabled(bool disabled)
+    {
+        _isAutoRefreshDisabled = disabled;
+        _allowModDetailsRefresh = !_isAutoRefreshDisabled;
+
+        if (disabled)
+            StopFastCheckTimer();
+        else
+            ResetFastCheckTimer();
+    }
+
+    internal void ForceNextRefreshToLoadDetails()
+    {
+        _isModDetailsRefreshForced = true;
     }
 
     internal void SetSelectedMod(ModListItemViewModel? mod, int selectionCount)
@@ -1307,39 +1399,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     internal void RemoveSearchResult(ModListItemViewModel mod)
     {
-        if (mod is null)
-        {
-            return;
-        }
+        if (mod is null) return;
 
         _searchResults.Remove(mod);
 
-        if (ReferenceEquals(SelectedMod, mod))
-        {
-            SelectedMod = null;
-        }
+        if (ReferenceEquals(SelectedMod, mod)) SelectedMod = null;
     }
 
     public ModListItemViewModel? FindInstalledModById(string? modId)
     {
-        if (string.IsNullOrWhiteSpace(modId))
+        if (string.IsNullOrWhiteSpace(modId)) return null;
+
+        var trimmed = modId.Trim();
+
+        foreach (var mod in _mods)
         {
-            return null;
-        }
+            if (mod is null || string.IsNullOrWhiteSpace(mod.ModId)) continue;
 
-        string trimmed = modId.Trim();
-
-        foreach (ModListItemViewModel mod in _mods)
-        {
-            if (mod is null || string.IsNullOrWhiteSpace(mod.ModId))
-            {
-                continue;
-            }
-
-            if (string.Equals(mod.ModId.Trim(), trimmed, StringComparison.OrdinalIgnoreCase))
-            {
-                return mod;
-            }
+            if (string.Equals(mod.ModId.Trim(), trimmed, StringComparison.OrdinalIgnoreCase)) return mod;
         }
 
         return null;
@@ -1347,28 +1424,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     internal ModListItemViewModel? FindModBySourcePath(string? sourcePath)
     {
-        if (string.IsNullOrWhiteSpace(sourcePath))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(sourcePath)) return null;
 
         return _modViewModelsBySourcePath.TryGetValue(sourcePath, out var viewModel)
             ? viewModel
             : null;
     }
 
-    public string? InstalledGameVersion => _installedGameVersion;
-
-    internal async Task<bool> PreserveActivationStateAsync(string modId, string? previousVersion, string? newVersion, bool wasActive)
+    internal async Task<bool> PreserveActivationStateAsync(string modId, string? previousVersion, string? newVersion,
+        bool wasActive)
     {
         string? localError = null;
 
-        bool success = await Task.Run(() =>
-            _settingsStore.TryUpdateDisabledEntry(modId, previousVersion, newVersion, shouldDisable: !wasActive, out localError));
+        var success = await Task.Run(() =>
+            _settingsStore.TryUpdateDisabledEntry(modId, previousVersion, newVersion, !wasActive, out localError));
 
         if (!success)
         {
-            string message = string.IsNullOrWhiteSpace(localError)
+            var message = string.IsNullOrWhiteSpace(localError)
                 ? $"Failed to preserve the activation state for {modId}."
                 : localError!;
             SetStatus(message, true);
@@ -1382,16 +1455,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(mod);
 
         string? localError = null;
-        bool success = await Task.Run(() =>
+        var success = await Task.Run(() =>
         {
-            bool result = _settingsStore.TrySetActive(mod.ModId, mod.Version, isActive, out var error);
+            var result = _settingsStore.TrySetActive(mod.ModId, mod.Version, isActive, out var error);
             localError = error;
             return result;
         });
 
         if (!success)
         {
-            string message = string.IsNullOrWhiteSpace(localError)
+            var message = string.IsNullOrWhiteSpace(localError)
                 ? $"Failed to update {mod.DisplayName}."
                 : localError!;
             SetStatus(message, true);
@@ -1406,30 +1479,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     internal IReadOnlyCollection<string> GetSourcePathsForModsWithErrors()
     {
-        if (_mods.Count == 0)
-        {
-            return Array.Empty<string>();
-        }
+        if (_mods.Count == 0) return Array.Empty<string>();
 
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var mod in _mods)
         {
-            if (mod is null)
-            {
-                continue;
-            }
+            if (mod is null) continue;
 
-            string? sourcePath = mod.SourcePath;
-            if (string.IsNullOrWhiteSpace(sourcePath))
-            {
-                continue;
-            }
+            var sourcePath = mod.SourcePath;
+            if (string.IsNullOrWhiteSpace(sourcePath)) continue;
 
             if (mod.HasLoadError || mod.DependencyHasErrors || mod.MissingDependencies.Count > 0)
-            {
                 result.Add(sourcePath);
-            }
         }
 
         return result.Count == 0 ? Array.Empty<string>() : result.ToArray();
@@ -1437,13 +1499,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     internal async Task RefreshModsWithErrorsAsync(IReadOnlyCollection<string>? includeSourcePaths = null)
     {
-        if (_mods.Count == 0 && _modEntriesBySourcePath.Count == 0)
-        {
-            return;
-        }
+        if (_mods.Count == 0 && _modEntriesBySourcePath.Count == 0) return;
 
         _modsWatcher.EnsureWatchers();
-        ModDirectoryChangeSet changeSet = _modsWatcher.ConsumeChanges();
+        var changeSet = _modsWatcher.ConsumeChanges();
         if (changeSet.RequiresFullRescan)
         {
             await LoadModsAsync().ConfigureAwait(true);
@@ -1453,100 +1512,99 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         if (includeSourcePaths is { Count: > 0 })
-        {
-            foreach (string path in includeSourcePaths)
-            {
+            foreach (var path in includeSourcePaths)
                 if (!string.IsNullOrWhiteSpace(path))
-                {
                     candidates.Add(path);
-                }
-            }
-        }
 
-        foreach (string path in changeSet.Paths)
-        {
+        foreach (var path in changeSet.Paths)
             if (!string.IsNullOrWhiteSpace(path))
-            {
                 candidates.Add(path);
-            }
-        }
 
         foreach (var mod in _mods)
         {
-            if (mod is null || string.IsNullOrWhiteSpace(mod.SourcePath))
-            {
-                continue;
-            }
+            if (mod is null || string.IsNullOrWhiteSpace(mod.SourcePath)) continue;
 
             if (mod.HasLoadError || mod.DependencyHasErrors || mod.MissingDependencies.Count > 0)
-            {
                 candidates.Add(mod.SourcePath);
-            }
         }
 
         if (_modEntriesBySourcePath.Count > 0)
         {
             var allEntries = new List<ModEntry>(_modEntriesBySourcePath.Values);
-            await Task.Run(() => _discoveryService.ApplyLoadStatuses(allEntries)).ConfigureAwait(true);
+            var recalculationSeed = new List<ModEntry>();
 
-            foreach (var entry in allEntries)
+            foreach (var path in candidates)
+                if (_modEntriesBySourcePath.TryGetValue(path, out var entry) && entry != null)
+                    recalculationSeed.Add(entry);
+
+            var impacted = recalculationSeed.Count == 0
+                ? Array.Empty<ModEntry>()
+                : await Task
+                    .Run(() => _discoveryService.ApplyLoadStatusesIncremental(allEntries, recalculationSeed))
+                    .ConfigureAwait(true);
+
+            foreach (var entry in impacted)
             {
-                if (entry is null || string.IsNullOrWhiteSpace(entry.SourcePath))
-                {
-                    continue;
-                }
+                if (entry is null || string.IsNullOrWhiteSpace(entry.SourcePath)) continue;
 
                 if (entry.HasLoadError
                     || entry.DependencyHasErrors
                     || (entry.MissingDependencies?.Count ?? 0) > 0)
-                {
                     candidates.Add(entry.SourcePath);
-                }
             }
         }
 
-        if (candidates.Count == 0)
-        {
-            return;
-        }
+        if (candidates.Count == 0) return;
 
-        string? previousSelection = SelectedMod?.SourcePath;
+        var previousSelection = SelectedMod?.SourcePath;
 
-        Dictionary<string, ModEntry> existingEntriesSnapshot = new(_modEntriesBySourcePath, StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, ModEntry> existingEntriesSnapshot =
+            new(_modEntriesBySourcePath, StringComparer.OrdinalIgnoreCase);
 
-        Dictionary<string, ModEntry?> reloadResults = await Task
+        var reloadResults = await Task
             .Run(() => LoadChangedModEntries(candidates, existingEntriesSnapshot))
             .ConfigureAwait(true);
 
         var refreshedEntries = new List<ModEntry>(reloadResults.Count);
+        var updatedEntriesForStatus = new List<ModEntry>(reloadResults.Count);
+        HashSet<string>? removedModIds = null;
 
         foreach (var pair in reloadResults)
         {
-            string path = pair.Key;
-            ModEntry? entry = pair.Value;
+            var path = pair.Key;
+            var entry = pair.Value;
 
             if (entry == null)
             {
                 _modEntriesBySourcePath.Remove(path);
+                if (existingEntriesSnapshot.TryGetValue(path, out var previous))
+                {
+                    removedModIds ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    if (!string.IsNullOrWhiteSpace(previous.ModId)) removedModIds.Add(previous.ModId);
+                }
+
                 continue;
             }
 
             _modEntriesBySourcePath[path] = entry;
             refreshedEntries.Add(entry);
+            updatedEntriesForStatus.Add(entry);
         }
 
         if (_modEntriesBySourcePath.Count > 0)
         {
-            var updatedEntries = new List<ModEntry>(_modEntriesBySourcePath.Values);
-            await Task.Run(() => _discoveryService.ApplyLoadStatuses(updatedEntries)).ConfigureAwait(true);
+            var updatedEntriesSnapshot = new List<ModEntry>(_modEntriesBySourcePath.Values);
+            _ = await Task
+                .Run(() => _discoveryService.ApplyLoadStatusesIncremental(
+                    updatedEntriesSnapshot,
+                    updatedEntriesForStatus,
+                    removedModIds))
+                .ConfigureAwait(true);
         }
 
         ApplyPartialUpdates(reloadResults, previousSelection);
 
-        if (refreshedEntries.Count > 0)
-        {
-            QueueDatabaseInfoRefresh(refreshedEntries);
-        }
+        if (_allowModDetailsRefresh && refreshedEntries.Count > 0) QueueDatabaseInfoRefresh(refreshedEntries);
 
         TotalMods = _mods.Count;
         UpdateActiveCount();
@@ -1557,10 +1615,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task LoadModsAsync()
     {
-        if (IsLoadingMods)
-        {
-            return;
-        }
+        if (IsLoadingMods) return;
+
+        var forcedRefresh = _isModDetailsRefreshForced;
+        _isModDetailsRefreshForced = false;
+        var previousAllowDetails = _allowModDetailsRefresh;
+        _allowModDetailsRefresh = !_isAutoRefreshDisabled || forcedRefresh;
 
         IsLoadingMods = true;
         using var busyScope = BeginBusyScope();
@@ -1575,12 +1635,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try
         {
             _modsWatcher.EnsureWatchers();
-            ModDirectoryChangeSet changeSet = _modsWatcher.ConsumeChanges();
-            bool requiresFullReload = _mods.Count == 0
-                || changeSet.RequiresFullRescan
-                || changeSet.Paths.Count == 0;
+            var changeSet = _modsWatcher.ConsumeChanges();
+            var requiresFullReload = _mods.Count == 0
+                                     || changeSet.RequiresFullRescan
+                                     || changeSet.Paths.Count == 0;
 
-            string? previousSelection = SelectedMod?.SourcePath;
+            var previousSelection = SelectedMod?.SourcePath;
 
             if (requiresFullReload)
             {
@@ -1588,39 +1648,45 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
             else
             {
-                Dictionary<string, ModEntry> existingEntriesSnapshot = new(_modEntriesBySourcePath, StringComparer.OrdinalIgnoreCase);
-                var reloadResults = await Task.Run(() => LoadChangedModEntries(changeSet.Paths, existingEntriesSnapshot));
+                Dictionary<string, ModEntry> existingEntriesSnapshot =
+                    new(_modEntriesBySourcePath, StringComparer.OrdinalIgnoreCase);
+                var reloadResults =
+                    await Task.Run(() => LoadChangedModEntries(changeSet.Paths, existingEntriesSnapshot));
+
+                var updatedEntriesForStatus = new List<ModEntry>(reloadResults.Count);
+                HashSet<string>? removedModIds = null;
 
                 foreach (var pair in reloadResults)
                 {
-                    if (pair.Value == null)
+                    var path = pair.Key;
+                    var entry = pair.Value;
+
+                    if (entry == null)
                     {
-                        _modEntriesBySourcePath.Remove(pair.Key);
+                        _modEntriesBySourcePath.Remove(path);
+                        if (existingEntriesSnapshot.TryGetValue(path, out var previous))
+                        {
+                            removedModIds ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            if (!string.IsNullOrWhiteSpace(previous.ModId)) removedModIds.Add(previous.ModId);
+                        }
                     }
                     else
                     {
-                        _modEntriesBySourcePath[pair.Key] = pair.Value;
-                    }
-                }
-
-                var updatedEntries = new List<ModEntry>();
-                foreach (var entry in reloadResults.Values)
-                {
-                    if (entry != null)
-                    {
-                        updatedEntries.Add(entry);
+                        _modEntriesBySourcePath[path] = entry;
+                        updatedEntriesForStatus.Add(entry);
                     }
                 }
 
                 var allEntries = new List<ModEntry>(_modEntriesBySourcePath.Values);
-                await Task.Run(() => _discoveryService.ApplyLoadStatuses(allEntries)).ConfigureAwait(true);
+                _ = await Task
+                    .Run(() => _discoveryService.ApplyLoadStatusesIncremental(allEntries, updatedEntriesForStatus,
+                        removedModIds))
+                    .ConfigureAwait(true);
 
                 ApplyPartialUpdates(reloadResults, previousSelection);
 
-                if (updatedEntries.Count > 0)
-                {
-                    QueueDatabaseInfoRefresh(updatedEntries);
-                }
+                if (_allowModDetailsRefresh && updatedEntriesForStatus.Count > 0)
+                    QueueDatabaseInfoRefresh(updatedEntriesForStatus);
             }
 
             TotalMods = _mods.Count;
@@ -1636,91 +1702,58 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         finally
         {
             IsLoadingMods = false;
+            _allowModDetailsRefresh = previousAllowDetails;
         }
     }
 
     private async Task PerformFullReloadAsync(string? previousSelection)
     {
-        var entries = new List<ModEntry>();
         Dictionary<string, ModEntry> previousEntries = new(StringComparer.OrdinalIgnoreCase);
 
         await InvokeOnDispatcherAsync(() =>
         {
-            foreach (var pair in _modEntriesBySourcePath)
-            {
-                previousEntries[pair.Key] = pair.Value;
-            }
-
-            _modEntriesBySourcePath.Clear();
-            _modViewModelsBySourcePath.Clear();
-            _mods.Clear();
-            SelectedMod = null;
-            TotalMods = 0;
+            foreach (var pair in _modEntriesBySourcePath) previousEntries[pair.Key] = pair.Value;
         }, CancellationToken.None).ConfigureAwait(true);
 
-        await foreach (var batch in _discoveryService.LoadModsIncrementallyAsync(InstalledModsIncrementalBatchSize))
+        var discoveredEntries = await Task
+            .Run(() => _discoveryService.LoadMods())
+            .ConfigureAwait(true);
+
+        var entries = discoveredEntries.Count == 0
+            ? new List<ModEntry>()
+            : new List<ModEntry>(discoveredEntries);
+
+        foreach (var entry in entries)
         {
-            if (batch.Count == 0)
-            {
-                continue;
-            }
-
-            entries.AddRange(batch);
-
-            await InvokeOnDispatcherAsync(() =>
-            {
-                foreach (var entry in batch)
-                {
-                    ResetCalculatedModState(entry);
-                    if (previousEntries.TryGetValue(entry.SourcePath, out var previous))
-                    {
-                        CopyTransientModState(previous, entry);
-                    }
-
-                    _modEntriesBySourcePath[entry.SourcePath] = entry;
-                    var viewModel = CreateModViewModel(entry);
-                    _modViewModelsBySourcePath[entry.SourcePath] = viewModel;
-                    _mods.Add(viewModel);
-                }
-
-                TotalMods = _mods.Count;
-            }, CancellationToken.None).ConfigureAwait(true);
-
-            await Task.Yield();
+            ResetCalculatedModState(entry);
+            if (previousEntries.TryGetValue(entry.SourcePath, out var previous)) CopyTransientModState(previous, entry);
         }
 
-        if (entries.Count > 0)
-        {
-            await Task.Run(() => _discoveryService.ApplyLoadStatuses(entries)).ConfigureAwait(true);
-        }
+        if (entries.Count > 0) await Task.Run(() => _discoveryService.ApplyLoadStatuses(entries)).ConfigureAwait(true);
 
         await InvokeOnDispatcherAsync(() =>
         {
+            _modEntriesBySourcePath.Clear();
+            _modViewModelsBySourcePath.Clear();
+            _mods.Clear();
+
             foreach (var entry in entries)
             {
-                if (_modViewModelsBySourcePath.TryGetValue(entry.SourcePath, out var viewModel))
-                {
-                    viewModel.UpdateLoadError(entry.LoadError);
-                    viewModel.UpdateDependencyIssues(entry.DependencyHasErrors, entry.MissingDependencies);
-                }
+                _modEntriesBySourcePath[entry.SourcePath] = entry;
+                var viewModel = CreateModViewModel(entry);
+                _modViewModelsBySourcePath[entry.SourcePath] = viewModel;
+                _mods.Add(viewModel);
             }
 
             TotalMods = _mods.Count;
 
             if (!string.IsNullOrWhiteSpace(previousSelection)
                 && _modViewModelsBySourcePath.TryGetValue(previousSelection, out var selected))
-            {
                 SelectedMod = selected;
-            }
             else
-            {
                 SelectedMod = null;
-            }
 
-            if (entries.Count > 0)
-            {
-                QueueDatabaseInfoRefresh(entries);
-            }
+            if (_allowModDetailsRefresh && entries.Count > 0) QueueDatabaseInfoRefresh(entries);
 
             UpdateLoadedModsStatus();
         }, CancellationToken.None).ConfigureAwait(true);
@@ -1729,42 +1762,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public async Task<bool> CheckForModStateChangesAsync()
     {
         _clientSettingsWatcher.EnsureWatcher();
-        bool clientSettingsTriggeredRefresh = false;
+        var clientSettingsTriggeredRefresh = false;
         if (_clientSettingsWatcher.TryConsumePendingChanges())
         {
             var result = await ApplyClientSettingsChangesAsync().ConfigureAwait(true);
             if (!result.success)
-            {
                 _clientSettingsWatcher.SignalPendingChange();
-            }
-            else if (result.modStatesChanged)
-            {
-                clientSettingsTriggeredRefresh = true;
-            }
+            else if (result.modStatesChanged) clientSettingsTriggeredRefresh = true;
         }
 
         _modsWatcher.EnsureWatchers();
 
-        if (clientSettingsTriggeredRefresh)
-        {
-            return true;
-        }
+        if (clientSettingsTriggeredRefresh) return true;
 
-        if (_modsWatcher.HasPendingChanges)
-        {
-            return true;
-        }
+        if (_modsWatcher.HasPendingChanges) return true;
 
-        if (_modsWatcher.IsWatching)
-        {
-            return false;
-        }
+        if (_modsWatcher.IsWatching) return false;
 
-        string? fingerprint = await CaptureModsStateFingerprintAsync().ConfigureAwait(false);
-        if (fingerprint is null)
-        {
-            return false;
-        }
+        var fingerprint = await CaptureModsStateFingerprintAsync().ConfigureAwait(false);
+        if (fingerprint is null) return false;
 
         lock (_modsStateLock)
         {
@@ -1787,26 +1803,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private async Task<(bool success, bool modStatesChanged)> ApplyClientSettingsChangesAsync()
     {
         string? localError = null;
-        bool reloadSuccess = await Task.Run(() => _settingsStore.TryReload(out localError)).ConfigureAwait(true);
+        var reloadSuccess = await Task.Run(() => _settingsStore.TryReload(out localError)).ConfigureAwait(true);
 
         if (!reloadSuccess)
         {
             if (!string.IsNullOrWhiteSpace(localError))
-            {
                 await InvokeOnDispatcherAsync(
                     () => SetStatus($"Failed to reload client settings: {localError}", true),
                     CancellationToken.None).ConfigureAwait(true);
-            }
 
             return (false, false);
         }
 
-        bool modStatesChanged = false;
+        var modStatesChanged = false;
         await InvokeOnDispatcherAsync(() =>
         {
             foreach (var mod in _mods)
             {
-                bool shouldBeActive = !_settingsStore.IsDisabled(mod.ModId, mod.Version);
+                var shouldBeActive = !_settingsStore.IsDisabled(mod.ModId, mod.Version);
                 if (mod.IsActive != shouldBeActive)
                 {
                     mod.SetIsActiveSilently(shouldBeActive);
@@ -1826,14 +1840,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private ModListItemViewModel CreateModViewModel(ModEntry entry)
     {
-        bool isActive = !_settingsStore.IsDisabled(entry.ModId, entry.Version);
-        string location = GetDisplayPath(entry.SourcePath);
+        var isActive = !_settingsStore.IsDisabled(entry.ModId, entry.Version);
+        var location = GetDisplayPath(entry.SourcePath);
         return new ModListItemViewModel(
             entry,
             isActive,
             location,
             ApplyActivationChangeAsync,
-            _installedGameVersion,
+            InstalledGameVersion,
             true,
             _configuration.ShouldSkipModVersion,
             () => _configuration.RequireExactVsVersionMatch);
@@ -1851,11 +1865,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        string? fingerprint = await CaptureModsStateFingerprintAsync().ConfigureAwait(false);
-        if (fingerprint is null)
-        {
-            return;
-        }
+        var fingerprint = await CaptureModsStateFingerprintAsync().ConfigureAwait(false);
+        if (fingerprint is null) return;
 
         lock (_modsStateLock)
         {
@@ -1897,7 +1908,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (System.Windows.Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
         {
             dispatcher.Invoke(() =>
             {
@@ -1917,34 +1928,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         switch (e.Action)
         {
             case NotifyCollectionChangedAction.Add:
-                foreach (ModListItemViewModel mod in EnumerateModItems(e.NewItems))
-                {
-                    AttachInstalledMod(mod);
-                }
+                foreach (var mod in EnumerateModItems(e.NewItems)) AttachInstalledMod(mod);
                 break;
             case NotifyCollectionChangedAction.Remove:
-                foreach (ModListItemViewModel mod in EnumerateModItems(e.OldItems))
-                {
-                    DetachInstalledMod(mod);
-                }
+                foreach (var mod in EnumerateModItems(e.OldItems)) DetachInstalledMod(mod);
                 break;
             case NotifyCollectionChangedAction.Replace:
-                foreach (ModListItemViewModel mod in EnumerateModItems(e.OldItems))
-                {
-                    DetachInstalledMod(mod);
-                }
+                foreach (var mod in EnumerateModItems(e.OldItems)) DetachInstalledMod(mod);
 
-                foreach (ModListItemViewModel mod in EnumerateModItems(e.NewItems))
-                {
-                    AttachInstalledMod(mod);
-                }
+                foreach (var mod in EnumerateModItems(e.NewItems)) AttachInstalledMod(mod);
                 break;
             case NotifyCollectionChangedAction.Reset:
                 DetachAllInstalledMods();
-                foreach (ModListItemViewModel mod in _mods)
-                {
-                    AttachInstalledMod(mod);
-                }
+                foreach (var mod in _mods) AttachInstalledMod(mod);
                 break;
         }
 
@@ -1957,34 +1953,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         switch (e.Action)
         {
             case NotifyCollectionChangedAction.Add:
-                foreach (ModListItemViewModel mod in EnumerateModItems(e.NewItems))
-                {
-                    AttachSearchResult(mod);
-                }
+                foreach (var mod in EnumerateModItems(e.NewItems)) AttachSearchResult(mod);
                 break;
             case NotifyCollectionChangedAction.Remove:
-                foreach (ModListItemViewModel mod in EnumerateModItems(e.OldItems))
-                {
-                    DetachSearchResult(mod);
-                }
+                foreach (var mod in EnumerateModItems(e.OldItems)) DetachSearchResult(mod);
                 break;
             case NotifyCollectionChangedAction.Replace:
-                foreach (ModListItemViewModel mod in EnumerateModItems(e.OldItems))
-                {
-                    DetachSearchResult(mod);
-                }
+                foreach (var mod in EnumerateModItems(e.OldItems)) DetachSearchResult(mod);
 
-                foreach (ModListItemViewModel mod in EnumerateModItems(e.NewItems))
-                {
-                    AttachSearchResult(mod);
-                }
+                foreach (var mod in EnumerateModItems(e.NewItems)) AttachSearchResult(mod);
                 break;
             case NotifyCollectionChangedAction.Reset:
                 DetachAllSearchResults();
-                foreach (ModListItemViewModel mod in _searchResults)
-                {
-                    AttachSearchResult(mod);
-                }
+                foreach (var mod in _searchResults) AttachSearchResult(mod);
                 break;
         }
 
@@ -1993,103 +1974,63 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static IEnumerable<ModListItemViewModel> EnumerateModItems(IList? items)
     {
-        if (items is null)
-        {
-            yield break;
-        }
+        if (items is null) yield break;
 
-        foreach (object item in items)
-        {
+        foreach (var item in items)
             if (item is ModListItemViewModel mod)
-            {
                 yield return mod;
-            }
-        }
     }
 
     private static IEnumerable<string> EnumerateModTags(IEnumerable<ModListItemViewModel> mods)
     {
-        foreach (ModListItemViewModel mod in mods)
+        foreach (var mod in mods)
         {
-            if (mod.DatabaseTags is not { Count: > 0 } tags)
-            {
-                continue;
-            }
+            if (mod.DatabaseTags is not { Count: > 0 } tags) continue;
 
-            foreach (string tag in tags)
-            {
-                yield return tag;
-            }
+            foreach (var tag in tags) yield return tag;
         }
     }
 
     private void AttachInstalledMod(ModListItemViewModel mod)
     {
-        if (_installedModSubscriptions.Add(mod))
-        {
-            mod.PropertyChanged += OnInstalledModPropertyChanged;
-        }
+        if (_installedModSubscriptions.Add(mod)) mod.PropertyChanged += OnInstalledModPropertyChanged;
 
-        QueueUserReportRefresh(mod);
+        if (_allowModDetailsRefresh) QueueUserReportRefresh(mod);
     }
 
     private void DetachInstalledMod(ModListItemViewModel mod)
     {
-        if (_installedModSubscriptions.Remove(mod))
-        {
-            mod.PropertyChanged -= OnInstalledModPropertyChanged;
-        }
+        if (_installedModSubscriptions.Remove(mod)) mod.PropertyChanged -= OnInstalledModPropertyChanged;
     }
 
     private void DetachAllInstalledMods()
     {
-        if (_installedModSubscriptions.Count == 0)
-        {
-            return;
-        }
+        if (_installedModSubscriptions.Count == 0) return;
 
-        foreach (ModListItemViewModel mod in _installedModSubscriptions)
-        {
-            mod.PropertyChanged -= OnInstalledModPropertyChanged;
-        }
+        foreach (var mod in _installedModSubscriptions) mod.PropertyChanged -= OnInstalledModPropertyChanged;
 
         _installedModSubscriptions.Clear();
     }
 
     private void AttachSearchResult(ModListItemViewModel mod)
     {
-        if (_searchResultSubscriptions.Add(mod))
-        {
-            mod.PropertyChanged += OnSearchResultPropertyChanged;
-        }
+        if (_searchResultSubscriptions.Add(mod)) mod.PropertyChanged += OnSearchResultPropertyChanged;
 
-        if (mod.CanSubmitUserReport)
-        {
-            QueueUserReportRefresh(mod);
-        }
+        if (mod.CanSubmitUserReport) QueueUserReportRefresh(mod);
 
         QueueLatestReleaseUserReportRefresh(mod);
     }
 
     private void DetachSearchResult(ModListItemViewModel mod)
     {
-        if (_searchResultSubscriptions.Remove(mod))
-        {
-            mod.PropertyChanged -= OnSearchResultPropertyChanged;
-        }
+        if (_searchResultSubscriptions.Remove(mod)) mod.PropertyChanged -= OnSearchResultPropertyChanged;
     }
 
     private void DetachAllSearchResults()
     {
-        if (_searchResultSubscriptions.Count == 0)
-        {
-            return;
-        }
+        if (_searchResultSubscriptions.Count == 0) return;
 
-        foreach (ModListItemViewModel mod in _searchResultSubscriptions)
-        {
-            mod.PropertyChanged -= OnSearchResultPropertyChanged;
-        }
+        foreach (var mod in _searchResultSubscriptions) mod.PropertyChanged -= OnSearchResultPropertyChanged;
 
         _searchResultSubscriptions.Clear();
     }
@@ -2109,17 +2050,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         if (string.Equals(e.PropertyName, nameof(ModListItemViewModel.CanUpdate), StringComparison.Ordinal))
-        {
             UpdateUpdatableCount();
-        }
     }
 
     private void OnSearchResultPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (sender is not ModListItemViewModel mod)
-        {
-            return;
-        }
+        if (sender is not ModListItemViewModel mod) return;
 
         if (string.Equals(e.PropertyName, nameof(ModListItemViewModel.DatabaseTags), StringComparison.Ordinal))
         {
@@ -2128,95 +2064,146 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         if (string.Equals(e.PropertyName, nameof(ModListItemViewModel.UserReportModVersion), StringComparison.Ordinal))
-        {
             if (mod.CanSubmitUserReport)
-            {
                 QueueUserReportRefresh(mod);
-            }
+    }
 
-            return;
+    private async Task<ModVersionVoteSummary?> RunUserReportOperationAsync(
+        Func<CancellationToken, Task<ModVersionVoteSummary?>> operation,
+        CancellationToken cancellationToken)
+    {
+        using var userReportScope = BeginUserReportOperation();
+        var entered = false;
+
+        try
+        {
+            await _userReportRefreshLimiter.WaitAsync(cancellationToken).ConfigureAwait(false);
+            entered = true;
+
+            return await operation(cancellationToken).ConfigureAwait(false);
         }
+        finally
+        {
+            if (entered) _userReportRefreshLimiter.Release();
+        }
+    }
+
+    private IDisposable BeginUserReportOperation()
+    {
+        bool shouldSetLoadingStatus;
+
+        lock (_userReportOperationLock)
+        {
+            _activeUserReportOperations++;
+            shouldSetLoadingStatus = _activeUserReportOperations == 1;
+        }
+
+        if (shouldSetLoadingStatus) SetStatus(UserReportsLoadingStatusMessage, false);
+
+        var busyScope = BeginBusyScope();
+        return new UserReportOperationScope(this, busyScope);
+    }
+
+    private void EndUserReportOperation()
+    {
+        bool shouldSetLoadedStatus;
+
+        lock (_userReportOperationLock)
+        {
+            if (_activeUserReportOperations > 0) _activeUserReportOperations--;
+
+            shouldSetLoadedStatus = _activeUserReportOperations == 0;
+        }
+
+        if (shouldSetLoadedStatus) SetStatus(UserReportsLoadedStatusMessage, false);
     }
 
     private void QueueLatestReleaseUserReportRefresh(ModListItemViewModel mod)
     {
-        if (mod is null)
-        {
-            return;
-        }
+        if (mod is null) return;
 
-        _ = RefreshLatestReleaseUserReportAsync(mod, suppressErrors: true, CancellationToken.None);
+        if (!_areUserReportsVisible) return;
+
+        _ = RunUserReportOperationAsync(
+            ct => RefreshLatestReleaseUserReportCoreAsync(mod, true, ct),
+            CancellationToken.None);
     }
 
     public Task<ModVersionVoteSummary?> RefreshLatestReleaseUserReportAsync(
         ModListItemViewModel mod,
         CancellationToken cancellationToken = default)
     {
-        return RefreshLatestReleaseUserReportAsync(mod, suppressErrors: false, cancellationToken);
+        return RunUserReportOperationAsync(
+            ct => RefreshLatestReleaseUserReportCoreAsync(mod, false, ct),
+            cancellationToken);
     }
 
-    private async Task<ModVersionVoteSummary?> RefreshLatestReleaseUserReportAsync(
+    private async Task<ModVersionVoteSummary?> RefreshLatestReleaseUserReportCoreAsync(
         ModListItemViewModel mod,
         bool suppressErrors,
         CancellationToken cancellationToken)
     {
-        if (mod is null)
-        {
-            return null;
-        }
+        if (mod is null) return null;
 
-        string? latestReleaseVersion = mod.LatestRelease?.Version;
+        var latestReleaseVersion = mod.LatestRelease?.Version;
         if (string.IsNullOrWhiteSpace(latestReleaseVersion))
         {
-            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken, DispatcherPriority.Background)
+            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken,
+                    DispatcherPriority.Background)
                 .ConfigureAwait(false);
+            StoreLatestReleaseUserReportEtag(mod.ModId, null, null);
             return null;
         }
 
         if (string.Equals(mod.LatestReleaseUserReportVersion, latestReleaseVersion, StringComparison.OrdinalIgnoreCase)
             && mod.LatestReleaseUserReportSummary is not null)
-        {
             return mod.LatestReleaseUserReportSummary;
-        }
 
-        if (string.IsNullOrWhiteSpace(_installedGameVersion))
+        if (string.IsNullOrWhiteSpace(InstalledGameVersion))
         {
-            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken, DispatcherPriority.Background)
+            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken,
+                    DispatcherPriority.Background)
                 .ConfigureAwait(false);
+            StoreLatestReleaseUserReportEtag(mod.ModId, latestReleaseVersion, null);
             return null;
         }
 
         if (InternetAccessManager.IsInternetAccessDisabled)
         {
-            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken, DispatcherPriority.Background)
+            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken,
+                    DispatcherPriority.Background)
                 .ConfigureAwait(false);
+            StoreLatestReleaseUserReportEtag(mod.ModId, latestReleaseVersion, null);
             return null;
         }
 
         try
         {
-            ModVersionVoteSummary summary = await _voteService
-                .GetVoteSummaryAsync(mod.ModId, latestReleaseVersion, _installedGameVersion!, cancellationToken)
+            var (Summary, etag) = await _voteService
+                .GetVoteSummaryWithEtagAsync(mod.ModId, latestReleaseVersion, InstalledGameVersion!, cancellationToken)
                 .ConfigureAwait(false);
 
             await InvokeOnDispatcherAsync(
-                    () => mod.ApplyLatestReleaseUserReportSummary(summary),
+                    () => mod.ApplyLatestReleaseUserReportSummary(Summary),
                     cancellationToken,
                     DispatcherPriority.Background)
                 .ConfigureAwait(false);
 
-            return summary;
+            StoreLatestReleaseUserReportEtag(mod.ModId, latestReleaseVersion, etag);
+
+            return Summary;
         }
         catch (InternetAccessDisabledException)
         {
-            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken, DispatcherPriority.Background)
+            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken,
+                    DispatcherPriority.Background)
                 .ConfigureAwait(false);
+            StoreLatestReleaseUserReportEtag(mod.ModId, latestReleaseVersion, null);
             return null;
         }
         catch (Exception ex)
         {
             if (!suppressErrors)
-            {
                 StatusLogService.AppendStatus(
                     string.Format(
                         CultureInfo.CurrentCulture,
@@ -2224,44 +2211,41 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                         mod.DisplayName,
                         ex.Message),
                     true);
-            }
 
-            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken, DispatcherPriority.Background)
+            await InvokeOnDispatcherAsync(mod.ClearLatestReleaseUserReport, cancellationToken,
+                    DispatcherPriority.Background)
                 .ConfigureAwait(false);
+            StoreLatestReleaseUserReportEtag(mod.ModId, latestReleaseVersion, null);
             return null;
         }
     }
 
     private void QueueUserReportRefresh(ModListItemViewModel mod)
     {
-        if (mod is null)
-        {
-            return;
-        }
+        if (mod is null) return;
 
-        _ = RefreshUserReportAsync(mod, suppressErrors: true, CancellationToken.None);
+        if (!_areUserReportsVisible) return;
+
+        _ = RunUserReportOperationAsync(
+            ct => RefreshUserReportCoreAsync(mod, true, ct),
+            CancellationToken.None);
     }
 
     public void EnableUserReportFetching()
     {
-        if (_hasEnabledUserReportFetching)
-        {
-            return;
-        }
+        if (!_areUserReportsVisible) return;
+
+        if (_hasEnabledUserReportFetching) return;
 
         _hasEnabledUserReportFetching = true;
 
-        foreach (ModListItemViewModel mod in _installedModSubscriptions)
-        {
-            QueueUserReportRefresh(mod);
-        }
-
-        foreach (ModListItemViewModel mod in _searchResultSubscriptions)
-        {
-            if (mod.CanSubmitUserReport)
-            {
+        if (_allowModDetailsRefresh)
+            foreach (var mod in _installedModSubscriptions)
                 QueueUserReportRefresh(mod);
-            }
+
+        foreach (var mod in _searchResultSubscriptions)
+        {
+            if (mod.CanSubmitUserReport) QueueUserReportRefresh(mod);
 
             QueueLatestReleaseUserReportRefresh(mod);
         }
@@ -2271,7 +2255,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ModListItemViewModel mod,
         CancellationToken cancellationToken = default)
     {
-        return RefreshUserReportAsync(mod, suppressErrors: false, cancellationToken);
+        return RunUserReportOperationAsync(
+            ct => RefreshUserReportCoreAsync(mod, false, ct),
+            cancellationToken);
     }
 
     public async Task<ModVersionVoteSummary?> SubmitUserReportVoteAsync(
@@ -2280,12 +2266,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         string? comment,
         CancellationToken cancellationToken = default)
     {
-        if (mod is null)
-        {
-            return null;
-        }
+        if (mod is null) return null;
 
-        if (string.IsNullOrWhiteSpace(_installedGameVersion) || string.IsNullOrWhiteSpace(mod.UserReportModVersion))
+        if (string.IsNullOrWhiteSpace(InstalledGameVersion) || string.IsNullOrWhiteSpace(mod.UserReportModVersion))
         {
             await InvokeOnDispatcherAsync(
                     () => mod.SetUserReportUnavailable("User reports require a known Vintage Story and mod version."),
@@ -2296,70 +2279,70 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         if (InternetAccessManager.IsInternetAccessDisabled)
-        {
             throw new InternetAccessDisabledException(
                 "Internet access is disabled. Enable it in the File menu to submit your vote.");
-        }
 
         await InvokeOnDispatcherAsync(mod.SetUserReportLoading, cancellationToken, DispatcherPriority.Background)
             .ConfigureAwait(false);
 
         try
         {
-            ModVersionVoteSummary summary = option.HasValue
+            var (Summary, etag) = option.HasValue
                 ? await _voteService
                     .SubmitVoteAsync(
                         mod.ModId,
                         mod.UserReportModVersion!,
-                        _installedGameVersion!,
+                        InstalledGameVersion!,
                         option.Value,
                         comment,
                         cancellationToken)
                     .ConfigureAwait(false)
                 : await _voteService
-                    .RemoveVoteAsync(mod.ModId, mod.UserReportModVersion!, _installedGameVersion!, cancellationToken)
+                    .RemoveVoteAsync(mod.ModId, mod.UserReportModVersion!, InstalledGameVersion!, cancellationToken)
                     .ConfigureAwait(false);
 
             await InvokeOnDispatcherAsync(
-                    () => mod.ApplyUserReportSummary(summary),
+                    () => mod.ApplyUserReportSummary(Summary),
                     cancellationToken,
                     DispatcherPriority.Background)
                 .ConfigureAwait(false);
 
-            return summary;
+            StoreUserReportEtag(mod.ModId, mod.UserReportModVersion, etag);
+
+            return Summary;
         }
         catch (InternetAccessDisabledException)
         {
             await InvokeOnDispatcherAsync(mod.SetUserReportOffline, cancellationToken, DispatcherPriority.Background)
                 .ConfigureAwait(false);
+            StoreUserReportEtag(mod.ModId, mod.UserReportModVersion, null);
             throw;
         }
         catch (Exception ex)
         {
             StatusLogService.AppendStatus(
-                string.Format(CultureInfo.CurrentCulture, "Failed to submit user report for {0}: {1}", mod.DisplayName, ex.Message),
+                string.Format(CultureInfo.CurrentCulture, "Failed to submit user report for {0}: {1}", mod.DisplayName,
+                    ex.Message),
                 true);
             throw;
         }
     }
 
-    private async Task<ModVersionVoteSummary?> RefreshUserReportAsync(
+    private async Task<ModVersionVoteSummary?> RefreshUserReportCoreAsync(
         ModListItemViewModel mod,
         bool suppressErrors,
         CancellationToken cancellationToken)
     {
-        if (mod is null)
-        {
-            return null;
-        }
+        if (mod is null) return null;
 
-        if (string.IsNullOrWhiteSpace(_installedGameVersion) || string.IsNullOrWhiteSpace(mod.UserReportModVersion))
+        if (string.IsNullOrWhiteSpace(InstalledGameVersion) || string.IsNullOrWhiteSpace(mod.UserReportModVersion))
         {
             await InvokeOnDispatcherAsync(
                     () => mod.SetUserReportUnavailable("User reports require a known Vintage Story and mod version."),
                     cancellationToken,
                     DispatcherPriority.Background)
                 .ConfigureAwait(false);
+            StoreUserReportEtag(mod.ModId, mod.UserReportModVersion, null);
             return null;
         }
 
@@ -2367,6 +2350,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             await InvokeOnDispatcherAsync(mod.SetUserReportOffline, cancellationToken, DispatcherPriority.Background)
                 .ConfigureAwait(false);
+            StoreUserReportEtag(mod.ModId, mod.UserReportModVersion, null);
             return null;
         }
 
@@ -2375,32 +2359,35 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            ModVersionVoteSummary summary = await _voteService
-                .GetVoteSummaryAsync(mod.ModId, mod.UserReportModVersion!, _installedGameVersion!, cancellationToken)
+            var (Summary, etag) = await _voteService
+                .GetVoteSummaryWithEtagAsync(mod.ModId, mod.UserReportModVersion!, InstalledGameVersion!,
+                    cancellationToken)
                 .ConfigureAwait(false);
 
             await InvokeOnDispatcherAsync(
-                    () => mod.ApplyUserReportSummary(summary),
+                    () => mod.ApplyUserReportSummary(Summary),
                     cancellationToken,
                     DispatcherPriority.Background)
                 .ConfigureAwait(false);
 
-            return summary;
+            StoreUserReportEtag(mod.ModId, mod.UserReportModVersion, etag);
+
+            return Summary;
         }
         catch (InternetAccessDisabledException)
         {
             await InvokeOnDispatcherAsync(mod.SetUserReportOffline, cancellationToken, DispatcherPriority.Background)
                 .ConfigureAwait(false);
+            StoreUserReportEtag(mod.ModId, mod.UserReportModVersion, null);
             return null;
         }
         catch (Exception ex)
         {
             if (!suppressErrors)
-            {
                 StatusLogService.AppendStatus(
-                    string.Format(CultureInfo.CurrentCulture, "Failed to refresh user reports for {0}: {1}", mod.DisplayName, ex.Message),
+                    string.Format(CultureInfo.CurrentCulture, "Failed to refresh user reports for {0}: {1}",
+                        mod.DisplayName, ex.Message),
                     true);
-            }
 
             await InvokeOnDispatcherAsync(
                     () => mod.SetUserReportError(ex.Message),
@@ -2408,21 +2395,53 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     DispatcherPriority.Background)
                 .ConfigureAwait(false);
 
-            if (suppressErrors)
-            {
-                return null;
-            }
+            if (suppressErrors) return null;
 
             throw;
         }
     }
 
-    private void ScheduleInstalledTagFilterRefresh()
+    private void SetTagsColumnVisibility(bool isVisible)
     {
-        if (_isInstalledTagRefreshPending)
+        if (_isTagsColumnVisible == isVisible) return;
+
+        _isTagsColumnVisible = isVisible;
+
+        if (!isVisible)
         {
+            foreach (var mod in _mods) mod.ClearDatabaseTags();
+
+            foreach (var mod in _searchResults) mod.ClearDatabaseTags();
+
             return;
         }
+
+        ScheduleInstalledTagFilterRefresh();
+        ScheduleModDatabaseTagRefresh();
+        if (_allowModDetailsRefresh && _modEntriesBySourcePath.Count > 0)
+            QueueDatabaseInfoRefresh(_modEntriesBySourcePath.Values.ToArray());
+    }
+
+    private void SetUserReportsColumnVisibility(bool isVisible)
+    {
+        if (_areUserReportsVisible == isVisible) return;
+
+        _areUserReportsVisible = isVisible;
+
+        if (!isVisible)
+        {
+            _hasEnabledUserReportFetching = false;
+            return;
+        }
+
+        if (_allowModDetailsRefresh) EnableUserReportFetching();
+    }
+
+    private void ScheduleInstalledTagFilterRefresh()
+    {
+        if (!_isTagsColumnVisible) return;
+
+        if (_isInstalledTagRefreshPending) return;
 
         _isInstalledTagRefreshPending = true;
 
@@ -2430,10 +2449,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             try
             {
-                List<string> tagSnapshot = EnumerateModTags(_mods).ToList();
-                List<string> selectedSnapshot = _selectedInstalledTags.ToList();
-                List<string> normalized = await Task.Run(
-                        () => NormalizeAndSortTags(tagSnapshot.Concat(selectedSnapshot)))
+                var tagSnapshot = EnumerateModTags(_mods).ToList();
+                var selectedSnapshot = _selectedInstalledTags.ToList();
+                var normalized = await Task.Run(() => NormalizeAndSortTags(tagSnapshot.Concat(selectedSnapshot)))
                     .ConfigureAwait(false);
 
                 await InvokeOnDispatcherAsync(
@@ -2442,9 +2460,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                         DispatcherPriority.ContextIdle)
                     .ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to refresh installed mod tags: {ex}");
+                // Swallow unexpected exceptions for resilience.
             }
             finally
             {
@@ -2452,22 +2470,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
         }
 
-        if (System.Windows.Application.Current?.Dispatcher is { } dispatcher)
-        {
+        if (Application.Current?.Dispatcher is { } dispatcher)
             dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(ExecuteAsync));
-        }
         else
-        {
             ExecuteAsync();
-        }
     }
 
     private void ScheduleModDatabaseTagRefresh()
     {
-        if (_isModDatabaseTagRefreshPending)
-        {
-            return;
-        }
+        if (!_isTagsColumnVisible) return;
+
+        if (_isModDatabaseTagRefreshPending) return;
 
         _isModDatabaseTagRefreshPending = true;
 
@@ -2475,11 +2488,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             try
             {
-                IReadOnlyList<string> existing = _modDatabaseAvailableTags;
-                List<string> tagSnapshot = EnumerateModTags(_searchResults).ToList();
-                List<string> selectedSnapshot = _selectedModDatabaseTags.ToList();
-                List<string> normalized = await Task.Run(
-                        () => NormalizeAndSortTags(existing.Concat(tagSnapshot).Concat(selectedSnapshot)))
+                var existing = _modDatabaseAvailableTags;
+                var tagSnapshot = EnumerateModTags(_searchResults).ToList();
+                var selectedSnapshot = _selectedModDatabaseTags.ToList();
+                var normalized = await Task
+                    .Run(() => NormalizeAndSortTags(existing.Concat(tagSnapshot).Concat(selectedSnapshot)))
                     .ConfigureAwait(false);
 
                 await InvokeOnDispatcherAsync(
@@ -2488,9 +2501,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                         DispatcherPriority.ContextIdle)
                     .ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to refresh mod database tags: {ex}");
+                // Swallow unexpected exceptions for resilience.
             }
             finally
             {
@@ -2498,38 +2511,35 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
         }
 
-        if (System.Windows.Application.Current?.Dispatcher is { } dispatcher)
-        {
+        if (Application.Current?.Dispatcher is { } dispatcher)
             dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(ExecuteAsync));
-        }
         else
-        {
             ExecuteAsync();
-        }
     }
 
     private void ResetInstalledTagFilters(IEnumerable<string> tags)
     {
-        List<string> normalized = NormalizeAndSortTags(tags.Concat(_selectedInstalledTags));
+        if (!_isTagsColumnVisible) return;
+
+        var normalized = NormalizeAndSortTags(tags.Concat(_selectedInstalledTags));
         ApplyInstalledTagFilters(normalized);
     }
 
     private void ApplyInstalledTagFilters(IReadOnlyList<string> normalized)
     {
+        if (!_isTagsColumnVisible) return;
+
         _suppressInstalledTagFilterSelectionChanges = true;
         try
         {
-            foreach (TagFilterOptionViewModel filter in _installedTagFilters)
-            {
-                filter.PropertyChanged -= OnInstalledTagFilterPropertyChanged;
-            }
+            foreach (var filter in _installedTagFilters) filter.PropertyChanged -= OnInstalledTagFilterPropertyChanged;
 
             _installedTagFilters.Clear();
 
             var selected = new HashSet<string>(_selectedInstalledTags, StringComparer.OrdinalIgnoreCase);
-            foreach (string tag in normalized)
+            foreach (var tag in normalized)
             {
-                bool isSelected = selected.Contains(tag);
+                var isSelected = selected.Contains(tag);
                 var option = new TagFilterOptionViewModel(tag, isSelected);
                 option.PropertyChanged += OnInstalledTagFilterPropertyChanged;
                 _installedTagFilters.Add(option);
@@ -2547,26 +2557,28 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void ResetModDatabaseTagFilters(IEnumerable<string> tags)
     {
-        List<string> normalized = NormalizeAndSortTags(tags.Concat(_selectedModDatabaseTags));
+        if (!_isTagsColumnVisible) return;
+
+        var normalized = NormalizeAndSortTags(tags.Concat(_selectedModDatabaseTags));
         ApplyModDatabaseTagFilters(normalized);
     }
 
     private void ApplyModDatabaseTagFilters(IReadOnlyList<string> normalized)
     {
+        if (!_isTagsColumnVisible) return;
+
         _suppressModDatabaseTagFilterSelectionChanges = true;
         try
         {
-            foreach (TagFilterOptionViewModel filter in _modDatabaseTagFilters)
-            {
+            foreach (var filter in _modDatabaseTagFilters)
                 filter.PropertyChanged -= OnModDatabaseTagFilterPropertyChanged;
-            }
 
             _modDatabaseTagFilters.Clear();
 
             var selected = new HashSet<string>(_selectedModDatabaseTags, StringComparer.OrdinalIgnoreCase);
-            foreach (string tag in normalized)
+            foreach (var tag in normalized)
             {
-                bool isSelected = selected.Contains(tag);
+                var isSelected = selected.Contains(tag);
                 var option = new TagFilterOptionViewModel(tag, isSelected);
                 option.PropertyChanged += OnModDatabaseTagFilterPropertyChanged;
                 _modDatabaseTagFilters.Add(option);
@@ -2583,16 +2595,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void ApplyModDatabaseAvailableTags(IEnumerable<string> tags)
     {
-        List<string> normalized = NormalizeAndSortTags(tags.Concat(_selectedModDatabaseTags));
+        if (!_isTagsColumnVisible) return;
+
+        var normalized = NormalizeAndSortTags(tags.Concat(_selectedModDatabaseTags));
         ApplyNormalizedModDatabaseAvailableTags(normalized);
     }
 
     private void ApplyNormalizedModDatabaseAvailableTags(IReadOnlyList<string> normalized)
     {
-        if (TagListsEqual(_modDatabaseAvailableTags, normalized))
-        {
-            return;
-        }
+        if (!_isTagsColumnVisible) return;
+
+        if (TagListsEqual(_modDatabaseAvailableTags, normalized)) return;
 
         _modDatabaseAvailableTags = normalized;
         ApplyModDatabaseTagFilters(_modDatabaseAvailableTags);
@@ -2600,20 +2613,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateModDatabaseAvailableTagsFromViewModels()
     {
+        if (!_isTagsColumnVisible) return;
+
         ApplyModDatabaseAvailableTags(_modDatabaseAvailableTags.Concat(EnumerateModTags(_searchResults)));
     }
 
     private void OnInstalledTagFilterPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_suppressInstalledTagFilterSelectionChanges)
-        {
-            return;
-        }
+        if (_suppressInstalledTagFilterSelectionChanges) return;
 
-        if (!string.Equals(e.PropertyName, nameof(TagFilterOptionViewModel.IsSelected), StringComparison.Ordinal))
-        {
-            return;
-        }
+        if (!string.Equals(e.PropertyName, nameof(TagFilterOptionViewModel.IsSelected),
+                StringComparison.Ordinal)) return;
 
         if (SyncSelectedTags(_installedTagFilters, _selectedInstalledTags))
         {
@@ -2624,15 +2634,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void OnModDatabaseTagFilterPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_suppressModDatabaseTagFilterSelectionChanges)
-        {
-            return;
-        }
+        if (_suppressModDatabaseTagFilterSelectionChanges) return;
 
-        if (!string.Equals(e.PropertyName, nameof(TagFilterOptionViewModel.IsSelected), StringComparison.Ordinal))
-        {
-            return;
-        }
+        if (!string.Equals(e.PropertyName, nameof(TagFilterOptionViewModel.IsSelected),
+                StringComparison.Ordinal)) return;
 
         if (SyncSelectedTags(_modDatabaseTagFilters, _selectedModDatabaseTags))
         {
@@ -2643,15 +2648,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static bool SyncSelectedTags(IEnumerable<TagFilterOptionViewModel> filters, List<string> target)
     {
-        List<string> newSelection = filters
+        var newSelection = filters
             .Where(filter => filter.IsSelected)
             .Select(filter => filter.Name)
             .ToList();
 
-        if (TagListsEqual(target, newSelection))
-        {
-            return false;
-        }
+        if (TagListsEqual(target, newSelection)) return false;
 
         target.Clear();
         target.AddRange(newSelection);
@@ -2666,23 +2668,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static List<string> NormalizeAndSortTags(IEnumerable<string> tags)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string tag in tags)
+        foreach (var tag in tags)
         {
-            if (string.IsNullOrWhiteSpace(tag))
-            {
-                continue;
-            }
+            if (string.IsNullOrWhiteSpace(tag)) continue;
 
-            string trimmed = tag.Trim();
-            if (trimmed.Length == 0)
-            {
-                continue;
-            }
+            var trimmed = tag.Trim();
+            if (trimmed.Length == 0) continue;
 
-            if (!map.ContainsKey(trimmed))
-            {
-                map[trimmed] = trimmed;
-            }
+            if (!map.ContainsKey(trimmed)) map[trimmed] = trimmed;
         }
 
         var list = map.Values.ToList();
@@ -2692,108 +2685,67 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static bool TagListsEqual(IReadOnlyList<string> left, IReadOnlyList<string> right)
     {
-        if (ReferenceEquals(left, right))
-        {
-            return true;
-        }
+        if (ReferenceEquals(left, right)) return true;
 
-        if (left.Count != right.Count)
-        {
-            return false;
-        }
+        if (left.Count != right.Count) return false;
 
-        for (int i = 0; i < left.Count; i++)
-        {
+        for (var i = 0; i < left.Count; i++)
             if (!string.Equals(left[i], right[i], StringComparison.OrdinalIgnoreCase))
-            {
                 return false;
-            }
-        }
 
         return true;
     }
 
     private IReadOnlyList<string> GetSelectedModDatabaseTagsSnapshot()
     {
-        if (_selectedModDatabaseTags.Count == 0)
-        {
-            return Array.Empty<string>();
-        }
+        if (_selectedModDatabaseTags.Count == 0) return Array.Empty<string>();
 
         return _selectedModDatabaseTags.ToArray();
     }
 
     private static IReadOnlyList<string> CollectModDatabaseTags(IEnumerable<ModDatabaseSearchResult> results)
     {
-        if (results is null)
-        {
-            return Array.Empty<string>();
-        }
+        if (results is null) return Array.Empty<string>();
 
         return NormalizeAndSortTags(results.SelectMany(GetTagsForResult));
     }
 
     private static IEnumerable<string> GetTagsForResult(ModDatabaseSearchResult result)
     {
-        if (result.DetailedInfo?.Tags is { Count: > 0 } detailed)
-        {
-            return detailed;
-        }
+        if (result.DetailedInfo?.Tags is { Count: > 0 } detailed) return detailed;
 
         return result.Tags ?? Array.Empty<string>();
     }
 
     private static bool ContainsAllTags(IEnumerable<string>? sourceTags, IReadOnlyList<string> requiredTags)
     {
-        if (requiredTags.Count == 0)
-        {
-            return true;
-        }
+        if (requiredTags.Count == 0) return true;
 
-        if (sourceTags is null)
-        {
-            return false;
-        }
+        if (sourceTags is null) return false;
 
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string tag in sourceTags)
+        foreach (var tag in sourceTags)
         {
-            if (string.IsNullOrWhiteSpace(tag))
-            {
-                continue;
-            }
+            if (string.IsNullOrWhiteSpace(tag)) continue;
 
-            string trimmed = tag.Trim();
-            if (trimmed.Length == 0)
-            {
-                continue;
-            }
+            var trimmed = tag.Trim();
+            if (trimmed.Length == 0) continue;
 
             set.Add(trimmed);
         }
 
-        if (set.Count == 0)
-        {
-            return false;
-        }
+        if (set.Count == 0) return false;
 
-        foreach (string required in requiredTags)
-        {
+        foreach (var required in requiredTags)
             if (!set.Contains(required))
-            {
                 return false;
-            }
-        }
 
         return true;
     }
 
     private void TriggerModDatabaseSearch(bool preserveResultLimit = false)
     {
-        if (!SearchModDatabase)
-        {
-            return;
-        }
+        if (!SearchModDatabase) return;
 
         if (!preserveResultLimit)
         {
@@ -2816,15 +2768,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var cts = new CancellationTokenSource();
         _modDatabaseSearchCts = cts;
 
-        bool hasSearchTokens = HasSearchText;
+        var hasSearchTokens = HasSearchText;
         string statusMessage;
         if (hasSearchTokens)
-        {
             statusMessage = "Searching the mod database...";
-        }
         else
-        {
-            statusMessage = _modDatabaseAutoLoadMode switch
+            statusMessage = ModDatabaseAutoLoadMode switch
             {
                 ModDatabaseAutoLoadMode.DownloadsLastThirtyDays => "Loading top mods from the last 30 days...",
                 ModDatabaseAutoLoadMode.DownloadsLastTenDays => "Loading top mods from the last 10 days...",
@@ -2835,10 +2784,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 ModDatabaseAutoLoadMode.MostTrending => "Loading most trending mods...",
                 _ => "Loading most downloaded mods..."
             };
-        }
         SetStatus(statusMessage, false);
 
-        IReadOnlyList<string> requiredTags = GetSelectedModDatabaseTagsSnapshot();
+        var requiredTags = GetSelectedModDatabaseTagsSnapshot();
         UpdateIsModDatabaseLoading(true);
         _ = RunModDatabaseSearchAsync(SearchText, hasSearchTokens, requiredTags, cts);
     }
@@ -2859,24 +2807,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void LoadMoreModDatabaseResults()
     {
-        if (!SearchModDatabase)
-        {
-            return;
-        }
+        if (!SearchModDatabase) return;
 
         _hasRequestedAdditionalModDatabaseResults = true;
 
-        int increment = Math.Max(_selectedModDatabaseFetchLimit, 1);
-        int nextLimit = _modDatabaseCurrentResultLimit;
-        long candidateLimit = (long)_modDatabaseCurrentResultLimit + increment;
+        var increment = Math.Max(_selectedModDatabaseFetchLimit, 1);
+        var nextLimit = _modDatabaseCurrentResultLimit;
+        var candidateLimit = (long)_modDatabaseCurrentResultLimit + increment;
         if (candidateLimit >= MaxModDatabaseResultLimit)
-        {
             nextLimit = MaxModDatabaseResultLimit;
-        }
         else
-        {
             nextLimit = (int)candidateLimit;
-        }
         if (nextLimit <= _modDatabaseCurrentResultLimit)
         {
             CanLoadMoreModDatabaseResults = false;
@@ -2886,7 +2827,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         _modDatabaseCurrentResultLimit = nextLimit;
-        TriggerModDatabaseSearch(preserveResultLimit: true);
+        TriggerModDatabaseSearch(true);
     }
 
     private async Task RunModDatabaseSearchAsync(
@@ -2896,7 +2837,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         CancellationTokenSource cts)
     {
         using var busyScope = BeginBusyScope();
-        CancellationToken cancellationToken = cts.Token;
+        var cancellationToken = cts.Token;
 
         try
         {
@@ -2904,7 +2845,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
             if (InternetAccessManager.IsInternetAccessDisabled)
             {
-                await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken).ConfigureAwait(false);
+                await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken)
+                    .ConfigureAwait(false);
                 await InvokeOnDispatcherAsync(
                         () => SetStatus(InternetAccessDisabledStatusMessage, false),
                         cancellationToken)
@@ -2912,25 +2854,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            bool excludeInstalled = ExcludeInstalledModDatabaseResults;
-            bool onlyShowCompatible = OnlyShowCompatibleModDatabaseResults;
-            HashSet<string> installedModIds = await GetInstalledModIdsAsync(cancellationToken).ConfigureAwait(false);
-            int desiredResultCount = _modDatabaseCurrentResultLimit;
-            int queryLimit = desiredResultCount;
+            var excludeInstalled = ExcludeInstalledModDatabaseResults;
+            var onlyShowCompatible = OnlyShowCompatibleModDatabaseResults;
+            var installedModIds = await GetInstalledModIdsAsync(cancellationToken).ConfigureAwait(false);
+            var desiredResultCount = _modDatabaseCurrentResultLimit;
+            var queryLimit = desiredResultCount;
             List<ModDatabaseSearchResult> finalResults = new();
-            bool hasMoreResults = false;
+            var hasMoreResults = false;
 
             while (true)
             {
                 IReadOnlyList<ModDatabaseSearchResult> results;
                 if (hasSearchTokens)
-                {
                     results = await _databaseService.SearchModsAsync(query, queryLimit, cancellationToken)
                         .ConfigureAwait(false);
-                }
                 else
-                {
-                    results = _modDatabaseAutoLoadMode switch
+                    results = ModDatabaseAutoLoadMode switch
                     {
                         ModDatabaseAutoLoadMode.DownloadsLastThirtyDays =>
                             await _databaseService
@@ -2974,16 +2913,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                             .GetMostDownloadedModsAsync(queryLimit, cancellationToken)
                             .ConfigureAwait(false)
                     };
-                }
 
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    return;
-                }
+                if (cancellationToken.IsCancellationRequested) return;
 
-                IReadOnlyList<string> availableTags = CollectModDatabaseTags(results);
-                List<string> combinedTags = await Task.Run(
-                        () => NormalizeAndSortTags(availableTags.Concat(requiredTags)))
+                var availableTags = CollectModDatabaseTags(results);
+                var combinedTags = await Task.Run(() => NormalizeAndSortTags(availableTags.Concat(requiredTags)))
                     .ConfigureAwait(false);
                 await InvokeOnDispatcherAsync(
                         () => ApplyNormalizedModDatabaseAvailableTags(combinedTags),
@@ -3023,17 +2957,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
                 IEnumerable<ModDatabaseSearchResult> candidateResults = filteredResults;
                 if (excludeInstalled)
-                {
                     candidateResults = candidateResults
                         .Where(result => !IsResultInstalled(result, installedModIds));
-                }
 
                 finalResults = candidateResults
                     .Take(desiredResultCount)
                     .ToList();
 
-                bool hasAdditionalResults = filteredResults.Count > finalResults.Count;
-                bool canRequestMore = results.Count >= queryLimit;
+                var hasAdditionalResults = filteredResults.Count > finalResults.Count;
+                var canRequestMore = results.Count >= queryLimit;
                 if (!excludeInstalled
                     || finalResults.Count >= desiredResultCount
                     || !canRequestMore)
@@ -3043,19 +2975,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 }
 
                 int nextLimit;
-                long candidateLimit = (long)queryLimit + desiredResultCount;
+                var candidateLimit = (long)queryLimit + desiredResultCount;
                 if (candidateLimit >= MaxModDatabaseResultLimit)
-                {
                     nextLimit = MaxModDatabaseResultLimit;
-                }
                 else
-                {
                     nextLimit = (int)candidateLimit;
-                }
-                if (nextLimit <= queryLimit)
-                {
-                    break;
-                }
+                if (nextLimit <= queryLimit) break;
 
                 queryLimit = nextLimit;
             }
@@ -3075,7 +3000,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                         },
                         cancellationToken)
                     .ConfigureAwait(false);
-                await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken).ConfigureAwait(false);
+                await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken)
+                    .ConfigureAwait(false);
                 await InvokeOnDispatcherAsync(
                         () => SetStatus(BuildNoModDatabaseResultsMessage(hasSearchTokens), false),
                         cancellationToken)
@@ -3091,7 +3017,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
             if (entries.Count == 0)
             {
-                await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken).ConfigureAwait(false);
+                await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken)
+                    .ConfigureAwait(false);
                 await InvokeOnDispatcherAsync(
                         () => SetStatus(BuildNoModDatabaseResultsMessage(hasSearchTokens), false),
                         cancellationToken)
@@ -3104,25 +3031,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 .ToList();
 
             if (onlyShowCompatible)
-            {
-                await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken).ConfigureAwait(false);
-            }
+                await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken)
+                    .ConfigureAwait(false);
             else
-            {
                 await UpdateSearchResultsAsync(viewModels, cancellationToken).ConfigureAwait(false);
-            }
 
             await InvokeOnDispatcherAsync(
                     () =>
                     {
-                        CanLoadMoreModDatabaseResults = hasMoreResults && _modDatabaseCurrentResultLimit < MaxModDatabaseResultLimit;
+                        CanLoadMoreModDatabaseResults =
+                            hasMoreResults && _modDatabaseCurrentResultLimit < MaxModDatabaseResultLimit;
 
                         if (_hasRequestedAdditionalModDatabaseResults)
                         {
-                            if (!CanLoadMoreModDatabaseResults)
-                            {
-                                IsLoadMoreModDatabaseButtonVisible = false;
-                            }
+                            if (!CanLoadMoreModDatabaseResults) IsLoadMoreModDatabaseButtonVisible = false;
 
                             _hasRequestedAdditionalModDatabaseResults = false;
                         }
@@ -3130,79 +3052,63 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
+            if (cancellationToken.IsCancellationRequested) return;
 
-            for (int i = 0; i < entries.Count; i++)
+            for (var i = 0; i < entries.Count; i++)
             {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    return;
-                }
+                if (cancellationToken.IsCancellationRequested) return;
 
-                ModEntry entry = entries[i].Entry;
-                ModDatabaseInfo? cachedInfo = await _databaseService
-                    .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion, _configuration.RequireExactVsVersionMatch, cancellationToken)
+                var entry = entries[i].Entry;
+                var cachedInfo = await _databaseService
+                    .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, InstalledGameVersion,
+                        _configuration.RequireExactVsVersionMatch, cancellationToken)
                     .ConfigureAwait(false);
 
-                if (cachedInfo is null)
-                {
-                    continue;
-                }
+                if (cachedInfo is null) continue;
 
                 entry.UpdateDatabaseInfo(cachedInfo);
 
-                ModDatabaseInfo capturedInfo = cachedInfo;
-                ModListItemViewModel viewModel = viewModels[i];
+                var capturedInfo = cachedInfo;
+                var viewModel = viewModels[i];
 
                 await InvokeOnDispatcherAsync(
-                        () => viewModel.UpdateDatabaseInfo(capturedInfo, loadLogoImmediately: false),
+                        () => viewModel.UpdateDatabaseInfo(capturedInfo, false),
                         cancellationToken)
                     .ConfigureAwait(false);
 
                 QueueLatestReleaseUserReportRefresh(viewModel);
             }
 
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
+            if (cancellationToken.IsCancellationRequested) return;
 
             await InvokeOnDispatcherAsync(
                     () => SetStatus("Loading mod details...", false),
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            await _databaseService.PopulateModDatabaseInfoAsync(entries.Select(item => item.Entry), _installedGameVersion, _configuration.RequireExactVsVersionMatch, cancellationToken)
+            await _databaseService.PopulateModDatabaseInfoAsync(entries.Select(item => item.Entry),
+                    InstalledGameVersion, _configuration.RequireExactVsVersionMatch, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
+            if (cancellationToken.IsCancellationRequested) return;
 
             await InvokeOnDispatcherAsync(
                 () =>
                 {
-                    for (int i = 0; i < entries.Count; i++)
+                    for (var i = 0; i < entries.Count; i++)
                     {
-                        ModDatabaseInfo? info = entries[i].Entry.DatabaseInfo;
+                        var info = entries[i].Entry.DatabaseInfo;
                         if (info != null)
                         {
-                            ModListItemViewModel viewModel = viewModels[i];
-                            viewModel.UpdateDatabaseInfo(info, loadLogoImmediately: false);
+                            var viewModel = viewModels[i];
+                            viewModel.UpdateDatabaseInfo(info, false);
                             QueueLatestReleaseUserReportRefresh(viewModel);
                         }
                     }
                 },
                 cancellationToken).ConfigureAwait(false);
 
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
+            if (cancellationToken.IsCancellationRequested) return;
 
             if (onlyShowCompatible)
             {
@@ -3210,7 +3116,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
                 if (viewModels.Count == 0)
                 {
-                    await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken).ConfigureAwait(false);
+                    await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken)
+                        .ConfigureAwait(false);
 
                     await InvokeOnDispatcherAsync(
                             () => SetStatus(NoCompatibleModDatabaseResultsStatusMessage, false),
@@ -3230,10 +3137,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
             await LoadModDatabaseLogosAsync(viewModels, cancellationToken).ConfigureAwait(false);
 
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
+            if (cancellationToken.IsCancellationRequested) return;
 
             await InvokeOnDispatcherAsync(
                     () => SetStatus(BuildModDatabaseResultsMessage(hasSearchTokens, viewModels.Count), false),
@@ -3246,7 +3150,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         catch (InternetAccessDisabledException)
         {
-            await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken).ConfigureAwait(false);
+            await UpdateSearchResultsAsync(Array.Empty<ModListItemViewModel>(), cancellationToken)
+                .ConfigureAwait(false);
             await InvokeOnDispatcherAsync(
                     () =>
                     {
@@ -3297,16 +3202,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateIsModDatabaseLoading(bool isLoading)
     {
-        if (System.Windows.Application.Current?.Dispatcher is Dispatcher dispatcher)
+        if (Application.Current?.Dispatcher is Dispatcher dispatcher)
         {
             if (dispatcher.CheckAccess())
-            {
                 IsModDatabaseLoading = isLoading;
-            }
             else
-            {
                 dispatcher.BeginInvoke(new Action(() => IsModDatabaseLoading = isLoading));
-            }
         }
         else
         {
@@ -3343,10 +3244,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         CancellationTokenSource? releaseToSchedule = null;
         lock (_busyStateLock)
         {
-            if (_busyOperationCount > 0)
-            {
-                _busyOperationCount--;
-            }
+            if (_busyOperationCount > 0) _busyOperationCount--;
 
             isBusy = _busyOperationCount > 0;
             if (!isBusy)
@@ -3360,13 +3258,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         pendingRelease?.Cancel();
 
         if (isBusy)
-        {
             UpdateIsBusy(true);
-        }
         else
-        {
             ScheduleBusyRelease(releaseToSchedule);
-        }
     }
 
     private void ScheduleBusyRelease(CancellationTokenSource? releaseCts)
@@ -3385,10 +3279,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
                 lock (_busyStateLock)
                 {
-                    if (!ReferenceEquals(_busyReleaseCts, releaseCts))
-                    {
-                        return;
-                    }
+                    if (!ReferenceEquals(_busyReleaseCts, releaseCts)) return;
 
                     _busyReleaseCts = null;
                 }
@@ -3407,7 +3298,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateIsBusy(bool isBusy)
     {
-        if (System.Windows.Application.Current?.Dispatcher is Dispatcher dispatcher)
+        if (Application.Current?.Dispatcher is Dispatcher dispatcher)
         {
             if (dispatcher.CheckAccess())
             {
@@ -3432,18 +3323,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void RecalculateIsBusy()
     {
-        bool isBusy = _hasActiveBusyScope || _isLoadingMods || _isLoadingModDetails || _isModDatabaseLoading;
+        var isBusy = _hasActiveBusyScope || _isLoadingMods || _isLoadingModDetails || _isModDatabaseLoading;
 
-        if (System.Windows.Application.Current?.Dispatcher is Dispatcher dispatcher)
+        if (Application.Current?.Dispatcher is Dispatcher dispatcher)
         {
             if (dispatcher.CheckAccess())
-            {
                 IsBusy = isBusy;
-            }
             else
-            {
                 dispatcher.BeginInvoke(new Action(() => IsBusy = isBusy));
-            }
         }
         else
         {
@@ -3453,16 +3340,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateIsLoadingModDetails(bool isLoading)
     {
-        if (System.Windows.Application.Current?.Dispatcher is Dispatcher dispatcher)
+        if (Application.Current?.Dispatcher is Dispatcher dispatcher)
         {
             if (dispatcher.CheckAccess())
-            {
                 IsLoadingModDetails = isLoading;
-            }
             else
-            {
                 dispatcher.BeginInvoke(new Action(() => IsLoadingModDetails = isLoading));
-            }
         }
         else
         {
@@ -3470,38 +3353,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private sealed class BusyScope : IDisposable
-    {
-        private readonly MainViewModel _owner;
-        private bool _disposed;
-
-        public BusyScope(MainViewModel owner)
-        {
-            _owner = owner;
-        }
-
-        public void Dispose()
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _disposed = true;
-            _owner.EndBusyScope();
-        }
-    }
-
     private string BuildModDatabaseResultsMessage(bool hasSearchTokens, int resultCount)
     {
-        string compatibilityQualifier = OnlyShowCompatibleModDatabaseResults ? " compatible" : string.Empty;
+        var compatibilityQualifier = OnlyShowCompatibleModDatabaseResults ? " compatible" : string.Empty;
 
-        if (hasSearchTokens)
-        {
-            return $"Found {resultCount}{compatibilityQualifier} mods in the mod database.";
-        }
+        if (hasSearchTokens) return $"Found {resultCount}{compatibilityQualifier} mods in the mod database.";
 
-        return _modDatabaseAutoLoadMode switch
+        return ModDatabaseAutoLoadMode switch
         {
             ModDatabaseAutoLoadMode.DownloadsLastThirtyDays =>
                 $"Showing {resultCount}{compatibilityQualifier} of the most downloaded mods from the last 30 days.",
@@ -3515,29 +3373,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         IList<(ModEntry Entry, bool IsInstalled)> entries,
         IList<ModListItemViewModel> viewModels)
     {
-        if (entries.Count != viewModels.Count)
-        {
-            return;
-        }
+        if (entries.Count != viewModels.Count) return;
 
-        for (int i = viewModels.Count - 1; i >= 0; i--)
-        {
+        for (var i = viewModels.Count - 1; i >= 0; i--)
             if (!viewModels[i].LatestReleaseIsCompatible)
             {
                 entries.RemoveAt(i);
                 viewModels.RemoveAt(i);
             }
-        }
     }
 
     private void UpdateLoadedModsStatus()
     {
         if (IsModDetailsRefreshPending())
         {
-            if (!_isModDetailsStatusActive)
-            {
-                SetStatus(BuildModDetailsLoadingStatusMessage(), false, isModDetailsStatus: true);
-            }
+            if (!_isModDetailsStatusActive) SetStatus(BuildModDetailsLoadingStatusMessage(), false, true);
         }
         else
         {
@@ -3552,12 +3402,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void OnModDetailsRefreshEnqueued(int count)
     {
-        if (count <= 0)
-        {
-            return;
-        }
+        if (count <= 0) return;
 
-        int newCount = Interlocked.Add(ref _pendingModDetailsRefreshCount, count);
+        var newCount = Interlocked.Add(ref _pendingModDetailsRefreshCount, count);
         if (newCount <= 0)
         {
             Interlocked.Exchange(ref _pendingModDetailsRefreshCount, 0);
@@ -3568,24 +3415,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateIsLoadingModDetails(true);
 
         if (newCount == count || !_isModDetailsStatusActive)
-        {
-            SetStatus(BuildModDetailsLoadingStatusMessage(), false, isModDetailsStatus: true);
-        }
+            SetStatus(BuildModDetailsLoadingStatusMessage(), false, true);
     }
 
     private void OnModDetailsRefreshCompleted()
     {
-        int newCount = Interlocked.Decrement(ref _pendingModDetailsRefreshCount);
+        var newCount = Interlocked.Decrement(ref _pendingModDetailsRefreshCount);
         if (newCount <= 0)
         {
             Interlocked.Exchange(ref _pendingModDetailsRefreshCount, 0);
             ReleaseModDetailsBusyScope();
             UpdateIsLoadingModDetails(false);
 
-            if (_isModDetailsStatusActive)
-            {
-                SetStatus(BuildModDetailsReadyStatusMessage(), false);
-            }
+            if (_isModDetailsStatusActive) SetStatus(BuildModDetailsReadyStatusMessage(), false);
         }
     }
 
@@ -3613,27 +3455,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private string BuildModDetailsReadyStatusMessage()
     {
-        if (_hasShownModDetailsLoadingStatus)
-        {
-            return $"Loaded {TotalMods} mods. Mod details up to date.";
-        }
+        if (_hasShownModDetailsLoadingStatus) return $"Loaded {TotalMods} mods. Mod details up to date.";
 
         return $"Loaded {TotalMods} mods.";
     }
 
     private string BuildNoModDatabaseResultsMessage(bool hasSearchTokens)
     {
-        if (OnlyShowCompatibleModDatabaseResults)
-        {
-            return NoCompatibleModDatabaseResultsStatusMessage;
-        }
+        if (OnlyShowCompatibleModDatabaseResults) return NoCompatibleModDatabaseResultsStatusMessage;
 
-        if (hasSearchTokens)
-        {
-            return "No mods found in the mod database.";
-        }
+        if (hasSearchTokens) return "No mods found in the mod database.";
 
-        return _modDatabaseAutoLoadMode switch
+        return ModDatabaseAutoLoadMode switch
         {
             ModDatabaseAutoLoadMode.DownloadsLastThirtyDays =>
                 "No mods with downloads in the last 30 days were found.",
@@ -3655,12 +3488,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         string operation;
         if (hasSearchTokens)
-        {
             operation = "search the mod database";
-        }
         else
-        {
-            operation = _modDatabaseAutoLoadMode switch
+            operation = ModDatabaseAutoLoadMode switch
             {
                 ModDatabaseAutoLoadMode.DownloadsLastThirtyDays =>
                     "load the most downloaded mods from the last 30 days",
@@ -3676,7 +3506,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     "load most trending mods",
                 _ => "load the most downloaded mods from the mod database"
             };
-        }
 
         return $"Failed to {operation}: {errorMessage}";
     }
@@ -3688,42 +3517,32 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             : $"in the last {_newModsRecentMonths} months";
     }
 
-    private Task UpdateSearchResultsAsync(IReadOnlyList<ModListItemViewModel> items, CancellationToken cancellationToken)
+    private Task UpdateSearchResultsAsync(IReadOnlyList<ModListItemViewModel> items,
+        CancellationToken cancellationToken)
     {
         return InvokeOnDispatcherAsync(() =>
         {
             _searchResults.Clear();
-            foreach (var item in items)
-            {
-                _searchResults.Add(item);
-            }
+            foreach (var item in items) _searchResults.Add(item);
 
             SelectedMod = null;
         }, cancellationToken);
     }
 
-    private async Task LoadModDatabaseLogosAsync(IReadOnlyList<ModListItemViewModel> viewModels, CancellationToken cancellationToken)
+    private async Task LoadModDatabaseLogosAsync(IReadOnlyList<ModListItemViewModel> viewModels,
+        CancellationToken cancellationToken)
     {
-        if (viewModels.Count == 0)
-        {
-            return;
-        }
+        if (viewModels.Count == 0) return;
 
         var tasks = new List<Task>(viewModels.Count);
-        foreach (ModListItemViewModel viewModel in viewModels)
+        foreach (var viewModel in viewModels)
         {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
+            if (cancellationToken.IsCancellationRequested) break;
 
             tasks.Add(viewModel.LoadModDatabaseLogoAsync(cancellationToken));
         }
 
-        if (tasks.Count == 0)
-        {
-            return;
-        }
+        if (tasks.Count == 0) return;
 
         try
         {
@@ -3742,12 +3561,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var mod in _mods)
-                {
                     if (!string.IsNullOrWhiteSpace(mod.ModId))
-                    {
                         installed.Add(mod.ModId);
-                    }
-                }
 
                 return installed;
             },
@@ -3756,30 +3571,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsResultInstalled(ModDatabaseSearchResult result, HashSet<string> installedModIds)
     {
-        if (installedModIds.Contains(result.ModId))
-        {
-            return true;
-        }
+        if (installedModIds.Contains(result.ModId)) return true;
 
-        foreach (string alternate in result.AlternateIds)
-        {
+        foreach (var alternate in result.AlternateIds)
             if (!string.IsNullOrWhiteSpace(alternate) && installedModIds.Contains(alternate))
-            {
                 return true;
-            }
-        }
 
         return false;
     }
 
-    private static Task InvokeOnDispatcherAsync(Action action, CancellationToken cancellationToken, DispatcherPriority priority = DispatcherPriority.Normal)
+    private static Task InvokeOnDispatcherAsync(Action action, CancellationToken cancellationToken,
+        DispatcherPriority priority = DispatcherPriority.Normal)
     {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return Task.CompletedTask;
-        }
+        if (cancellationToken.IsCancellationRequested) return Task.CompletedTask;
 
-        if (System.Windows.Application.Current?.Dispatcher is { } dispatcher)
+        if (Application.Current?.Dispatcher is { } dispatcher)
         {
             if (dispatcher.CheckAccess())
             {
@@ -3794,19 +3600,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return Task.CompletedTask;
     }
 
-    private static Task<T> InvokeOnDispatcherAsync<T>(Func<T> function, CancellationToken cancellationToken, DispatcherPriority priority = DispatcherPriority.Normal)
+    private static Task<T> InvokeOnDispatcherAsync<T>(Func<T> function, CancellationToken cancellationToken,
+        DispatcherPriority priority = DispatcherPriority.Normal)
     {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return Task.FromCanceled<T>(cancellationToken);
-        }
+        if (cancellationToken.IsCancellationRequested) return Task.FromCanceled<T>(cancellationToken);
 
-        if (System.Windows.Application.Current?.Dispatcher is { } dispatcher)
+        if (Application.Current?.Dispatcher is { } dispatcher)
         {
-            if (dispatcher.CheckAccess())
-            {
-                return Task.FromResult(function());
-            }
+            if (dispatcher.CheckAccess()) return Task.FromResult(function());
 
             return dispatcher.InvokeAsync(function, priority, cancellationToken).Task;
         }
@@ -3820,10 +3621,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             ? Array.Empty<string>()
             : new[] { result.Author };
 
-        string? description = BuildSearchResultDescription(result);
-        string? pageUrl = BuildModDatabasePageUrl(result);
+        var description = BuildSearchResultDescription(result);
+        var pageUrl = BuildModDatabasePageUrl(result);
 
-        ModDatabaseInfo databaseInfo = result.DetailedInfo ?? new ModDatabaseInfo
+        var databaseInfo = result.DetailedInfo ?? new ModDatabaseInfo
         {
             Tags = result.Tags,
             AssetId = result.AssetId,
@@ -3841,6 +3642,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             ModId = result.ModId,
             Name = result.Name,
+            ManifestName = result.Name,
             Description = description,
             Authors = authors,
             Website = pageUrl,
@@ -3854,7 +3656,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private ModListItemViewModel CreateSearchResultViewModel(ModEntry entry, bool isInstalled)
     {
-        return new ModListItemViewModel(entry, false, "Mod Database", RejectActivationChangeAsync, _installedGameVersion, isInstalled, null, () => _configuration.RequireExactVsVersionMatch);
+        return new ModListItemViewModel(entry, false, "Mod Database", RejectActivationChangeAsync, InstalledGameVersion,
+            isInstalled, null, () => _configuration.RequireExactVsVersionMatch);
     }
 
     private static string? BuildSearchResultDescription(ModDatabaseSearchResult result)
@@ -3865,13 +3668,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static string? BuildModDatabasePageUrl(ModDatabaseSearchResult result)
     {
         if (!string.IsNullOrWhiteSpace(result.AssetId))
-        {
             return $"https://mods.vintagestory.at/show/mod/{result.AssetId}";
-        }
 
         if (!string.IsNullOrWhiteSpace(result.UrlAlias))
         {
-            string alias = result.UrlAlias!.TrimStart('/');
+            var alias = result.UrlAlias!.TrimStart('/');
             return string.IsNullOrWhiteSpace(alias) ? null : $"https://mods.vintagestory.at/{alias}";
         }
 
@@ -3885,30 +3686,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private bool FilterMod(object? item)
     {
-        if (item is not ModListItemViewModel mod)
-        {
-            return false;
-        }
+        if (item is not ModListItemViewModel mod) return false;
 
         if (_selectedInstalledTags.Count > 0 && !ContainsAllTags(mod.DatabaseTags, _selectedInstalledTags))
-        {
             return false;
-        }
 
-        if (_searchTokens.Length == 0)
-        {
-            return true;
-        }
+        if (_searchTokens.Length == 0) return true;
 
         return mod.MatchesSearchTokens(_searchTokens);
     }
 
     private static string[] CreateSearchTokens(string value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return Array.Empty<string>();
-        }
+        if (string.IsNullOrWhiteSpace(value)) return Array.Empty<string>();
 
         return value
             .Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -3916,10 +3706,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private string GetDisplayPath(string? fullPath)
     {
-        if (string.IsNullOrWhiteSpace(fullPath))
-        {
-            return string.Empty;
-        }
+        if (string.IsNullOrWhiteSpace(fullPath)) return string.Empty;
 
         string best;
         try
@@ -3932,20 +3719,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         foreach (var candidate in EnumerateBasePaths())
-        {
             try
             {
-                string relative = Path.GetRelativePath(candidate, best);
+                var relative = Path.GetRelativePath(candidate, best);
                 if (!relative.StartsWith("..", StringComparison.Ordinal) && relative.Length < best.Length)
-                {
                     best = relative;
-                }
             }
             catch (Exception)
             {
                 // Ignore invalid paths.
             }
-        }
 
         return best.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
     }
@@ -3956,14 +3739,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         void TryAdd(string? candidate)
         {
-            if (string.IsNullOrWhiteSpace(candidate))
-            {
-                return;
-            }
+            if (string.IsNullOrWhiteSpace(candidate)) return;
 
             try
             {
-                string full = Path.GetFullPath(candidate);
+                var full = Path.GetFullPath(candidate);
                 set.Add(full);
             }
             catch (Exception)
@@ -3973,10 +3753,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         TryAdd(_settingsStore.DataDirectory);
-        foreach (var path in _settingsStore.SearchBaseCandidates)
-        {
-            TryAdd(path);
-        }
+        foreach (var path in _settingsStore.SearchBaseCandidates) TryAdd(path);
 
         TryAdd(Directory.GetCurrentDirectory());
 
@@ -3985,30 +3762,28 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static IEnumerable<SortOption> CreateSortOptions()
     {
-        yield return new SortOption("Name (A → Z)", (nameof(ModListItemViewModel.DisplayName), ListSortDirection.Ascending));
-        yield return new SortOption("Name (Z → A)", (nameof(ModListItemViewModel.DisplayName), ListSortDirection.Descending));
+        yield return new SortOption(
+            "Name (A → Z)",
+            (nameof(ModListItemViewModel.NameSortKey), ListSortDirection.Ascending));
+        yield return new SortOption(
+            "Name (Z → A)",
+            (nameof(ModListItemViewModel.NameSortKey), ListSortDirection.Descending));
         yield return new SortOption(
             "Active (Active → Inactive)",
             (nameof(ModListItemViewModel.ActiveSortOrder), ListSortDirection.Ascending),
-            (nameof(ModListItemViewModel.DisplayName), ListSortDirection.Ascending));
+            (nameof(ModListItemViewModel.NameSortKey), ListSortDirection.Ascending));
         yield return new SortOption(
             "Active (Inactive → Active)",
             (nameof(ModListItemViewModel.ActiveSortOrder), ListSortDirection.Descending),
-            (nameof(ModListItemViewModel.DisplayName), ListSortDirection.Ascending));
+            (nameof(ModListItemViewModel.NameSortKey), ListSortDirection.Ascending));
     }
 
     private void ReapplyActiveSortIfNeeded()
     {
-        if (SelectedSortOption?.SortDescriptions is not { Count: > 0 } sorts)
-        {
-            return;
-        }
+        if (SelectedSortOption?.SortDescriptions is not { Count: > 0 } sorts) return;
 
         var primary = sorts[0];
-        if (!IsActiveSortProperty(primary.Property))
-        {
-            return;
-        }
+        if (!IsActiveSortProperty(primary.Property)) return;
 
         SelectedSortOption.Apply(ModsView);
         ModsView.Refresh();
@@ -4016,13 +3791,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsActiveSortProperty(string? propertyName)
     {
-        if (string.IsNullOrWhiteSpace(propertyName))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(propertyName)) return false;
 
         return string.Equals(propertyName, nameof(ModListItemViewModel.IsActive), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(propertyName, nameof(ModListItemViewModel.ActiveSortOrder), StringComparison.OrdinalIgnoreCase);
+               || string.Equals(propertyName, nameof(ModListItemViewModel.ActiveSortOrder),
+                   StringComparison.OrdinalIgnoreCase);
     }
 
     private void SetStatus(string message, bool isError, bool isModDetailsStatus = false)
@@ -4040,16 +3813,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var results = new Dictionary<string, ModEntry?>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (string path in paths)
+        foreach (var path in paths)
         {
-            ModEntry? entry = _discoveryService.LoadModFromPath(path);
+            var entry = _discoveryService.LoadModFromPath(path);
             if (entry != null)
             {
                 ResetCalculatedModState(entry);
                 if (existingEntries != null && existingEntries.TryGetValue(path, out var previous))
-                {
                     CopyTransientModState(previous, entry);
-                }
             }
 
             results[path] = entry;
@@ -4067,29 +3838,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static void CopyTransientModState(ModEntry source, ModEntry target)
     {
-        if (source is null || target is null)
-        {
-            return;
-        }
+        if (source is null || target is null) return;
 
-        bool sameModId = string.Equals(source.ModId, target.ModId, StringComparison.OrdinalIgnoreCase);
-        bool sameVersion = string.Equals(source.Version, target.Version, StringComparison.OrdinalIgnoreCase)
-            || (string.IsNullOrWhiteSpace(source.Version) && string.IsNullOrWhiteSpace(target.Version));
+        var sameModId = string.Equals(source.ModId, target.ModId, StringComparison.OrdinalIgnoreCase);
+        var sameVersion = string.Equals(source.Version, target.Version, StringComparison.OrdinalIgnoreCase)
+                          || (string.IsNullOrWhiteSpace(source.Version) && string.IsNullOrWhiteSpace(target.Version));
 
-        if (!sameModId || !sameVersion)
-        {
-            return;
-        }
+        if (!sameModId || !sameVersion) return;
 
-        if (target.DatabaseInfo is null && source.DatabaseInfo != null)
-        {
-            target.DatabaseInfo = source.DatabaseInfo;
-        }
+        if (target.DatabaseInfo is null && source.DatabaseInfo != null) target.DatabaseInfo = source.DatabaseInfo;
 
-        if (source.ModDatabaseSearchScore.HasValue)
-        {
-            target.ModDatabaseSearchScore = source.ModDatabaseSearchScore;
-        }
+        if (source.ModDatabaseSearchScore.HasValue) target.ModDatabaseSearchScore = source.ModDatabaseSearchScore;
     }
 
     private void ApplyPartialUpdates(IReadOnlyDictionary<string, ModEntry?> changes, string? previousSelection)
@@ -4099,21 +3858,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             SetStatus("Mods are up to date.", false);
             if (!string.IsNullOrWhiteSpace(previousSelection)
                 && _modViewModelsBySourcePath.TryGetValue(previousSelection, out var selected))
-            {
                 SelectedMod = selected;
-            }
 
             return;
         }
 
-        int added = 0;
-        int updated = 0;
-        int removed = 0;
+        var added = 0;
+        var updated = 0;
+        var removed = 0;
 
         foreach (var change in changes)
         {
-            string path = change.Key;
-            ModEntry? entry = change.Value;
+            var path = change.Key;
+            var entry = change.Value;
 
             if (entry == null)
             {
@@ -4123,10 +3880,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     _modViewModelsBySourcePath.Remove(path);
                     removed++;
 
-                    if (ReferenceEquals(SelectedMod, existingVm))
-                    {
-                        SelectedMod = null;
-                    }
+                    if (ReferenceEquals(SelectedMod, existingVm)) SelectedMod = null;
                 }
 
                 _modEntriesBySourcePath.Remove(path);
@@ -4136,23 +3890,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var viewModel = CreateModViewModel(entry);
             if (_modViewModelsBySourcePath.TryGetValue(path, out var existing))
             {
-                int index = _mods.IndexOf(existing);
+                var index = _mods.IndexOf(existing);
                 if (index >= 0)
-                {
                     _mods[index] = viewModel;
-                }
                 else
-                {
                     _mods.Add(viewModel);
-                }
 
                 _modViewModelsBySourcePath[path] = viewModel;
                 updated++;
 
-                if (ReferenceEquals(SelectedMod, existing))
-                {
-                    SelectedMod = viewModel;
-                }
+                if (ReferenceEquals(SelectedMod, existing)) SelectedMod = viewModel;
             }
             else
             {
@@ -4165,10 +3912,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         foreach (var pair in _modViewModelsBySourcePath)
         {
-            if (changes.ContainsKey(pair.Key))
-            {
-                continue;
-            }
+            if (changes.ContainsKey(pair.Key)) continue;
 
             if (_modEntriesBySourcePath.TryGetValue(pair.Key, out var entry))
             {
@@ -4179,15 +3923,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (!string.IsNullOrWhiteSpace(previousSelection)
             && _modViewModelsBySourcePath.TryGetValue(previousSelection, out var selectedAfter))
-        {
             SelectedMod = selectedAfter;
-        }
-        else if (SelectedMod != null && !_mods.Contains(SelectedMod))
-        {
-            SelectedMod = null;
-        }
+        else if (SelectedMod != null && !_mods.Contains(SelectedMod)) SelectedMod = null;
 
-        int affected = added + updated + removed;
+        var affected = added + updated + removed;
         if (affected == 0)
         {
             SetStatus("Mods are up to date.", false);
@@ -4195,42 +3934,29 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         var parts = new List<string>();
-        if (added > 0)
-        {
-            parts.Add($"{added} added");
-        }
+        if (added > 0) parts.Add($"{added} added");
 
-        if (updated > 0)
-        {
-            parts.Add($"{updated} updated");
-        }
+        if (updated > 0) parts.Add($"{updated} updated");
 
-        if (removed > 0)
-        {
-            parts.Add($"{removed} removed");
-        }
+        if (removed > 0) parts.Add($"{removed} removed");
 
-        string summary = parts.Count == 0 ? $"{affected} changed" : string.Join(", ", parts);
+        var summary = parts.Count == 0 ? $"{affected} changed" : string.Join(", ", parts);
         SetStatus($"Applied changes to mods ({summary}).", false);
     }
 
-    private void QueueDatabaseInfoRefresh(IEnumerable<ModEntry> entries)
+    private void QueueDatabaseInfoRefresh(IEnumerable<ModEntry> entries, bool forceRefresh = false)
     {
-        if (entries is null)
-        {
-            return;
-        }
+        if (entries is null) return;
 
-        ModEntry[] pending = entries
+        if (!_allowModDetailsRefresh && !forceRefresh) return;
+
+        var pending = entries
             .Where(entry => entry != null
-                && !string.IsNullOrWhiteSpace(entry.ModId)
-                && NeedsDatabaseRefresh(entry))
+                            && !string.IsNullOrWhiteSpace(entry.ModId)
+                            && (forceRefresh || NeedsDatabaseRefresh(entry)))
             .ToArray();
 
-        if (pending.Length == 0)
-        {
-            return;
-        }
+        if (pending.Length == 0) return;
 
         OnModDetailsRefreshEnqueued(pending.Length);
 
@@ -4258,14 +3984,38 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         });
     }
 
-    private static bool NeedsDatabaseRefresh(ModEntry entry)
+    private bool NeedsDatabaseRefresh(ModEntry entry)
     {
-        if (entry is null)
-        {
-            return false;
-        }
+        if (entry is null) return false;
+
+        if (_isTagsColumnVisible
+            && TryGetTagSuppressionKey(entry, out var key)
+            && key != null
+            && _suppressedTagEntries.Contains(key))
+            return true;
 
         return entry.DatabaseInfo == null || entry.DatabaseInfo.IsOfflineOnly;
+    }
+
+    private static bool TryGetTagSuppressionKey(ModEntry entry, out string? key)
+    {
+        key = null;
+
+        if (entry is null) return false;
+
+        if (!string.IsNullOrWhiteSpace(entry.SourcePath))
+        {
+            key = entry.SourcePath;
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.ModId))
+        {
+            key = entry.ModId;
+            return true;
+        }
+
+        return false;
     }
 
     private async Task RefreshDatabaseInfoAsync(ModEntry entry, SemaphoreSlim limiter)
@@ -4273,22 +4023,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         await limiter.WaitAsync().ConfigureAwait(false);
 
         using var logScope = StatusLogService.BeginDebugScope(entry.Name, entry.ModId, "metadata");
-        bool cacheHit = false;
-        string source = string.Empty;
-        int tagCount = 0;
-        int releaseCount = 0;
+        var cacheHit = false;
+        var source = string.Empty;
+        var tagCount = 0;
+        var releaseCount = 0;
 
         try
         {
-            ModDatabaseInfo? cachedInfo = await _databaseService
-                .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion, _configuration.RequireExactVsVersionMatch)
+            var cachedInfo = await _databaseService
+                .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, InstalledGameVersion,
+                    _configuration.RequireExactVsVersionMatch)
                 .ConfigureAwait(false);
 
             cacheHit = cachedInfo != null;
 
             if (cachedInfo != null)
             {
-                await ApplyDatabaseInfoAsync(entry, cachedInfo, loadLogoImmediately: false).ConfigureAwait(false);
+                await ApplyDatabaseInfoAsync(entry, cachedInfo, false).ConfigureAwait(false);
                 tagCount = cachedInfo.Tags?.Count ?? 0;
                 releaseCount = cachedInfo.Releases?.Count ?? 0;
 
@@ -4311,7 +4062,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             try
             {
                 info = await _databaseService
-                    .TryLoadDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion, _configuration.RequireExactVsVersionMatch)
+                    .TryLoadDatabaseInfoAsync(entry.ModId, entry.Version, InstalledGameVersion,
+                        _configuration.RequireExactVsVersionMatch)
                     .ConfigureAwait(false);
             }
             catch (Exception)
@@ -4346,10 +4098,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (logScope != null)
             {
                 logScope.SetCacheStatus(cacheHit);
-                if (!string.IsNullOrWhiteSpace(source))
-                {
-                    logScope.SetDetail("src", source);
-                }
+                if (!string.IsNullOrWhiteSpace(source)) logScope.SetDetail("src", source);
 
                 logScope.SetDetail("tags", tagCount);
                 logScope.SetDetail("rel", releaseCount);
@@ -4361,14 +4110,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task PopulateOfflineDatabaseInfoAsync(IEnumerable<ModEntry> entries)
     {
-        foreach (ModEntry entry in entries)
-        {
+        foreach (var entry in entries)
             try
             {
-                if (entry is not null)
-                {
-                    await PopulateOfflineInfoForEntryAsync(entry).ConfigureAwait(false);
-                }
+                if (entry is not null) await PopulateOfflineInfoForEntryAsync(entry).ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -4378,41 +4123,32 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 OnModDetailsRefreshCompleted();
             }
-        }
     }
 
     private async Task PopulateOfflineInfoForEntryAsync(ModEntry entry)
     {
-        if (entry is null)
-        {
-            return;
-        }
+        if (entry is null) return;
 
-        ModDatabaseInfo? cachedInfo = entry.DatabaseInfo;
+        var cachedInfo = entry.DatabaseInfo;
         if (cachedInfo is null)
-        {
             cachedInfo = await _databaseService
-                .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, _installedGameVersion, _configuration.RequireExactVsVersionMatch)
+                .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, InstalledGameVersion,
+                    _configuration.RequireExactVsVersionMatch)
                 .ConfigureAwait(false);
-        }
 
-        ModDatabaseInfo? offlineInfo = CreateOfflineDatabaseInfo(entry);
+        var offlineInfo = CreateOfflineDatabaseInfo(entry);
 
-        ModDatabaseInfo? mergedInfo = MergeOfflineAndCachedInfo(offlineInfo, cachedInfo);
-        if (mergedInfo is null)
-        {
-            return;
-        }
+        var mergedInfo = MergeOfflineAndCachedInfo(offlineInfo, cachedInfo);
+        if (mergedInfo is null) return;
 
         await ApplyDatabaseInfoAsync(entry, mergedInfo).ConfigureAwait(false);
     }
 
     private async Task ApplyDatabaseInfoAsync(ModEntry entry, ModDatabaseInfo info, bool loadLogoImmediately = true)
     {
-        if (info is null)
-        {
-            return;
-        }
+        if (info is null) return;
+
+        var preparedInfo = PrepareDatabaseInfoForVisibility(entry, info);
 
         try
         {
@@ -4421,15 +4157,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     {
                         if (!_modEntriesBySourcePath.TryGetValue(entry.SourcePath, out var currentEntry)
                             || !ReferenceEquals(currentEntry, entry))
-                        {
                             return;
-                        }
 
-                        currentEntry.UpdateDatabaseInfo(info);
+                        currentEntry.UpdateDatabaseInfo(preparedInfo);
 
                         if (_modViewModelsBySourcePath.TryGetValue(entry.SourcePath, out var viewModel))
                         {
-                            viewModel.UpdateDatabaseInfo(info, loadLogoImmediately);
+                            viewModel.UpdateDatabaseInfo(preparedInfo, loadLogoImmediately);
                             QueueLatestReleaseUserReportRefresh(viewModel);
                         }
                     },
@@ -4447,24 +4181,64 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private ModDatabaseInfo? CreateOfflineDatabaseInfo(ModEntry entry)
+    private ModDatabaseInfo PrepareDatabaseInfoForVisibility(ModEntry entry, ModDatabaseInfo info)
     {
-        if (entry is null)
+        if (!_isTagsColumnVisible)
         {
-            return null;
+            if (TryGetTagSuppressionKey(entry, out var key) && key != null) _suppressedTagEntries.Add(key);
+
+            return CreateInfoWithoutTags(info);
         }
 
+        if (TryGetTagSuppressionKey(entry, out var visibleKey) && visibleKey != null)
+            _suppressedTagEntries.Remove(visibleKey);
+
+        return info;
+    }
+
+    private static ModDatabaseInfo CreateInfoWithoutTags(ModDatabaseInfo source)
+    {
+        return new ModDatabaseInfo
+        {
+            Tags = Array.Empty<string>(),
+            CachedTagsVersion = null,
+            AssetId = source.AssetId,
+            ModPageUrl = source.ModPageUrl,
+            LatestCompatibleVersion = source.LatestCompatibleVersion,
+            LatestVersion = source.LatestVersion,
+            RequiredGameVersions = source.RequiredGameVersions,
+            Downloads = source.Downloads,
+            Comments = source.Comments,
+            Follows = source.Follows,
+            TrendingPoints = source.TrendingPoints,
+            LogoUrl = source.LogoUrl,
+            DownloadsLastThirtyDays = source.DownloadsLastThirtyDays,
+            DownloadsLastTenDays = source.DownloadsLastTenDays,
+            LastReleasedUtc = source.LastReleasedUtc,
+            CreatedUtc = source.CreatedUtc,
+            LatestRelease = source.LatestRelease,
+            LatestCompatibleRelease = source.LatestCompatibleRelease,
+            Releases = source.Releases,
+            IsOfflineOnly = source.IsOfflineOnly,
+            Side = source.Side
+        };
+    }
+
+    private ModDatabaseInfo? CreateOfflineDatabaseInfo(ModEntry entry)
+    {
+        if (entry is null) return null;
+
         var dependencies = entry.Dependencies ?? Array.Empty<ModDependencyInfo>();
-        IReadOnlyList<string> installedRequiredGameVersions = ExtractRequiredGameVersions(dependencies);
-        IReadOnlyList<ModReleaseInfo> releases = CreateOfflineReleases(entry, installedRequiredGameVersions, dependencies);
-        IReadOnlyList<string> aggregatedRequiredGameVersions = AggregateRequiredGameVersions(installedRequiredGameVersions, releases);
+        var installedRequiredGameVersions = ExtractRequiredGameVersions(dependencies);
+        var releases = CreateOfflineReleases(entry, installedRequiredGameVersions, dependencies);
+        var aggregatedRequiredGameVersions = AggregateRequiredGameVersions(installedRequiredGameVersions, releases);
 
-        ModReleaseInfo? latestRelease = releases.Count > 0 ? releases[0] : null;
-        ModReleaseInfo? latestCompatibleRelease = releases.FirstOrDefault(release => release.IsCompatibleWithInstalledGame);
-        DateTime? lastUpdatedUtc = DetermineOfflineLastUpdatedUtc(entry, releases);
+        var latestRelease = releases.Count > 0 ? releases[0] : null;
+        var latestCompatibleRelease = releases.FirstOrDefault(release => release.IsCompatibleWithInstalledGame);
+        var lastUpdatedUtc = DetermineOfflineLastUpdatedUtc(entry, releases);
 
-        string? latestVersion = latestRelease?.Version ?? entry.Version;
-        string? latestCompatibleVersion = latestCompatibleRelease?.Version ?? entry.Version;
+        var latestVersion = latestRelease?.Version ?? entry.Version;
+        var latestCompatibleVersion = latestCompatibleRelease?.Version ?? entry.Version;
 
         return new ModDatabaseInfo
         {
@@ -4482,30 +4256,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static ModDatabaseInfo? MergeOfflineAndCachedInfo(ModDatabaseInfo? offlineInfo, ModDatabaseInfo? cachedInfo)
     {
-        if (offlineInfo is null)
-        {
-            return cachedInfo;
-        }
+        if (offlineInfo is null) return cachedInfo;
 
-        if (cachedInfo is null)
-        {
-            return offlineInfo;
-        }
+        if (cachedInfo is null) return offlineInfo;
 
-        IReadOnlyList<ModReleaseInfo> mergedReleases = MergeReleases(offlineInfo.Releases, cachedInfo.Releases);
-        ModReleaseInfo? latestRelease = offlineInfo.LatestRelease ?? cachedInfo.LatestRelease;
-        if (latestRelease is null && mergedReleases is { Count: > 0 })
-        {
-            latestRelease = mergedReleases[0];
-        }
+        var mergedReleases = MergeReleases(offlineInfo.Releases, cachedInfo.Releases);
+        var latestRelease = offlineInfo.LatestRelease ?? cachedInfo.LatestRelease;
+        if (latestRelease is null && mergedReleases is { Count: > 0 }) latestRelease = mergedReleases[0];
 
-        ModReleaseInfo? latestCompatibleRelease = offlineInfo.LatestCompatibleRelease ?? cachedInfo.LatestCompatibleRelease;
+        var latestCompatibleRelease = offlineInfo.LatestCompatibleRelease ?? cachedInfo.LatestCompatibleRelease;
         if (latestCompatibleRelease is null && mergedReleases is { Count: > 0 })
-        {
-            latestCompatibleRelease = mergedReleases.FirstOrDefault(release => release?.IsCompatibleWithInstalledGame == true);
-        }
+            latestCompatibleRelease =
+                mergedReleases.FirstOrDefault(release => release?.IsCompatibleWithInstalledGame == true);
 
-        IReadOnlyList<string> requiredVersions = offlineInfo.RequiredGameVersions is { Count: > 0 }
+        var requiredVersions = offlineInfo.RequiredGameVersions is { Count: > 0 }
             ? offlineInfo.RequiredGameVersions
             : cachedInfo.RequiredGameVersions;
 
@@ -4539,46 +4303,29 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         IReadOnlyList<ModReleaseInfo>? cachedReleases)
     {
         if (offlineReleases is not { Count: > 0 })
-        {
             return cachedReleases is { Count: > 0 } ? cachedReleases : Array.Empty<ModReleaseInfo>();
-        }
 
-        if (cachedReleases is not { Count: > 0 })
-        {
-            return offlineReleases;
-        }
+        if (cachedReleases is not { Count: > 0 }) return offlineReleases;
 
         var byVersion = new Dictionary<string, ModReleaseInfo>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (ModReleaseInfo release in cachedReleases)
+        foreach (var release in cachedReleases)
         {
-            if (release is null || string.IsNullOrWhiteSpace(release.Version))
-            {
-                continue;
-            }
+            if (release is null || string.IsNullOrWhiteSpace(release.Version)) continue;
 
-            if (!byVersion.ContainsKey(release.Version))
-            {
-                byVersion[release.Version] = release;
-            }
+            if (!byVersion.ContainsKey(release.Version)) byVersion[release.Version] = release;
         }
 
-        foreach (ModReleaseInfo release in offlineReleases)
+        foreach (var release in offlineReleases)
         {
-            if (release is null || string.IsNullOrWhiteSpace(release.Version))
-            {
-                continue;
-            }
+            if (release is null || string.IsNullOrWhiteSpace(release.Version)) continue;
 
             byVersion[release.Version] = release;
         }
 
-        if (byVersion.Count == 0)
-        {
-            return Array.Empty<ModReleaseInfo>();
-        }
+        if (byVersion.Count == 0) return Array.Empty<ModReleaseInfo>();
 
-        List<ModReleaseInfo> merged = byVersion.Values.ToList();
+        var merged = byVersion.Values.ToList();
         merged.Sort(CompareOfflineReleases);
         return merged;
     }
@@ -4591,27 +4338,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var releases = new List<ModReleaseInfo>();
         var seenVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        ModReleaseInfo? installedRelease = CreateOfflineRelease(entry, installedRequiredGameVersions, installedDependencies);
+        var installedRelease = CreateOfflineRelease(entry, installedRequiredGameVersions, installedDependencies);
         if (installedRelease != null)
         {
             releases.Add(installedRelease);
             seenVersions.Add(installedRelease.Version);
         }
 
-        foreach (ModReleaseInfo cachedRelease in EnumerateCachedModReleases(entry.ModId))
+        foreach (var cachedRelease in EnumerateCachedModReleases(entry.ModId))
         {
-            if (!seenVersions.Add(cachedRelease.Version))
-            {
-                continue;
-            }
+            if (!seenVersions.Add(cachedRelease.Version)) continue;
 
             releases.Add(cachedRelease);
         }
 
-        if (releases.Count == 0)
-        {
-            return Array.Empty<ModReleaseInfo>();
-        }
+        if (releases.Count == 0) return Array.Empty<ModReleaseInfo>();
 
         releases.Sort(CompareOfflineReleases);
         return releases.AsReadOnly();
@@ -4622,17 +4363,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         IReadOnlyList<string> requiredGameVersions,
         IReadOnlyList<ModDependencyInfo> dependencies)
     {
-        if (string.IsNullOrWhiteSpace(entry.Version))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(entry.Version)) return null;
 
-        if (!TryCreateFileUri(entry.SourcePath, entry.SourceKind, out Uri? downloadUri))
-        {
-            return null;
-        }
+        if (!TryCreateFileUri(entry.SourcePath, entry.SourceKind, out var downloadUri)) return null;
 
-        DateTime? createdUtc = TryGetLastWriteTimeUtc(entry.SourcePath, entry.SourceKind);
+        var createdUtc = TryGetLastWriteTimeUtc(entry.SourcePath, entry.SourceKind);
 
         return new ModReleaseInfo
         {
@@ -4648,38 +4383,29 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private IEnumerable<ModReleaseInfo> EnumerateCachedModReleases(string modId)
     {
-        string? cacheDirectory = ModCacheLocator.GetModCacheDirectory(modId);
-        if (string.IsNullOrWhiteSpace(cacheDirectory))
-        {
-            yield break;
-        }
+        var cacheDirectory = ModCacheLocator.GetModCacheDirectory(modId);
+        if (string.IsNullOrWhiteSpace(cacheDirectory)) yield break;
 
         try
         {
-            if (!Directory.Exists(cacheDirectory))
-            {
-                yield break;
-            }
+            if (!Directory.Exists(cacheDirectory)) yield break;
         }
         catch (Exception)
         {
             yield break;
         }
 
-        foreach (string file in ModCacheLocator.EnumerateCachedFiles(modId))
+        foreach (var file in ModCacheLocator.EnumerateCachedFiles(modId))
         {
-            ModReleaseInfo? release = TryCreateCachedRelease(file, modId);
-            if (release != null)
-            {
-                yield return release;
-            }
+            var release = TryCreateCachedRelease(file, modId);
+            if (release != null) yield return release;
         }
     }
 
     private ModReleaseInfo? TryCreateCachedRelease(string archivePath, string expectedModId)
     {
-        DateTime lastWriteTimeUtc = DateTime.MinValue;
-        long length = 0L;
+        var lastWriteTimeUtc = DateTime.MinValue;
+        var length = 0L;
 
         try
         {
@@ -4695,35 +4421,29 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             // Ignore filesystem probing failures; the cache simply will not be used.
         }
 
-        if (ModManifestCacheService.TryGetManifest(archivePath, lastWriteTimeUtc, length, out string cachedManifest, out _))
-        {
+        if (ModManifestCacheService.TryGetManifest(archivePath, lastWriteTimeUtc, length, out var cachedManifest,
+                out _))
             try
             {
-                using JsonDocument document = JsonDocument.Parse(cachedManifest);
-                JsonElement root = document.RootElement;
+                using var document = JsonDocument.Parse(cachedManifest);
+                var root = document.RootElement;
 
-                string? modId = GetString(root, "modid") ?? GetString(root, "modID");
+                var modId = GetString(root, "modid") ?? GetString(root, "modID");
                 if (!IsModIdMatch(expectedModId, modId))
                 {
                     ModManifestCacheService.Invalidate(archivePath);
                 }
                 else
                 {
-                    string? version = GetString(root, "version") ?? TryResolveVersionFromMap(root);
-                    if (string.IsNullOrWhiteSpace(version))
-                    {
-                        return null;
-                    }
+                    var version = GetString(root, "version") ?? TryResolveVersionFromMap(root);
+                    if (string.IsNullOrWhiteSpace(version)) return null;
 
-                    IReadOnlyList<ModDependencyInfo> dependencies = ParseDependencies(root);
-                    IReadOnlyList<string> requiredGameVersions = ExtractRequiredGameVersions(dependencies);
+                    var dependencies = ParseDependencies(root);
+                    var requiredGameVersions = ExtractRequiredGameVersions(dependencies);
 
-                    if (!TryCreateFileUri(archivePath, ModSourceKind.ZipArchive, out Uri? downloadUri))
-                    {
-                        return null;
-                    }
+                    if (!TryCreateFileUri(archivePath, ModSourceKind.ZipArchive, out var downloadUri)) return null;
 
-                    DateTime? createdUtc = TryGetLastWriteTimeUtc(archivePath, ModSourceKind.ZipArchive);
+                    var createdUtc = TryGetLastWriteTimeUtc(archivePath, ModSourceKind.ZipArchive);
                     return new ModReleaseInfo
                     {
                         Version = version!,
@@ -4740,54 +4460,44 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 ModManifestCacheService.Invalidate(archivePath);
             }
-        }
 
         try
         {
-            using ZipArchive archive = ZipFile.OpenRead(archivePath);
-            ZipArchiveEntry? infoEntry = FindArchiveEntry(archive, "modinfo.json");
-            if (infoEntry == null)
-            {
-                return null;
-            }
+            using var archive = ZipFile.OpenRead(archivePath);
+            var infoEntry = FindArchiveEntry(archive, "modinfo.json");
+            if (infoEntry == null) return null;
 
             string manifestContent;
-            using (Stream infoStream = infoEntry.Open())
-            using (var reader = new StreamReader(infoStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+            using (var infoStream = infoEntry.Open())
+            using (var reader = new StreamReader(infoStream, Encoding.UTF8, true))
             {
                 manifestContent = reader.ReadToEnd();
             }
 
-            using JsonDocument document = JsonDocument.Parse(manifestContent);
-            JsonElement root = document.RootElement;
+            using var document = JsonDocument.Parse(manifestContent);
+            var root = document.RootElement;
 
-            string? modId = GetString(root, "modid") ?? GetString(root, "modID");
-            if (!IsModIdMatch(expectedModId, modId))
-            {
-                return null;
-            }
+            var modId = GetString(root, "modid") ?? GetString(root, "modID");
+            if (!IsModIdMatch(expectedModId, modId)) return null;
 
-            string? version = GetString(root, "version") ?? TryResolveVersionFromMap(root);
-            if (string.IsNullOrWhiteSpace(version))
-            {
-                return null;
-            }
+            var version = GetString(root, "version") ?? TryResolveVersionFromMap(root);
+            if (string.IsNullOrWhiteSpace(version)) return null;
 
-            IReadOnlyList<ModDependencyInfo> dependencies = ParseDependencies(root);
-            IReadOnlyList<string> requiredGameVersions = ExtractRequiredGameVersions(dependencies);
+            var dependencies = ParseDependencies(root);
+            var requiredGameVersions = ExtractRequiredGameVersions(dependencies);
 
-            if (!TryCreateFileUri(archivePath, ModSourceKind.ZipArchive, out Uri? downloadUri))
-            {
-                return null;
-            }
+            if (!TryCreateFileUri(archivePath, ModSourceKind.ZipArchive, out var downloadUri)) return null;
 
-            DateTime? createdUtc = TryGetLastWriteTimeUtc(archivePath, ModSourceKind.ZipArchive);
+            var createdUtc = TryGetLastWriteTimeUtc(archivePath, ModSourceKind.ZipArchive);
 
-            string cacheModId = !string.IsNullOrWhiteSpace(modId)
+            var cacheModId = !string.IsNullOrWhiteSpace(modId)
                 ? modId
-                : (!string.IsNullOrWhiteSpace(expectedModId) ? expectedModId : Path.GetFileNameWithoutExtension(archivePath));
+                : !string.IsNullOrWhiteSpace(expectedModId)
+                    ? expectedModId
+                    : Path.GetFileNameWithoutExtension(archivePath);
 
-            ModManifestCacheService.StoreManifest(archivePath, lastWriteTimeUtc, length, cacheModId, version, manifestContent, null);
+            ModManifestCacheService.StoreManifest(archivePath, lastWriteTimeUtc, length, cacheModId, version,
+                manifestContent, null);
 
             return new ModReleaseInfo
             {
@@ -4808,23 +4518,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsModIdMatch(string expectedModId, string? actualModId)
     {
-        if (string.IsNullOrWhiteSpace(expectedModId) || string.IsNullOrWhiteSpace(actualModId))
-        {
-            return true;
-        }
+        if (string.IsNullOrWhiteSpace(expectedModId) || string.IsNullOrWhiteSpace(actualModId)) return true;
 
         return string.Equals(actualModId, expectedModId, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ZipArchiveEntry? FindArchiveEntry(ZipArchive archive, string entryName)
     {
-        foreach (ZipArchiveEntry entry in archive.Entries)
-        {
+        foreach (var entry in archive.Entries)
             if (string.Equals(entry.FullName, entryName, StringComparison.OrdinalIgnoreCase))
-            {
                 return entry;
-            }
-        }
 
         return archive.Entries.FirstOrDefault(entry =>
             string.Equals(Path.GetFileName(entry.FullName), entryName, StringComparison.OrdinalIgnoreCase));
@@ -4832,24 +4535,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static string? GetString(JsonElement element, string propertyName)
     {
-        if (TryGetProperty(element, propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
-        {
+        if (TryGetProperty(element, propertyName, out var value) && value.ValueKind == JsonValueKind.String)
             return value.GetString();
-        }
 
         return null;
     }
 
     private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement value)
     {
-        foreach (JsonProperty property in element.EnumerateObject())
-        {
+        foreach (var property in element.EnumerateObject())
             if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
             {
                 value = property.Value;
                 return true;
             }
-        }
 
         value = default;
         return false;
@@ -4857,31 +4556,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static string? TryResolveVersionFromMap(JsonElement root)
     {
-        if (!TryGetProperty(root, "versionmap", out JsonElement map) && !TryGetProperty(root, "VersionMap", out map))
-        {
-            return null;
-        }
+        if (!TryGetProperty(root, "versionmap", out var map) &&
+            !TryGetProperty(root, "VersionMap", out map)) return null;
 
-        if (map.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
+        if (map.ValueKind != JsonValueKind.Object) return null;
 
         string? preferred = null;
         string? fallback = null;
-        foreach (JsonProperty property in map.EnumerateObject())
+        foreach (var property in map.EnumerateObject())
         {
-            string? version = property.Value.GetString();
-            if (version == null)
-            {
-                continue;
-            }
+            var version = property.Value.GetString();
+            if (version == null) continue;
 
             fallback = version;
-            if (property.Name.Contains("1.21", StringComparison.OrdinalIgnoreCase))
-            {
-                preferred = version;
-            }
+            if (property.Name.Contains("1.21", StringComparison.OrdinalIgnoreCase)) preferred = version;
         }
 
         return preferred ?? fallback;
@@ -4889,16 +4577,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static IReadOnlyList<ModDependencyInfo> ParseDependencies(JsonElement root)
     {
-        if (!TryGetProperty(root, "dependencies", out JsonElement dependenciesElement)
+        if (!TryGetProperty(root, "dependencies", out var dependenciesElement)
             || dependenciesElement.ValueKind != JsonValueKind.Object)
-        {
             return Array.Empty<ModDependencyInfo>();
-        }
 
         var dependencies = new List<ModDependencyInfo>();
-        foreach (JsonProperty property in dependenciesElement.EnumerateObject())
+        foreach (var property in dependenciesElement.EnumerateObject())
         {
-            string version = property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString() ?? string.Empty : string.Empty;
+            var version = property.Value.ValueKind == JsonValueKind.String
+                ? property.Value.GetString() ?? string.Empty
+                : string.Empty;
             dependencies.Add(new ModDependencyInfo(property.Name, version));
         }
 
@@ -4911,28 +4599,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var versions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (string version in installedRequiredGameVersions)
-        {
+        foreach (var version in installedRequiredGameVersions)
             if (!string.IsNullOrWhiteSpace(version))
-            {
                 versions.Add(version);
-            }
-        }
 
-        foreach (ModReleaseInfo release in releases)
+        foreach (var release in releases)
         {
-            if (release?.GameVersionTags is null)
-            {
-                continue;
-            }
+            if (release?.GameVersionTags is null) continue;
 
-            foreach (string tag in release.GameVersionTags)
-            {
+            foreach (var tag in release.GameVersionTags)
                 if (!string.IsNullOrWhiteSpace(tag))
-                {
                     versions.Add(tag);
-                }
-            }
         }
 
         return versions.Count == 0 ? Array.Empty<string>() : versions.ToArray();
@@ -4941,17 +4618,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static DateTime? DetermineOfflineLastUpdatedUtc(ModEntry entry, IReadOnlyList<ModReleaseInfo> releases)
     {
         DateTime? lastUpdatedUtc = null;
-        foreach (ModReleaseInfo release in releases)
+        foreach (var release in releases)
         {
-            if (release?.CreatedUtc is not DateTime created)
-            {
-                continue;
-            }
+            if (release?.CreatedUtc is not DateTime created) continue;
 
-            if (!lastUpdatedUtc.HasValue || created > lastUpdatedUtc)
-            {
-                lastUpdatedUtc = created;
-            }
+            if (!lastUpdatedUtc.HasValue || created > lastUpdatedUtc) lastUpdatedUtc = created;
         }
 
         return lastUpdatedUtc ?? TryGetLastWriteTimeUtc(entry.SourcePath, entry.SourceKind);
@@ -4959,16 +4630,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void OnInternetAccessChanged(object? sender, EventArgs e)
     {
-        if (System.Windows.Application.Current?.Dispatcher is { } dispatcher)
+        if (Application.Current?.Dispatcher is { } dispatcher)
         {
             if (dispatcher.CheckAccess())
-            {
                 RefreshInternetAccessDependentState();
-            }
             else
-            {
                 dispatcher.BeginInvoke(DispatcherPriority.Normal, RefreshInternetAccessDependentState);
-            }
 
             return;
         }
@@ -4978,25 +4645,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void RefreshInternetAccessDependentState()
     {
-        bool isOffline = InternetAccessManager.IsInternetAccessDisabled;
+        var isOffline = InternetAccessManager.IsInternetAccessDisabled;
 
-        foreach (ModListItemViewModel mod in _mods)
+        foreach (var mod in _mods)
         {
             mod.RefreshInternetAccessDependentState();
             if (isOffline)
-            {
                 mod.SetUserReportOffline();
-            }
             else
-            {
                 QueueUserReportRefresh(mod);
-            }
         }
 
-        foreach (ModListItemViewModel mod in _searchResults)
-        {
-            mod.RefreshInternetAccessDependentState();
-        }
+        foreach (var mod in _searchResults) mod.RefreshInternetAccessDependentState();
 
         _showModDatabaseCommand.NotifyCanExecuteChanged();
         _showCloudModlistsCommand.NotifyCanExecuteChanged();
@@ -5016,84 +4676,29 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-
-        InternetAccessManager.InternetAccessChanged -= OnInternetAccessChanged;
-        _mods.CollectionChanged -= OnModsCollectionChanged;
-        _searchResults.CollectionChanged -= OnSearchResultsCollectionChanged;
-
-        DetachAllInstalledMods();
-        DetachAllSearchResults();
-
-        foreach (TagFilterOptionViewModel filter in _installedTagFilters)
-        {
-            filter.PropertyChanged -= OnInstalledTagFilterPropertyChanged;
-        }
-
-        foreach (TagFilterOptionViewModel filter in _modDatabaseTagFilters)
-        {
-            filter.PropertyChanged -= OnModDatabaseTagFilterPropertyChanged;
-        }
-
-        _installedTagFilters.Clear();
-        _modDatabaseTagFilters.Clear();
-
-        _clientSettingsWatcher.Dispose();
-        _modDetailsBusyScope?.Dispose();
-        _modDetailsBusyScope = null;
-    }
-
     private static int CompareOfflineReleases(ModReleaseInfo? left, ModReleaseInfo? right)
     {
-        if (ReferenceEquals(left, right))
-        {
-            return 0;
-        }
+        if (ReferenceEquals(left, right)) return 0;
 
-        if (left is null)
-        {
-            return 1;
-        }
+        if (left is null) return 1;
 
-        if (right is null)
-        {
-            return -1;
-        }
+        if (right is null) return -1;
 
-        if (VersionStringUtility.IsCandidateVersionNewer(left.Version, right.Version))
-        {
-            return -1;
-        }
+        if (VersionStringUtility.IsCandidateVersionNewer(left.Version, right.Version)) return -1;
 
-        if (VersionStringUtility.IsCandidateVersionNewer(right.Version, left.Version))
-        {
-            return 1;
-        }
+        if (VersionStringUtility.IsCandidateVersionNewer(right.Version, left.Version)) return 1;
 
-        DateTime leftTimestamp = left.CreatedUtc ?? DateTime.MinValue;
-        DateTime rightTimestamp = right.CreatedUtc ?? DateTime.MinValue;
-        int dateComparison = rightTimestamp.CompareTo(leftTimestamp);
-        if (dateComparison != 0)
-        {
-            return dateComparison;
-        }
+        var leftTimestamp = left.CreatedUtc ?? DateTime.MinValue;
+        var rightTimestamp = right.CreatedUtc ?? DateTime.MinValue;
+        var dateComparison = rightTimestamp.CompareTo(leftTimestamp);
+        if (dateComparison != 0) return dateComparison;
 
         return string.Compare(left.Version, right.Version, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyList<string> ExtractRequiredGameVersions(IReadOnlyList<ModDependencyInfo> dependencies)
     {
-        if (dependencies is null || dependencies.Count == 0)
-        {
-            return Array.Empty<string>();
-        }
+        if (dependencies is null || dependencies.Count == 0) return Array.Empty<string>();
 
         var versions = dependencies
             .Where(dependency => dependency != null && dependency.IsGameOrCoreDependency)
@@ -5108,39 +4713,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private bool DetermineInstalledGameCompatibility(IReadOnlyList<ModDependencyInfo> dependencies)
     {
-        if (dependencies is null || dependencies.Count == 0)
-        {
-            return true;
-        }
+        if (dependencies is null || dependencies.Count == 0) return true;
 
-        if (string.IsNullOrWhiteSpace(_installedGameVersion))
-        {
-            return true;
-        }
+        if (string.IsNullOrWhiteSpace(InstalledGameVersion)) return true;
 
         foreach (var dependency in dependencies)
         {
-            if (dependency is null || !dependency.IsGameOrCoreDependency)
-            {
-                continue;
-            }
+            if (dependency is null || !dependency.IsGameOrCoreDependency) continue;
 
             // Check if the installed game version satisfies the dependency's minimum version requirement
             // (e.g., if mod requires 1.21.0 and user has 1.21.4, that's OK as 1.21.4 >= 1.21.0)
-            if (!VersionStringUtility.SatisfiesMinimumVersion(dependency.Version, _installedGameVersion))
-            {
-                return false;
-            }
+            if (!VersionStringUtility.SatisfiesMinimumVersion(dependency.Version, InstalledGameVersion)) return false;
 
             // When exact version match is required, also verify first 3 version parts match
             // (e.g., with exact mode, 1.21.3 won't be compatible with 1.21.4 even though 1.21.4 >= 1.21.3)
             if (_configuration.RequireExactVsVersionMatch)
-            {
-                if (!VersionStringUtility.MatchesFirstThreeDigits(dependency.Version, _installedGameVersion))
-                {
+                if (!VersionStringUtility.MatchesFirstThreeDigits(dependency.Version, InstalledGameVersion))
                     return false;
-                }
-            }
         }
 
         return true;
@@ -5150,18 +4739,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         uri = null;
 
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(path)) return false;
 
         try
         {
-            string fullPath = Path.GetFullPath(path);
+            var fullPath = Path.GetFullPath(path);
             if (kind == ModSourceKind.Folder)
-            {
                 fullPath = Path.TrimEndingDirectorySeparator(fullPath) + Path.DirectorySeparatorChar;
-            }
 
             return Uri.TryCreate(fullPath, UriKind.Absolute, out uri);
         }
@@ -5174,20 +4758,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static string? TryGetReleaseFileName(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(path)) return null;
 
         try
         {
-            string normalized = Path.GetFullPath(path);
-            if (Directory.Exists(normalized))
-            {
-                normalized = Path.TrimEndingDirectorySeparator(normalized);
-            }
+            var normalized = Path.GetFullPath(path);
+            if (Directory.Exists(normalized)) normalized = Path.TrimEndingDirectorySeparator(normalized);
 
-            string fileName = Path.GetFileName(normalized);
+            var fileName = Path.GetFileName(normalized);
             return string.IsNullOrWhiteSpace(fileName) ? null : fileName;
         }
         catch (Exception)
@@ -5198,20 +4776,74 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private static DateTime? TryGetLastWriteTimeUtc(string? path, ModSourceKind kind)
     {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(path)) return null;
 
         try
         {
             return kind == ModSourceKind.Folder
                 ? Directory.Exists(path) ? Directory.GetLastWriteTimeUtc(path) : null
-                : File.Exists(path) ? File.GetLastWriteTimeUtc(path) : null;
+                : File.Exists(path)
+                    ? File.GetLastWriteTimeUtc(path)
+                    : null;
         }
         catch (Exception)
         {
             return null;
+        }
+    }
+
+    private enum ViewSection
+    {
+        InstalledMods,
+        ModDatabase,
+        CloudModlists
+    }
+
+    private sealed record VoteCheckTarget(
+        ModListItemViewModel Mod,
+        string? UserReportVersion,
+        bool HasUserReportSummary,
+        string? LatestReleaseVersion,
+        bool HasLatestReleaseSummary);
+
+    private sealed class UserReportOperationScope : IDisposable
+    {
+        private readonly IDisposable _busyScope;
+        private readonly MainViewModel _owner;
+        private bool _disposed;
+
+        public UserReportOperationScope(MainViewModel owner, IDisposable busyScope)
+        {
+            _owner = owner;
+            _busyScope = busyScope;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _disposed = true;
+            _busyScope.Dispose();
+            _owner.EndUserReportOperation();
+        }
+    }
+
+    private sealed class BusyScope : IDisposable
+    {
+        private readonly MainViewModel _owner;
+        private bool _disposed;
+
+        public BusyScope(MainViewModel owner)
+        {
+            _owner = owner;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _disposed = true;
+            _owner.EndBusyScope();
         }
     }
 }

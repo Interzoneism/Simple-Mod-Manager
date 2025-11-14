@@ -1,4 +1,3 @@
-using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
@@ -51,16 +50,14 @@ public abstract class ModConfigContainerNodeViewModel : ModConfigNodeViewModel
 
     public override void ApplyChanges()
     {
-        foreach (ModConfigNodeViewModel child in _children)
-        {
-            child.ApplyChanges();
-        }
+        foreach (var child in _children) child.ApplyChanges();
     }
 }
 
 public sealed class ModConfigObjectNodeViewModel : ModConfigContainerNodeViewModel
 {
-    public ModConfigObjectNodeViewModel(string name, ObservableCollection<ModConfigNodeViewModel> children, string? displayName = null)
+    public ModConfigObjectNodeViewModel(string name, ObservableCollection<ModConfigNodeViewModel> children,
+        string? displayName = null)
         : base(name, "Object", children, displayName)
     {
     }
@@ -85,11 +82,12 @@ public sealed class ModConfigArrayNodeViewModel : ModConfigContainerNodeViewMode
 
 public sealed class ModConfigValueNodeViewModel : ModConfigNodeViewModel
 {
-    private readonly Action<JsonNode?> _valueSetter;
     private readonly JsonValueKind _valueKind;
+    private readonly Action<JsonNode?> _valueSetter;
     private string _valueText;
 
-    public ModConfigValueNodeViewModel(string name, JsonNode? node, Action<JsonNode?> valueSetter, string? displayName = null)
+    public ModConfigValueNodeViewModel(string name, JsonNode? node, Action<JsonNode?> valueSetter,
+        string? displayName = null)
         : base(name, DetermineTypeDisplay(node), displayName)
     {
         _valueSetter = valueSetter ?? throw new ArgumentNullException(nameof(valueSetter));
@@ -105,12 +103,8 @@ public sealed class ModConfigValueNodeViewModel : ModConfigNodeViewModel
         set
         {
             if (SetProperty(ref _valueText, value))
-            {
                 if (IsBoolean)
-                {
                     OnPropertyChanged(nameof(BooleanValue));
-                }
-            }
         }
     }
 
@@ -121,23 +115,20 @@ public sealed class ModConfigValueNodeViewModel : ModConfigNodeViewModel
         get => string.Equals(_valueText, bool.TrueString, StringComparison.OrdinalIgnoreCase);
         set
         {
-            string newValue = value ? bool.TrueString : bool.FalseString;
-            if (SetProperty(ref _valueText, newValue, nameof(BooleanValue)))
-            {
-                OnPropertyChanged(nameof(ValueText));
-            }
+            var newValue = value ? bool.TrueString : bool.FalseString;
+            if (SetProperty(ref _valueText, newValue)) OnPropertyChanged(nameof(ValueText));
         }
     }
 
     public override void ApplyChanges()
     {
-        JsonNode? value = ConvertTextToNode(ValueText, _valueKind, DisplayLabel);
+        var value = ConvertTextToNode(ValueText, _valueKind, DisplayLabel);
         _valueSetter(value);
     }
 
     private static string DetermineTypeDisplay(JsonNode? node)
     {
-        JsonValueKind kind = node?.GetValueKind() ?? JsonValueKind.Null;
+        var kind = node?.GetValueKind() ?? JsonValueKind.Null;
         return kind switch
         {
             JsonValueKind.String => "String",
@@ -152,10 +143,7 @@ public sealed class ModConfigValueNodeViewModel : ModConfigNodeViewModel
 
     private static string ConvertNodeToText(JsonNode? node, JsonValueKind kind)
     {
-        if (node is null)
-        {
-            return string.Empty;
-        }
+        if (node is null) return string.Empty;
 
         return kind switch
         {
@@ -176,52 +164,36 @@ public sealed class ModConfigValueNodeViewModel : ModConfigNodeViewModel
                 return JsonValue.Create(text ?? string.Empty);
             case JsonValueKind.True:
             case JsonValueKind.False:
-                {
-                    if (string.IsNullOrWhiteSpace(text))
-                    {
-                        throw new InvalidOperationException($"Value for '{propertyName}' cannot be empty.");
-                    }
+            {
+                if (string.IsNullOrWhiteSpace(text))
+                    throw new InvalidOperationException($"Value for '{propertyName}' cannot be empty.");
 
-                    if (!bool.TryParse(text, out bool boolValue))
-                    {
-                        throw new InvalidOperationException($"Value for '{propertyName}' must be a boolean (true/false).");
-                    }
+                if (!bool.TryParse(text, out var boolValue))
+                    throw new InvalidOperationException($"Value for '{propertyName}' must be a boolean (true/false).");
 
-                    return JsonValue.Create(boolValue);
-                }
+                return JsonValue.Create(boolValue);
+            }
             case JsonValueKind.Number:
-                {
-                    if (string.IsNullOrWhiteSpace(text))
-                    {
-                        throw new InvalidOperationException($"Value for '{propertyName}' cannot be empty.");
-                    }
+            {
+                if (string.IsNullOrWhiteSpace(text))
+                    throw new InvalidOperationException($"Value for '{propertyName}' cannot be empty.");
 
-                    if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long longValue))
-                    {
-                        return JsonValue.Create(longValue);
-                    }
+                if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longValue))
+                    return JsonValue.Create(longValue);
 
-                    if (decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal decimalValue))
-                    {
-                        return JsonValue.Create(decimalValue);
-                    }
+                if (decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalValue))
+                    return JsonValue.Create(decimalValue);
 
-                    throw new InvalidOperationException($"Value for '{propertyName}' must be a number.");
-                }
+                throw new InvalidOperationException($"Value for '{propertyName}' must be a number.");
+            }
             case JsonValueKind.Null:
-                {
-                    if (string.IsNullOrWhiteSpace(text))
-                    {
-                        return null;
-                    }
+            {
+                if (string.IsNullOrWhiteSpace(text)) return null;
 
-                    if (string.Equals(text.Trim(), "null", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return null;
-                    }
+                if (string.Equals(text.Trim(), "null", StringComparison.OrdinalIgnoreCase)) return null;
 
-                    return JsonValue.Create(text);
-                }
+                return JsonValue.Create(text);
+            }
             default:
                 return JsonValue.Create(text);
         }

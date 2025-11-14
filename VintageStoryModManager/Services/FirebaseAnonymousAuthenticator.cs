@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -7,15 +5,13 @@ using System.Security;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading;
-using System.Threading.Tasks;
 using VintageStoryModManager;
 using VintageStoryModManager.Services;
 
 namespace SimpleVsManager.Cloud;
 
 /// <summary>
-/// Handles Firebase anonymous authentication and persists refresh tokens for reuse.
+///     Handles Firebase anonymous authentication and persists refresh tokens for reuse.
 /// </summary>
 public sealed class FirebaseAnonymousAuthenticator
 {
@@ -26,37 +22,42 @@ public sealed class FirebaseAnonymousAuthenticator
     private static readonly HttpClient HttpClient = new();
     private static readonly TimeSpan ExpirationSkew = TimeSpan.FromMinutes(2);
 
-    private readonly string _apiKey;
+    private static readonly string DefaultApiKey = DevConfig.FirebaseDefaultApiKey;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     private readonly string _stateFilePath;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
 
     private FirebaseAuthState? _cachedState;
 
-    private static readonly string DefaultApiKey = DevConfig.FirebaseDefaultApiKey;
-
-    public FirebaseAnonymousAuthenticator() : this(DefaultApiKey) { }
+    public FirebaseAnonymousAuthenticator() : this(DefaultApiKey)
+    {
+    }
 
     public FirebaseAnonymousAuthenticator(string apiKey)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
-        {
             throw new ArgumentException("A Firebase API key is required.", nameof(apiKey));
-        }
 
-        _apiKey = apiKey.Trim();
+        ApiKey = apiKey.Trim();
         _stateFilePath = DetermineStateFilePath();
     }
 
 
-    public string ApiKey => _apiKey;
+    public string ApiKey { get; }
 
     /// <summary>
-    /// Retrieves a valid ID token, refreshing or signing in anonymously as required.
+    ///     Retrieves a valid ID token, refreshing or signing in anonymously as required.
     /// </summary>
     public async Task<string> GetIdTokenAsync(CancellationToken ct)
     {
         InternetAccessManager.ThrowIfInternetAccessDisabled();
-        FirebaseAuthSession session = await GetSessionAsync(ct).ConfigureAwait(false);
+        var session = await GetSessionAsync(ct).ConfigureAwait(false);
         return session.IdToken;
     }
 
@@ -69,20 +70,14 @@ public sealed class FirebaseAnonymousAuthenticator
             _cachedState ??= LoadStateFromDisk();
 
             if (_cachedState is { } cachedWithoutUser && string.IsNullOrWhiteSpace(cachedWithoutUser.UserId))
-            {
                 _cachedState = null;
-            }
 
             if (_cachedState is { } existing && !existing.IsExpired)
-            {
                 return new FirebaseAuthSession(existing.IdToken, existing.UserId);
-            }
 
             FirebaseAuthState? refreshed = null;
             if (_cachedState is { } stateWithRefresh && !string.IsNullOrWhiteSpace(stateWithRefresh.RefreshToken))
-            {
                 refreshed = await TryRefreshAsync(stateWithRefresh, ct).ConfigureAwait(false);
-            }
 
             if (refreshed is not null)
             {
@@ -91,7 +86,7 @@ public sealed class FirebaseAnonymousAuthenticator
                 return new FirebaseAuthSession(refreshed.IdToken, refreshed.UserId);
             }
 
-            FirebaseAuthState newState = await SignInAsync(ct).ConfigureAwait(false);
+            var newState = await SignInAsync(ct).ConfigureAwait(false);
             _cachedState = newState;
             SaveStateToDisk(newState);
             return new FirebaseAuthSession(newState.IdToken, newState.UserId);
@@ -104,20 +99,14 @@ public sealed class FirebaseAnonymousAuthenticator
 
     public async Task<FirebaseAuthSession?> TryGetExistingSessionAsync(CancellationToken ct)
     {
-        if (InternetAccessManager.IsInternetAccessDisabled)
-        {
-            return null;
-        }
+        if (InternetAccessManager.IsInternetAccessDisabled) return null;
 
         await _stateLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             _cachedState ??= LoadStateFromDisk();
 
-            if (_cachedState is null)
-            {
-                return null;
-            }
+            if (_cachedState is null) return null;
 
             if (string.IsNullOrWhiteSpace(_cachedState.UserId))
             {
@@ -126,17 +115,11 @@ public sealed class FirebaseAnonymousAuthenticator
                 return null;
             }
 
-            FirebaseAuthState currentState = _cachedState!;
+            var currentState = _cachedState!;
 
-            if (!currentState.IsExpired)
-            {
-                return new FirebaseAuthSession(currentState.IdToken, currentState.UserId);
-            }
+            if (!currentState.IsExpired) return new FirebaseAuthSession(currentState.IdToken, currentState.UserId);
 
-            if (string.IsNullOrWhiteSpace(currentState.RefreshToken))
-            {
-                return null;
-            }
+            if (string.IsNullOrWhiteSpace(currentState.RefreshToken)) return null;
 
             FirebaseAuthState? refreshed;
             try
@@ -166,20 +149,17 @@ public sealed class FirebaseAnonymousAuthenticator
     }
 
     /// <summary>
-    /// Marks the current token as expired so the next call will refresh it.
+    ///     Marks the current token as expired so the next call will refresh it.
     /// </summary>
     public async Task MarkTokenAsExpiredAsync(CancellationToken ct)
     {
         await _stateLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            FirebaseAuthState? state = _cachedState ?? LoadStateFromDisk();
-            if (state is null)
-            {
-                return;
-            }
+            var state = _cachedState ?? LoadStateFromDisk();
+            if (state is null) return;
 
-            FirebaseAuthState expired = state.WithExpiration(DateTimeOffset.UtcNow - TimeSpan.FromMinutes(5));
+            var expired = state.WithExpiration(DateTimeOffset.UtcNow - TimeSpan.FromMinutes(5));
             _cachedState = expired;
             SaveStateToDisk(expired);
         }
@@ -196,7 +176,7 @@ public sealed class FirebaseAnonymousAuthenticator
         await _stateLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            FirebaseAuthState? state = _cachedState ?? LoadStateFromDisk();
+            var state = _cachedState ?? LoadStateFromDisk();
             if (state is null)
             {
                 _cachedState = null;
@@ -204,10 +184,10 @@ public sealed class FirebaseAnonymousAuthenticator
                 return;
             }
 
-            FirebaseAuthState currentState = state;
+            var currentState = state;
             if (currentState.IsExpired)
             {
-                FirebaseAuthState? refreshed = await TryRefreshAsync(currentState, ct).ConfigureAwait(false);
+                var refreshed = await TryRefreshAsync(currentState, ct).ConfigureAwait(false);
                 if (refreshed is not null)
                 {
                     currentState = refreshed;
@@ -229,28 +209,20 @@ public sealed class FirebaseAnonymousAuthenticator
 
     internal static bool HasPersistedState()
     {
-        string stateFilePath = GetStateFilePath();
-        if (string.IsNullOrWhiteSpace(stateFilePath) || !File.Exists(stateFilePath))
-        {
-            return false;
-        }
+        var stateFilePath = GetStateFilePath();
+        if (string.IsNullOrWhiteSpace(stateFilePath) || !File.Exists(stateFilePath)) return false;
 
         try
         {
-            string json = File.ReadAllText(stateFilePath);
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return false;
-            }
+            var json = File.ReadAllText(stateFilePath);
+            if (string.IsNullOrWhiteSpace(json)) return false;
 
-            AuthStateModel? model = JsonSerializer.Deserialize<AuthStateModel>(json, JsonOptions);
+            var model = JsonSerializer.Deserialize<AuthStateModel>(json, JsonOptions);
             if (model is null
                 || string.IsNullOrWhiteSpace(model.IdToken)
                 || string.IsNullOrWhiteSpace(model.RefreshToken)
                 || string.IsNullOrWhiteSpace(model.UserId))
-            {
                 return false;
-            }
 
             return true;
         }
@@ -274,29 +246,22 @@ public sealed class FirebaseAnonymousAuthenticator
 
     internal static string GetStateFilePath()
     {
-        string? developerOverride = DeveloperProfileManager.GetFirebaseStateFilePathOverride();
-        if (!string.IsNullOrWhiteSpace(developerOverride))
-        {
-            return developerOverride!;
-        }
+        var developerOverride = DeveloperProfileManager.GetFirebaseStateFilePathOverride();
+        if (!string.IsNullOrWhiteSpace(developerOverride)) return developerOverride!;
 
-        string? secureDirectory = TryGetSecureBaseDirectory();
+        var secureDirectory = TryGetSecureBaseDirectory();
 
-        if (!string.IsNullOrWhiteSpace(secureDirectory))
-        {
-            return Path.Combine(secureDirectory!, StateFileName);
-        }
+        if (!string.IsNullOrWhiteSpace(secureDirectory)) return Path.Combine(secureDirectory!, StateFileName);
 
         return GetDefaultStateFilePath();
     }
 
     private static string DetermineStateFilePath()
     {
-        string stateFilePath = GetStateFilePath();
-        string? directory = Path.GetDirectoryName(stateFilePath);
+        var stateFilePath = GetStateFilePath();
+        var directory = Path.GetDirectoryName(stateFilePath);
 
         if (!string.IsNullOrWhiteSpace(directory))
-        {
             try
             {
                 Directory.CreateDirectory(directory);
@@ -313,30 +278,23 @@ public sealed class FirebaseAnonymousAuthenticator
             catch (SecurityException)
             {
             }
-        }
 
         return stateFilePath;
     }
 
     private static string? TryGetSecureBaseDirectory()
     {
-        foreach (Environment.SpecialFolder folder in new[]
+        foreach (var folder in new[]
                  {
                      Environment.SpecialFolder.LocalApplicationData,
                      Environment.SpecialFolder.ApplicationData
                  })
         {
-            string? root = TryGetFolderPath(folder);
-            if (string.IsNullOrWhiteSpace(root))
-            {
-                continue;
-            }
+            var root = TryGetFolderPath(folder);
+            if (string.IsNullOrWhiteSpace(root)) continue;
 
-            string candidate = Path.Combine(root!, "Simple VS Manager");
-            if (TryEnsureDirectory(candidate))
-            {
-                return candidate;
-            }
+            var candidate = Path.Combine(root!, "Simple VS Manager");
+            if (TryEnsureDirectory(candidate)) return candidate;
         }
 
         return null;
@@ -344,16 +302,13 @@ public sealed class FirebaseAnonymousAuthenticator
 
     private static string GetDefaultStateFilePath()
     {
-        string? baseDirectory = ModCacheLocator.GetManagerDataDirectory();
-        if (!string.IsNullOrWhiteSpace(baseDirectory))
-        {
-            return Path.Combine(baseDirectory, StateFileName);
-        }
+        var baseDirectory = ModCacheLocator.GetManagerDataDirectory();
+        if (!string.IsNullOrWhiteSpace(baseDirectory)) return Path.Combine(baseDirectory, StateFileName);
 
-        string? documents = TryGetFolderPath(Environment.SpecialFolder.MyDocuments)
-            ?? TryGetFolderPath(Environment.SpecialFolder.Personal);
+        var documents = TryGetFolderPath(Environment.SpecialFolder.MyDocuments)
+                        ?? TryGetFolderPath(Environment.SpecialFolder.Personal);
 
-        string root = string.IsNullOrWhiteSpace(documents)
+        var root = string.IsNullOrWhiteSpace(documents)
             ? Environment.CurrentDirectory
             : documents!;
 
@@ -364,10 +319,11 @@ public sealed class FirebaseAnonymousAuthenticator
     {
         try
         {
-            string path = Environment.GetFolderPath(folder);
+            var path = Environment.GetFolderPath(folder);
             return string.IsNullOrWhiteSpace(path) ? null : path;
         }
-        catch (Exception ex) when (ex is PlatformNotSupportedException or InvalidOperationException or SecurityException)
+        catch (Exception ex) when
+            (ex is PlatformNotSupportedException or InvalidOperationException or SecurityException)
         {
             return null;
         }
@@ -380,7 +336,8 @@ public sealed class FirebaseAnonymousAuthenticator
             Directory.CreateDirectory(path);
             return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or SecurityException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
+                                       or SecurityException)
         {
             return false;
         }
@@ -390,31 +347,24 @@ public sealed class FirebaseAnonymousAuthenticator
     {
         try
         {
-            if (!File.Exists(_stateFilePath))
-            {
-                return null;
-            }
+            if (!File.Exists(_stateFilePath)) return null;
 
-            string json = File.ReadAllText(_stateFilePath);
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return null;
-            }
+            var json = File.ReadAllText(_stateFilePath);
+            if (string.IsNullOrWhiteSpace(json)) return null;
 
-            AuthStateModel? model = JsonSerializer.Deserialize<AuthStateModel>(json, JsonOptions);
+            var model = JsonSerializer.Deserialize<AuthStateModel>(json, JsonOptions);
             if (model is null ||
                 string.IsNullOrWhiteSpace(model.IdToken) ||
                 string.IsNullOrWhiteSpace(model.RefreshToken) ||
                 string.IsNullOrWhiteSpace(model.UserId))
-            {
                 return null;
-            }
 
-            DateTimeOffset expiration = model.ExpirationUtc == default
+            var expiration = model.ExpirationUtc == default
                 ? DateTimeOffset.MinValue
                 : model.ExpirationUtc;
 
-            return new FirebaseAuthState(model.IdToken.Trim(), model.RefreshToken.Trim(), expiration, model.UserId.Trim());
+            return new FirebaseAuthState(model.IdToken.Trim(), model.RefreshToken.Trim(), expiration,
+                model.UserId.Trim());
         }
         catch (IOException)
         {
@@ -438,11 +388,8 @@ public sealed class FirebaseAnonymousAuthenticator
     {
         try
         {
-            string? directory = Path.GetDirectoryName(_stateFilePath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
+            var directory = Path.GetDirectoryName(_stateFilePath);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
 
             var model = new AuthStateModel
             {
@@ -452,7 +399,7 @@ public sealed class FirebaseAnonymousAuthenticator
                 UserId = state.UserId
             };
 
-            string json = JsonSerializer.Serialize(model, JsonOptions);
+            var json = JsonSerializer.Serialize(model, JsonOptions);
             File.WriteAllText(_stateFilePath, json);
 
             // Try to create a backup after successfully saving the auth file
@@ -474,25 +421,17 @@ public sealed class FirebaseAnonymousAuthenticator
         try
         {
             // Check if the original auth file exists
-            if (!File.Exists(_stateFilePath))
-            {
-                return;
-            }
+            if (!File.Exists(_stateFilePath)) return;
 
             // Try to get user configuration to check if backup has been created
-            UserConfigurationService? config = TryGetUserConfiguration();
+            var config = TryGetUserConfiguration();
             if (config is not null && config.FirebaseAuthBackupCreated)
-            {
                 // Backup flag is already set, no need to check further
                 return;
-            }
 
             // Determine backup path: AppData/Local/SVSM Backup/firebase-auth.json
-            string? backupPath = GetBackupFilePath();
-            if (string.IsNullOrWhiteSpace(backupPath))
-            {
-                return;
-            }
+            var backupPath = GetBackupFilePath();
+            if (string.IsNullOrWhiteSpace(backupPath)) return;
 
             // If backup file already exists, don't overwrite it
             if (File.Exists(backupPath))
@@ -503,14 +442,11 @@ public sealed class FirebaseAnonymousAuthenticator
             }
 
             // Create backup directory if it doesn't exist
-            string? backupDirectory = Path.GetDirectoryName(backupPath);
-            if (!string.IsNullOrWhiteSpace(backupDirectory))
-            {
-                Directory.CreateDirectory(backupDirectory);
-            }
+            var backupDirectory = Path.GetDirectoryName(backupPath);
+            if (!string.IsNullOrWhiteSpace(backupDirectory)) Directory.CreateDirectory(backupDirectory);
 
             // Copy the auth file to backup location
-            File.Copy(_stateFilePath, backupPath, overwrite: false);
+            File.Copy(_stateFilePath, backupPath, false);
 
             // Mark backup as created in configuration
             MarkBackupCreated(config);
@@ -559,13 +495,10 @@ public sealed class FirebaseAnonymousAuthenticator
     {
         try
         {
-            string? localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (string.IsNullOrWhiteSpace(localAppData))
-            {
-                return null;
-            }
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localAppData)) return null;
 
-            string backupDirectory = Path.Combine(localAppData, DevConfig.FirebaseAuthBackupDirectoryName);
+            var backupDirectory = Path.Combine(localAppData, DevConfig.FirebaseAuthBackupDirectoryName);
             return Path.Combine(backupDirectory, StateFileName);
         }
         catch
@@ -578,10 +511,7 @@ public sealed class FirebaseAnonymousAuthenticator
     {
         try
         {
-            if (File.Exists(_stateFilePath))
-            {
-                File.Delete(_stateFilePath);
-            }
+            if (File.Exists(_stateFilePath)) File.Delete(_stateFilePath);
         }
         catch (IOException)
         {
@@ -597,128 +527,107 @@ public sealed class FirebaseAnonymousAuthenticator
     private async Task<FirebaseAuthState> SignInAsync(CancellationToken ct)
     {
         InternetAccessManager.ThrowIfInternetAccessDisabled();
-        string requestUri = $"{SignInEndpoint}?key={Uri.EscapeDataString(_apiKey)}";
+        var requestUri = $"{SignInEndpoint}?key={Uri.EscapeDataString(ApiKey)}";
         using var request = new HttpRequestMessage(HttpMethod.Post, requestUri)
         {
             Content = new StringContent("{\"returnSecureToken\":true}", Encoding.UTF8, "application/json")
         };
 
-        using HttpResponseMessage response = await HttpClient.SendAsync(request, ct).ConfigureAwait(false);
-        string json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        using var response = await HttpClient.SendAsync(request, ct).ConfigureAwait(false);
+        var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"Firebase anonymous sign-in failed: {(int)response.StatusCode} {response.ReasonPhrase} | {Truncate(json, 200)}");
-        }
+            throw new InvalidOperationException(
+                $"Firebase anonymous sign-in failed: {(int)response.StatusCode} {response.ReasonPhrase} | {Truncate(json, 200)}");
 
-        SignInResponse? payload = JsonSerializer.Deserialize<SignInResponse>(json, JsonOptions);
+        var payload = JsonSerializer.Deserialize<SignInResponse>(json, JsonOptions);
         if (payload is null ||
             string.IsNullOrWhiteSpace(payload.IdToken) ||
             string.IsNullOrWhiteSpace(payload.RefreshToken) ||
             string.IsNullOrWhiteSpace(payload.ExpiresIn))
-        {
             throw new InvalidOperationException("Firebase anonymous sign-in returned an unexpected response.");
-        }
 
-        DateTimeOffset expiration = DateTimeOffset.UtcNow.AddSeconds(ParseExpirationSeconds(payload.ExpiresIn));
+        var expiration = DateTimeOffset.UtcNow.AddSeconds(ParseExpirationSeconds(payload.ExpiresIn));
         if (string.IsNullOrWhiteSpace(payload.LocalId))
-        {
-            throw new InvalidOperationException("Firebase anonymous sign-in returned a response without a user identifier.");
-        }
+            throw new InvalidOperationException(
+                "Firebase anonymous sign-in returned a response without a user identifier.");
 
-        return new FirebaseAuthState(payload.IdToken.Trim(), payload.RefreshToken.Trim(), expiration, payload.LocalId.Trim());
+        return new FirebaseAuthState(payload.IdToken.Trim(), payload.RefreshToken.Trim(), expiration,
+            payload.LocalId.Trim());
     }
 
     private async Task DeleteAccountInternalAsync(string idToken, CancellationToken ct)
     {
         InternetAccessManager.ThrowIfInternetAccessDisabled();
-        string requestUri = $"{DeleteEndpoint}?key={Uri.EscapeDataString(_apiKey)}";
-        string payload = JsonSerializer.Serialize(new { idToken });
+        var requestUri = $"{DeleteEndpoint}?key={Uri.EscapeDataString(ApiKey)}";
+        var payload = JsonSerializer.Serialize(new { idToken });
 
         using var request = new HttpRequestMessage(HttpMethod.Post, requestUri)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
         };
 
-        using HttpResponseMessage response = await HttpClient.SendAsync(request, ct).ConfigureAwait(false);
-        if (response.IsSuccessStatusCode)
-        {
-            return;
-        }
+        using var response = await HttpClient.SendAsync(request, ct).ConfigureAwait(false);
+        if (response.IsSuccessStatusCode) return;
 
-        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
-        {
-            return;
-        }
+        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+            or HttpStatusCode.NotFound) return;
 
-        string body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        throw new InvalidOperationException($"Firebase account deletion failed: {(int)response.StatusCode} {response.ReasonPhrase} | {Truncate(body, 200)}");
+        var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        throw new InvalidOperationException(
+            $"Firebase account deletion failed: {(int)response.StatusCode} {response.ReasonPhrase} | {Truncate(body, 200)}");
     }
 
     private async Task<FirebaseAuthState?> TryRefreshAsync(FirebaseAuthState existingState, CancellationToken ct)
     {
         InternetAccessManager.ThrowIfInternetAccessDisabled();
-        string requestUri = $"{RefreshEndpoint}?key={Uri.EscapeDataString(_apiKey)}";
+        var requestUri = $"{RefreshEndpoint}?key={Uri.EscapeDataString(ApiKey)}";
         using var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "refresh_token",
             ["refresh_token"] = existingState.RefreshToken
         });
 
-        using HttpResponseMessage response = await HttpClient.PostAsync(requestUri, content, ct).ConfigureAwait(false);
-        string json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        using var response = await HttpClient.PostAsync(requestUri, content, ct).ConfigureAwait(false);
+        var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
+        if (!response.IsSuccessStatusCode) return null;
 
-        RefreshResponse? payload = JsonSerializer.Deserialize<RefreshResponse>(json, JsonOptions);
+        var payload = JsonSerializer.Deserialize<RefreshResponse>(json, JsonOptions);
         if (payload is null ||
             string.IsNullOrWhiteSpace(payload.IdToken) ||
             string.IsNullOrWhiteSpace(payload.RefreshToken) ||
             string.IsNullOrWhiteSpace(payload.ExpiresIn))
-        {
             return null;
-        }
 
-        DateTimeOffset expiration = DateTimeOffset.UtcNow.AddSeconds(ParseExpirationSeconds(payload.ExpiresIn));
-        string userId = !string.IsNullOrWhiteSpace(payload.UserId)
+        var expiration = DateTimeOffset.UtcNow.AddSeconds(ParseExpirationSeconds(payload.ExpiresIn));
+        var userId = !string.IsNullOrWhiteSpace(payload.UserId)
             ? payload.UserId.Trim()
             : existingState.UserId;
 
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(userId)) return null;
 
         return new FirebaseAuthState(payload.IdToken.Trim(), payload.RefreshToken.Trim(), expiration, userId);
     }
 
     private static double ParseExpirationSeconds(string expiresIn)
     {
-        if (double.TryParse(expiresIn, out double seconds) && seconds > 0)
-        {
-            return seconds;
-        }
+        if (double.TryParse(expiresIn, out var seconds) && seconds > 0) return seconds;
 
         return 3600; // Default to one hour if parsing fails.
     }
 
     private static string Truncate(string value, int length)
     {
-        if (string.IsNullOrEmpty(value) || value.Length <= length)
-        {
-            return value;
-        }
+        if (string.IsNullOrEmpty(value) || value.Length <= length) return value;
 
         return value.Substring(0, length) + "...";
     }
 
     /// <summary>
-    /// Checks if Firebase auth backup should be created and attempts to create it on app startup.
-    /// This ensures the firebase-auth.json file is backed up to AppData/Local/SVSM Backup/ if it exists
-    /// and hasn't been backed up yet.
+    ///     Checks if Firebase auth backup should be created and attempts to create it on app startup.
+    ///     This ensures the firebase-auth.json file is backed up to AppData/Local/SVSM Backup/ if it exists
+    ///     and hasn't been backed up yet.
     /// </summary>
     /// <param name="config">User configuration service to check and update backup status.</param>
     public static void EnsureStartupBackup(UserConfigurationService? config)
@@ -726,25 +635,17 @@ public sealed class FirebaseAnonymousAuthenticator
         try
         {
             // If config is null or backup already created, nothing to do
-            if (config is null || config.FirebaseAuthBackupCreated)
-            {
-                return;
-            }
+            if (config is null || config.FirebaseAuthBackupCreated) return;
 
             // Get the path to the main firebase-auth.json file
-            string stateFilePath = GetStateFilePath();
+            var stateFilePath = GetStateFilePath();
             if (string.IsNullOrWhiteSpace(stateFilePath) || !File.Exists(stateFilePath))
-            {
                 // No auth file exists, nothing to backup
                 return;
-            }
 
             // Get the backup file path
-            string? backupPath = GetBackupFilePath();
-            if (string.IsNullOrWhiteSpace(backupPath))
-            {
-                return;
-            }
+            var backupPath = GetBackupFilePath();
+            if (string.IsNullOrWhiteSpace(backupPath)) return;
 
             // If backup file already exists, just mark it as created
             if (File.Exists(backupPath))
@@ -754,14 +655,11 @@ public sealed class FirebaseAnonymousAuthenticator
             }
 
             // Create backup directory if it doesn't exist
-            string? backupDirectory = Path.GetDirectoryName(backupPath);
-            if (!string.IsNullOrWhiteSpace(backupDirectory))
-            {
-                Directory.CreateDirectory(backupDirectory);
-            }
+            var backupDirectory = Path.GetDirectoryName(backupPath);
+            if (!string.IsNullOrWhiteSpace(backupDirectory)) Directory.CreateDirectory(backupDirectory);
 
             // Copy the auth file to backup location
-            File.Copy(stateFilePath, backupPath, overwrite: false);
+            File.Copy(stateFilePath, backupPath, false);
 
             // Mark backup as created in configuration
             MarkBackupCreated(config);
@@ -784,12 +682,6 @@ public sealed class FirebaseAnonymousAuthenticator
         }
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
     private sealed class AuthStateModel
     {
         public string? IdToken { get; set; }
@@ -803,32 +695,24 @@ public sealed class FirebaseAnonymousAuthenticator
 
     private sealed class SignInResponse
     {
-        [JsonPropertyName("idToken")]
-        public string? IdToken { get; set; }
+        [JsonPropertyName("idToken")] public string? IdToken { get; set; }
 
-        [JsonPropertyName("refreshToken")]
-        public string? RefreshToken { get; set; }
+        [JsonPropertyName("refreshToken")] public string? RefreshToken { get; set; }
 
-        [JsonPropertyName("expiresIn")]
-        public string? ExpiresIn { get; set; }
+        [JsonPropertyName("expiresIn")] public string? ExpiresIn { get; set; }
 
-        [JsonPropertyName("localId")]
-        public string? LocalId { get; set; }
+        [JsonPropertyName("localId")] public string? LocalId { get; set; }
     }
 
     private sealed class RefreshResponse
     {
-        [JsonPropertyName("id_token")]
-        public string? IdToken { get; set; }
+        [JsonPropertyName("id_token")] public string? IdToken { get; set; }
 
-        [JsonPropertyName("refresh_token")]
-        public string? RefreshToken { get; set; }
+        [JsonPropertyName("refresh_token")] public string? RefreshToken { get; set; }
 
-        [JsonPropertyName("expires_in")]
-        public string? ExpiresIn { get; set; }
+        [JsonPropertyName("expires_in")] public string? ExpiresIn { get; set; }
 
-        [JsonPropertyName("user_id")]
-        public string? UserId { get; set; }
+        [JsonPropertyName("user_id")] public string? UserId { get; set; }
     }
 
     private sealed class FirebaseAuthState
@@ -852,7 +736,9 @@ public sealed class FirebaseAnonymousAuthenticator
         public bool IsExpired => DateTimeOffset.UtcNow >= Expiration - ExpirationSkew;
 
         public FirebaseAuthState WithExpiration(DateTimeOffset expiration)
-            => new(IdToken, RefreshToken, expiration, UserId);
+        {
+            return new FirebaseAuthState(IdToken, RefreshToken, expiration, UserId);
+        }
     }
 
     public readonly struct FirebaseAuthSession

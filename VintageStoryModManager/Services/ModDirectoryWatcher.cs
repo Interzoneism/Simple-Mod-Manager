@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
 
 namespace VintageStoryModManager.Services;
@@ -13,13 +11,13 @@ public sealed class ModDirectoryWatcher : IDisposable
     };
 
     private readonly ModDiscoveryService _discoveryService;
+    private readonly HashSet<string> _pendingPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _syncRoot = new();
     private readonly Dictionary<string, FileSystemWatcher> _watchers = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _pendingPaths = new(StringComparer.OrdinalIgnoreCase);
+    private bool _disposed;
+    private bool _isWatching;
 
     private bool _requiresFullRescan;
-    private bool _isWatching;
-    private bool _disposed;
 
     public ModDirectoryWatcher(ModDiscoveryService discoveryService)
     {
@@ -48,33 +46,47 @@ public sealed class ModDirectoryWatcher : IDisposable
         }
     }
 
+    public void Dispose()
+    {
+        lock (_syncRoot)
+        {
+            if (_disposed) return;
+
+            foreach (var watcher in _watchers.Values)
+            {
+                watcher.EnableRaisingEvents = false;
+                watcher.Created -= OnChanged;
+                watcher.Changed -= OnChanged;
+                watcher.Deleted -= OnChanged;
+                watcher.Renamed -= OnRenamed;
+                watcher.Dispose();
+            }
+
+            _watchers.Clear();
+            _pendingPaths.Clear();
+            _disposed = true;
+            _isWatching = false;
+        }
+    }
+
     public void EnsureWatchers()
     {
-        IReadOnlyList<string> searchPaths = _discoveryService.GetSearchPaths();
+        var searchPaths = _discoveryService.GetSearchPaths();
 
         lock (_syncRoot)
         {
-            if (_disposed)
-            {
-                return;
-            }
+            if (_disposed) return;
 
             var normalizedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (string path in searchPaths)
+            foreach (var path in searchPaths)
             {
-                string? normalized = NormalizePath(path);
-                if (normalized == null)
-                {
-                    continue;
-                }
+                var normalized = NormalizePath(path);
+                if (normalized == null) continue;
 
                 normalizedTargets.Add(normalized);
 
-                if (_watchers.ContainsKey(normalized) || !Directory.Exists(normalized))
-                {
-                    continue;
-                }
+                if (_watchers.ContainsKey(normalized) || !Directory.Exists(normalized)) continue;
 
                 try
                 {
@@ -82,9 +94,9 @@ public sealed class ModDirectoryWatcher : IDisposable
                     {
                         IncludeSubdirectories = true,
                         NotifyFilter = NotifyFilters.DirectoryName
-                            | NotifyFilters.FileName
-                            | NotifyFilters.LastWrite
-                            | NotifyFilters.Size
+                                       | NotifyFilters.FileName
+                                       | NotifyFilters.LastWrite
+                                       | NotifyFilters.Size
                     };
 
                     watcher.Created += OnChanged;
@@ -103,17 +115,13 @@ public sealed class ModDirectoryWatcher : IDisposable
             }
 
             var toRemove = new List<string>();
-            foreach (string existing in _watchers.Keys)
-            {
+            foreach (var existing in _watchers.Keys)
                 if (!normalizedTargets.Contains(existing))
-                {
                     toRemove.Add(existing);
-                }
-            }
 
             if (toRemove.Count > 0)
             {
-                foreach (string obsolete in toRemove)
+                foreach (var obsolete in toRemove)
                 {
                     if (_watchers.TryGetValue(obsolete, out var watcher))
                     {
@@ -139,10 +147,7 @@ public sealed class ModDirectoryWatcher : IDisposable
     {
         lock (_syncRoot)
         {
-            if (_pendingPaths.Count == 0 && !_requiresFullRescan)
-            {
-                return ModDirectoryChangeSet.Empty;
-            }
+            if (_pendingPaths.Count == 0 && !_requiresFullRescan) return ModDirectoryChangeSet.Empty;
 
             var paths = _pendingPaths.Count == 0
                 ? Array.Empty<string>()
@@ -154,44 +159,12 @@ public sealed class ModDirectoryWatcher : IDisposable
         }
     }
 
-    public void Dispose()
-    {
-        lock (_syncRoot)
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            foreach (var watcher in _watchers.Values)
-            {
-                watcher.EnableRaisingEvents = false;
-                watcher.Created -= OnChanged;
-                watcher.Changed -= OnChanged;
-                watcher.Deleted -= OnChanged;
-                watcher.Renamed -= OnRenamed;
-                watcher.Dispose();
-            }
-
-            _watchers.Clear();
-            _pendingPaths.Clear();
-            _disposed = true;
-            _isWatching = false;
-        }
-    }
-
     private void OnChanged(object sender, FileSystemEventArgs e)
     {
-        if (sender is not FileSystemWatcher watcher || string.IsNullOrWhiteSpace(e.FullPath))
-        {
-            return;
-        }
+        if (sender is not FileSystemWatcher watcher || string.IsNullOrWhiteSpace(e.FullPath)) return;
 
-        string? root = TryResolveRootPath(watcher.Path, e.FullPath);
-        if (root == null)
-        {
-            return;
-        }
+        var root = TryResolveRootPath(watcher.Path, e.FullPath);
+        if (root == null) return;
 
         lock (_syncRoot)
         {
@@ -203,16 +176,10 @@ public sealed class ModDirectoryWatcher : IDisposable
     {
         OnChanged(sender, e);
 
-        if (string.IsNullOrWhiteSpace(e.OldFullPath) || sender is not FileSystemWatcher watcher)
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(e.OldFullPath) || sender is not FileSystemWatcher watcher) return;
 
-        string? root = TryResolveRootPath(watcher.Path, e.OldFullPath);
-        if (root == null)
-        {
-            return;
-        }
+        var root = TryResolveRootPath(watcher.Path, e.OldFullPath);
+        if (root == null) return;
 
         lock (_syncRoot)
         {
@@ -222,48 +189,33 @@ public sealed class ModDirectoryWatcher : IDisposable
 
     private static string? TryResolveRootPath(string searchPath, string fullPath)
     {
-        string? normalizedSearch = NormalizePath(searchPath);
-        string? normalizedFull = NormalizePath(fullPath);
+        var normalizedSearch = NormalizePath(searchPath);
+        var normalizedFull = NormalizePath(fullPath);
 
-        if (normalizedSearch == null || normalizedFull == null)
-        {
-            return normalizedFull;
-        }
+        if (normalizedSearch == null || normalizedFull == null) return normalizedFull;
 
-        if (!normalizedFull.StartsWith(normalizedSearch, StringComparison.OrdinalIgnoreCase))
-        {
-            return normalizedFull;
-        }
+        if (!normalizedFull.StartsWith(normalizedSearch, StringComparison.OrdinalIgnoreCase)) return normalizedFull;
 
-        string relative = normalizedFull.Length == normalizedSearch.Length
+        var relative = normalizedFull.Length == normalizedSearch.Length
             ? string.Empty
             : normalizedFull.Substring(normalizedSearch.Length).TrimStart(DirectorySeparators);
 
-        if (relative.Length == 0)
-        {
-            return null;
-        }
+        if (relative.Length == 0) return null;
 
-        int separatorIndex = relative.IndexOfAny(DirectorySeparators);
-        string topLevel = separatorIndex >= 0 ? relative[..separatorIndex] : relative;
-        if (string.IsNullOrWhiteSpace(topLevel))
-        {
-            return null;
-        }
+        var separatorIndex = relative.IndexOfAny(DirectorySeparators);
+        var topLevel = separatorIndex >= 0 ? relative[..separatorIndex] : relative;
+        if (string.IsNullOrWhiteSpace(topLevel)) return null;
 
         return Path.Combine(normalizedSearch, topLevel);
     }
 
     private static string? NormalizePath(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(path)) return null;
 
         try
         {
-            string normalized = Path.GetFullPath(path);
+            var normalized = Path.GetFullPath(path);
             return normalized.TrimEnd(DirectorySeparators);
         }
         catch (Exception)

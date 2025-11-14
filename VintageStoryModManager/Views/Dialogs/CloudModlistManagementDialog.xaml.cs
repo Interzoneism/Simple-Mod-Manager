@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -13,10 +9,10 @@ namespace VintageStoryModManager.Views.Dialogs;
 
 public partial class CloudModlistManagementDialog : Window
 {
+    private readonly Func<CloudModlistManagementEntry, Task<bool>> _deleteCallback;
     private readonly ObservableCollection<CloudModlistManagementEntry> _entries;
     private readonly Func<Task<IReadOnlyList<CloudModlistManagementEntry>>> _refreshCallback;
     private readonly Func<CloudModlistManagementEntry, string, Task<bool>> _renameCallback;
-    private readonly Func<CloudModlistManagementEntry, Task<bool>> _deleteCallback;
     private bool _isBusy;
 
     public CloudModlistManagementDialog(
@@ -37,10 +33,7 @@ public partial class CloudModlistManagementDialog : Window
             entries ?? Enumerable.Empty<CloudModlistManagementEntry>());
         ModlistsListView.ItemsSource = _entries;
 
-        if (_entries.Count > 0)
-        {
-            ModlistsListView.SelectedIndex = 0;
-        }
+        if (_entries.Count > 0) ModlistsListView.SelectedIndex = 0;
 
         UpdateButtonStates();
     }
@@ -50,67 +43,46 @@ public partial class CloudModlistManagementDialog : Window
 
     private async void RenameButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedEntry is not CloudModlistManagementEntry entry)
-        {
-            return;
-        }
+        if (SelectedEntry is not CloudModlistManagementEntry entry) return;
 
         var renameDialog = new CloudModlistRenameDialog(this, entry.Name ?? entry.EffectiveName);
-        bool? dialogResult = renameDialog.ShowDialog();
-        if (dialogResult != true)
-        {
-            return;
-        }
+        var dialogResult = renameDialog.ShowDialog();
+        if (dialogResult != true) return;
 
-        string newName = renameDialog.ModlistName;
-        if (string.IsNullOrWhiteSpace(newName))
-        {
-            return;
-        }
+        var newName = renameDialog.ModlistName;
+        if (string.IsNullOrWhiteSpace(newName)) return;
 
         await RunOperationAsync(() => _renameCallback(entry, newName));
     }
 
     private async void DeleteButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedEntry is not CloudModlistManagementEntry entry)
-        {
-            return;
-        }
+        if (SelectedEntry is not CloudModlistManagementEntry entry) return;
 
-        string displayName = string.IsNullOrWhiteSpace(entry.Name)
+        var displayName = string.IsNullOrWhiteSpace(entry.Name)
             ? entry.SlotLabel
             : $"{entry.SlotLabel} (\"{entry.Name}\")";
 
-        MessageBoxResult confirmation = WpfMessageBox.Show(
+        var confirmation = WpfMessageBox.Show(
             $"Are you sure you want to delete {displayName}? This action cannot be undone.",
             "Simple VS Manager",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
 
-        if (confirmation != MessageBoxResult.Yes)
-        {
-            return;
-        }
+        if (confirmation != MessageBoxResult.Yes) return;
 
         await RunOperationAsync(() => _deleteCallback(entry));
     }
 
     private async Task RunOperationAsync(Func<Task<bool>> operation)
     {
-        if (operation is null || _isBusy)
-        {
-            return;
-        }
+        if (operation is null || _isBusy) return;
 
         SetIsBusy(true);
         try
         {
-            bool success = await operation();
-            if (success)
-            {
-                await RefreshEntriesAsync();
-            }
+            var success = await operation();
+            if (success) await RefreshEntriesAsync();
         }
         finally
         {
@@ -135,19 +107,13 @@ public partial class CloudModlistManagementDialog : Window
             return;
         }
 
-        string? selectedSlotKey = SelectedEntry?.SlotKey;
+        var selectedSlotKey = SelectedEntry?.SlotKey;
 
         _entries.Clear();
         if (entries is not null)
-        {
-            foreach (CloudModlistManagementEntry entry in entries)
-            {
+            foreach (var entry in entries)
                 if (entry is not null)
-                {
                     _entries.Add(entry);
-                }
-            }
-        }
 
         if (_entries.Count == 0)
         {
@@ -160,27 +126,18 @@ public partial class CloudModlistManagementDialog : Window
             return;
         }
 
-        int selectedIndex = -1;
+        var selectedIndex = -1;
         if (!string.IsNullOrWhiteSpace(selectedSlotKey))
-        {
-            for (int i = 0; i < _entries.Count; i++)
-            {
+            for (var i = 0; i < _entries.Count; i++)
                 if (string.Equals(_entries[i].SlotKey, selectedSlotKey, StringComparison.OrdinalIgnoreCase))
                 {
                     selectedIndex = i;
                     break;
                 }
-            }
-        }
 
         if (selectedIndex >= 0)
-        {
             ModlistsListView.SelectedIndex = selectedIndex;
-        }
-        else if (_entries.Count > 0)
-        {
-            ModlistsListView.SelectedIndex = 0;
-        }
+        else if (_entries.Count > 0) ModlistsListView.SelectedIndex = 0;
 
         UpdateButtonStates();
     }
@@ -202,12 +159,9 @@ public partial class CloudModlistManagementDialog : Window
 
     private void UpdateButtonStates()
     {
-        if (_isBusy)
-        {
-            return;
-        }
+        if (_isBusy) return;
 
-        bool hasSelection = SelectedEntry is not null;
+        var hasSelection = SelectedEntry is not null;
         RenameButton.IsEnabled = hasSelection;
         DeleteButton.IsEnabled = hasSelection;
     }
@@ -219,10 +173,7 @@ public partial class CloudModlistManagementDialog : Window
 
     private void ModlistsListView_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left || e.ClickCount < 2)
-        {
-            return;
-        }
+        if (e.ChangedButton != MouseButton.Left || e.ClickCount < 2) return;
 
         RenameButton_OnClick(sender, e);
     }

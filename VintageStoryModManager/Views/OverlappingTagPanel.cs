@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Windows;
 using WpfPanel = System.Windows.Controls.Panel;
 using Size = System.Windows.Size;
@@ -9,18 +7,19 @@ namespace VintageStoryModManager.Views;
 
 public class OverlappingTagPanel : WpfPanel
 {
-    public OverlappingTagPanel()
-    {
-        ClipToBounds = true;
-    }
-
-    private readonly List<Rect> _arrangeRects = new();
-
     public static readonly DependencyProperty MaxSpacingProperty = DependencyProperty.Register(
         nameof(MaxSpacing),
         typeof(double),
         typeof(OverlappingTagPanel),
-        new FrameworkPropertyMetadata(6d, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsArrange));
+        new FrameworkPropertyMetadata(6d,
+            FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsArrange));
+
+    private readonly List<Rect> _arrangeRects = new();
+
+    public OverlappingTagPanel()
+    {
+        ClipToBounds = true;
+    }
 
     public double MaxSpacing
     {
@@ -30,22 +29,16 @@ public class OverlappingTagPanel : WpfPanel
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        int childCount = InternalChildren.Count;
-        if (childCount == 0)
-        {
-            return new Size(0d, 0d);
-        }
+        var childCount = InternalChildren.Count;
+        if (childCount == 0) return new Size(0d, 0d);
 
-        double[] widths = new double[childCount];
-        double[] heights = new double[childCount];
+        var widths = new double[childCount];
+        var heights = new double[childCount];
 
-        for (int i = 0; i < childCount; i++)
+        for (var i = 0; i < childCount; i++)
         {
-            UIElement child = InternalChildren[i];
-            if (child is null)
-            {
-                continue;
-            }
+            var child = InternalChildren[i];
+            if (child is null) continue;
 
             child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             widths[i] = child.DesiredSize.Width;
@@ -57,43 +50,34 @@ public class OverlappingTagPanel : WpfPanel
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        int childCount = InternalChildren.Count;
-        if (childCount == 0)
-        {
-            return finalSize;
-        }
+        var childCount = InternalChildren.Count;
+        if (childCount == 0) return finalSize;
 
-        double[] widths = new double[childCount];
-        double[] heights = new double[childCount];
+        var widths = new double[childCount];
+        var heights = new double[childCount];
 
-        for (int i = 0; i < childCount; i++)
+        for (var i = 0; i < childCount; i++)
         {
-            UIElement child = InternalChildren[i];
-            if (child is null)
-            {
-                continue;
-            }
+            var child = InternalChildren[i];
+            if (child is null) continue;
 
             widths[i] = child.DesiredSize.Width;
             heights[i] = child.DesiredSize.Height;
         }
 
-        Size arrangedSize = ArrangeChildren(finalSize, widths, heights);
+        var arrangedSize = ArrangeChildren(finalSize, widths, heights);
 
-        for (int i = 0; i < childCount; i++)
+        for (var i = 0; i < childCount; i++)
         {
-            UIElement child = InternalChildren[i];
-            if (child is null)
-            {
-                continue;
-            }
+            var child = InternalChildren[i];
+            if (child is null) continue;
 
-            Rect rect = i < _arrangeRects.Count
+            var rect = i < _arrangeRects.Count
                 ? _arrangeRects[i]
                 : new Rect(new Size(widths[i], heights[i]));
 
             child.Arrange(rect);
-            WpfPanel.SetZIndex(child, childCount - i);
+            SetZIndex(child, childCount - i);
         }
 
         return arrangedSize;
@@ -101,20 +85,29 @@ public class OverlappingTagPanel : WpfPanel
 
     private Size ComputeDesiredSize(Size availableSize, IReadOnlyList<double> widths, IReadOnlyList<double> heights)
     {
-        double widthConstraint = double.IsInfinity(availableSize.Width) ? double.PositiveInfinity : Math.Max(0d, availableSize.Width);
-        double heightConstraint = double.IsInfinity(availableSize.Height) ? double.PositiveInfinity : Math.Max(0d, availableSize.Height);
+        var widthConstraint = double.IsInfinity(availableSize.Width)
+            ? double.PositiveInfinity
+            : Math.Max(0d, availableSize.Width);
+        var heightConstraint = double.IsInfinity(availableSize.Height)
+            ? double.PositiveInfinity
+            : Math.Max(0d, availableSize.Height);
 
-        DetermineSpacing(widthConstraint, heightConstraint, widths, heights, null, out double measuredWidth, out double measuredHeight);
+        DetermineSpacing(widthConstraint, heightConstraint, widths, heights, null, out var measuredWidth,
+            out var measuredHeight);
 
         return new Size(measuredWidth, measuredHeight);
     }
 
     private Size ArrangeChildren(Size finalSize, IReadOnlyList<double> widths, IReadOnlyList<double> heights)
     {
-        double widthConstraint = double.IsInfinity(finalSize.Width) ? double.PositiveInfinity : Math.Max(0d, finalSize.Width);
-        double heightConstraint = double.IsInfinity(finalSize.Height) ? double.PositiveInfinity : Math.Max(0d, finalSize.Height);
+        var widthConstraint =
+            double.IsInfinity(finalSize.Width) ? double.PositiveInfinity : Math.Max(0d, finalSize.Width);
+        var heightConstraint = double.IsInfinity(finalSize.Height)
+            ? double.PositiveInfinity
+            : Math.Max(0d, finalSize.Height);
 
-        DetermineSpacing(widthConstraint, heightConstraint, widths, heights, _arrangeRects, out double measuredWidth, out double measuredHeight);
+        DetermineSpacing(widthConstraint, heightConstraint, widths, heights, _arrangeRects, out var measuredWidth,
+            out var measuredHeight);
 
         return new Size(measuredWidth, measuredHeight);
     }
@@ -128,7 +121,7 @@ public class OverlappingTagPanel : WpfPanel
         out double measuredWidth,
         out double measuredHeight)
     {
-        int count = widths.Count;
+        var count = widths.Count;
         if (count == 0)
         {
             measuredWidth = 0d;
@@ -137,36 +130,35 @@ public class OverlappingTagPanel : WpfPanel
             return 0d;
         }
 
-        double spacingUpper = MaxSpacing;
+        var spacingUpper = MaxSpacing;
         if (count > 1)
         {
-            double spacingFalloff = MaxSpacing / Math.Sqrt(count);
+            var spacingFalloff = MaxSpacing / Math.Sqrt(count);
             spacingUpper = Math.Max(0d, Math.Min(MaxSpacing, spacingFalloff));
         }
-        double spacingLower = 0d;
+
+        var spacingLower = 0d;
 
         if (!double.IsInfinity(widthConstraint) && count > 1)
         {
-            double totalWidth = 0d;
-            for (int i = 0; i < count; i++)
-            {
-                totalWidth += widths[i];
-            }
+            var totalWidth = 0d;
+            for (var i = 0; i < count; i++) totalWidth += widths[i];
 
-            double candidate = (widthConstraint - totalWidth) / (count - 1);
+            var candidate = (widthConstraint - totalWidth) / (count - 1);
             spacingLower = Math.Max(0d, Math.Min(spacingUpper, candidate));
         }
 
         spacingLower = Math.Min(spacingLower, spacingUpper);
 
-        double bestSpacing = spacingUpper;
-        double heightAtUpper = ComputeLayout(widthConstraint, spacingUpper, widths, heights, null, out double widthAtUpper);
-        double bestHeight = heightAtUpper;
-        double bestWidth = widthAtUpper;
+        var bestSpacing = spacingUpper;
+        var heightAtUpper = ComputeLayout(widthConstraint, spacingUpper, widths, heights, null, out var widthAtUpper);
+        var bestHeight = heightAtUpper;
+        var bestWidth = widthAtUpper;
 
         if (!double.IsInfinity(heightConstraint) && heightAtUpper > heightConstraint && count > 1)
         {
-            double heightAtLower = ComputeLayout(widthConstraint, spacingLower, widths, heights, null, out double widthAtLower);
+            var heightAtLower =
+                ComputeLayout(widthConstraint, spacingLower, widths, heights, null, out var widthAtLower);
 
             if (heightAtLower > heightConstraint)
             {
@@ -176,13 +168,13 @@ public class OverlappingTagPanel : WpfPanel
             }
             else
             {
-                double lo = spacingLower;
-                double hi = spacingUpper;
+                var lo = spacingLower;
+                var hi = spacingUpper;
 
-                for (int iteration = 0; iteration < 48; iteration++)
+                for (var iteration = 0; iteration < 48; iteration++)
                 {
-                    double mid = (lo + hi) * 0.5d;
-                    double heightAtMid = ComputeLayout(widthConstraint, mid, widths, heights, null, out double widthAtMid);
+                    var mid = (lo + hi) * 0.5d;
+                    var heightAtMid = ComputeLayout(widthConstraint, mid, widths, heights, null, out var widthAtMid);
 
                     if (heightAtMid <= heightConstraint)
                     {
@@ -220,18 +212,18 @@ public class OverlappingTagPanel : WpfPanel
     {
         rects?.Clear();
 
-        int count = widths.Count;
-        double x = 0d;
-        double y = 0d;
-        double rowHeight = 0d;
-        double maxWidth = 0d;
+        var count = widths.Count;
+        var x = 0d;
+        var y = 0d;
+        var rowHeight = 0d;
+        var maxWidth = 0d;
 
         const double epsilon = 0.1d;
 
-        for (int i = 0; i < count; i++)
+        for (var i = 0; i < count; i++)
         {
-            double childWidth = widths[i];
-            double childHeight = heights[i];
+            var childWidth = widths[i];
+            var childHeight = heights[i];
 
             if (!double.IsInfinity(widthConstraint) && x > 0d && x + childWidth > widthConstraint + epsilon)
             {
@@ -240,26 +232,20 @@ public class OverlappingTagPanel : WpfPanel
                 x = 0d;
             }
 
-            double childX = x;
-            if (childX < 0d)
-            {
-                childX = 0d;
-            }
+            var childX = x;
+            if (childX < 0d) childX = 0d;
 
-            Rect rect = new Rect(childX, y, childWidth, childHeight);
+            var rect = new Rect(childX, y, childWidth, childHeight);
             rects?.Add(rect);
 
             rowHeight = Math.Max(rowHeight, childHeight);
             maxWidth = Math.Max(maxWidth, rect.Right);
 
             x = childX + childWidth + spacing;
-            if (x < 0d)
-            {
-                x = 0d;
-            }
+            if (x < 0d) x = 0d;
         }
 
-        double totalHeight = y + rowHeight;
+        var totalHeight = y + rowHeight;
         measuredWidth = double.IsInfinity(widthConstraint) ? maxWidth : Math.Min(maxWidth, widthConstraint);
         return totalHeight;
     }

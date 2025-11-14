@@ -1,20 +1,18 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using MessageBox = System.Windows.MessageBox;
 
 namespace VintageStoryModManager.Views.Dialogs;
 
 public partial class ExperimentalModDebugDialog : Window, INotifyPropertyChanged
 {
+    private readonly ICollectionView? _filteredLogLines;
     private bool _showOnlyHighlighted;
-    private ICollectionView? _filteredLogLines;
 
     public ExperimentalModDebugDialog(string modId, IReadOnlyList<ExperimentalModDebugLogLine> logLines)
         : this(
@@ -51,8 +49,6 @@ public partial class ExperimentalModDebugDialog : Window, INotifyPropertyChanged
         DataContext = this;
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
-
     public string? ModId { get; private set; }
 
     public IReadOnlyList<ExperimentalModDebugLogLine> LogLines { get; }
@@ -79,17 +75,13 @@ public partial class ExperimentalModDebugDialog : Window, INotifyPropertyChanged
         }
     }
 
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     private bool FilterLogLine(object obj)
     {
-        if (obj is not ExperimentalModDebugLogLine logLine)
-        {
-            return true;
-        }
+        if (obj is not ExperimentalModDebugLogLine logLine) return true;
 
-        if (!ShowOnlyHighlighted)
-        {
-            return true;
-        }
+        if (!ShowOnlyHighlighted) return true;
 
         return logLine.IsHighlighted;
     }
@@ -101,26 +93,17 @@ public partial class ExperimentalModDebugDialog : Window, INotifyPropertyChanged
 
     private void DataGrid_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not DataGrid dataGrid)
-        {
-            return;
-        }
+        if (sender is not DataGrid dataGrid) return;
 
-        if (dataGrid.SelectedItem is not ExperimentalModDebugLogLine selectedLine)
-        {
-            return;
-        }
+        if (dataGrid.SelectedItem is not ExperimentalModDebugLogLine selectedLine) return;
 
         // Check if the line has a file path and line number
-        if (string.IsNullOrWhiteSpace(selectedLine.FilePath) || selectedLine.LineNumber <= 0)
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(selectedLine.FilePath) || selectedLine.LineNumber <= 0) return;
 
         // Verify the file exists
         if (!File.Exists(selectedLine.FilePath))
         {
-            System.Windows.MessageBox.Show(
+            MessageBox.Show(
                 $"The log file could not be found:\n\n{selectedLine.FilePath}",
                 "File Not Found",
                 MessageBoxButton.OK,
@@ -134,10 +117,7 @@ public partial class ExperimentalModDebugDialog : Window, INotifyPropertyChanged
     private static void OpenFileAtLine(string filePath, int lineNumber)
     {
         // Validate file path to prevent security issues
-        if (string.IsNullOrWhiteSpace(filePath))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(filePath)) return;
 
         // Ensure the file path is absolute and doesn't contain potentially malicious patterns
         try
@@ -157,22 +137,21 @@ public partial class ExperimentalModDebugDialog : Window, INotifyPropertyChanged
         {
             // VS Code - most common modern editor
             ("code", $"-g \"{filePath}\":{lineNumber}"),
-            
+
             // Notepad++ - popular on Windows
             ("notepad++", $"\"{filePath}\" -n{lineNumber}"),
-            
+
             // Sublime Text
             ("subl", $"\"{filePath}\":{lineNumber}"),
-            
+
             // Vim/GVim
             ("gvim", $"+{lineNumber} \"{filePath}\""),
-            
+
             // Fallback to default text editor without line navigation
             (string.Empty, $"\"{filePath}\"")
         };
 
         foreach (var (executable, arguments) in editorAttempts)
-        {
             try
             {
                 var startInfo = new ProcessStartInfo();
@@ -193,22 +172,18 @@ public partial class ExperimentalModDebugDialog : Window, INotifyPropertyChanged
                 Process.Start(startInfo);
                 return; // Success - don't try other editors
             }
-            catch (System.ComponentModel.Win32Exception)
+            catch (Win32Exception)
             {
                 // Editor not found or not installed - try next one
-                continue;
             }
             catch (FileNotFoundException)
             {
                 // Editor executable not found - try next one
-                continue;
             }
             catch (Exception)
             {
                 // Unexpected error with this editor - try next one
                 // We silently continue to try other editors rather than showing an error
-                continue;
             }
-        }
     }
 }

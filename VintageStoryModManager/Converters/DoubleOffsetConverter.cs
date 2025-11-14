@@ -1,4 +1,3 @@
-using System;
 using System.Globalization;
 using System.Windows.Data;
 
@@ -8,7 +7,7 @@ public class DoubleOffsetConverter : IValueConverter
 {
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        double baseValue = value switch
+        var baseValue = value switch
         {
             double d => d,
             float f => f,
@@ -17,7 +16,7 @@ public class DoubleOffsetConverter : IValueConverter
             _ => System.Convert.ToDouble(value, culture)
         };
 
-        double offset = parameter switch
+        var offset = parameter switch
         {
             double d => d,
             float f => f,
@@ -26,22 +25,13 @@ public class DoubleOffsetConverter : IValueConverter
             _ => System.Convert.ToDouble(parameter, culture)
         };
 
-        double result = baseValue + offset;
+        var result = baseValue + offset;
 
-        if (targetType == typeof(string))
-        {
-            return result.ToString(culture);
-        }
+        if (targetType == typeof(string)) return result.ToString(culture);
 
-        if (targetType == typeof(int))
-        {
-            return (int)Math.Round(result);
-        }
+        if (targetType == typeof(int)) return (int)Math.Round(result);
 
-        if (targetType == typeof(float))
-        {
-            return (float)result;
-        }
+        if (targetType == typeof(float)) return (float)result;
 
         return result;
     }

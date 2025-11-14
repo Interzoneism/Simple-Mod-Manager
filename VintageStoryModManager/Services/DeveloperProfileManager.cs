@@ -1,23 +1,15 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace VintageStoryModManager.Services;
 
 /// <summary>
-/// Provides helpers for switching between developer-only player identities without
-/// touching the real user's data or Firebase authentication state.
+///     Provides helpers for switching between developer-only player identities without
+///     touching the real user's data or Firebase authentication state.
 /// </summary>
 public static class DeveloperProfileManager
 {
-    /// <summary>
-    /// Enables the developer identity switching helpers. Set to false before publishing.
-    /// </summary>
-    public static bool DevDebug { get; set; } = false;
-
     private static readonly DeveloperProfileDefinition[] FakeProfiles =
     {
         new("ember-rowan", "Fake: Ember Rowan", "EmberRowan", "c8f8d0a5-1f54-4c0b-93de-314ce521f9db"),
@@ -34,16 +26,16 @@ public static class DeveloperProfileManager
     private static DeveloperProfile? _currentProfile;
     private static string? _profilesRoot;
 
-    public static event EventHandler<DeveloperProfileChangedEventArgs>? CurrentProfileChanged;
+    /// <summary>
+    ///     Enables the developer identity switching helpers. Set to false before publishing.
+    /// </summary>
+    public static bool DevDebug { get; set; } = false;
 
     public static DeveloperProfile? CurrentProfile
     {
         get
         {
-            if (!DevDebug)
-            {
-                return null;
-            }
+            if (!DevDebug) return null;
 
             lock (SyncRoot)
             {
@@ -52,12 +44,11 @@ public static class DeveloperProfileManager
         }
     }
 
+    public static event EventHandler<DeveloperProfileChangedEventArgs>? CurrentProfileChanged;
+
     public static IReadOnlyList<DeveloperProfile> GetProfiles()
     {
-        if (!DevDebug)
-        {
-            return Array.Empty<DeveloperProfile>();
-        }
+        if (!DevDebug) return Array.Empty<DeveloperProfile>();
 
         lock (SyncRoot)
         {
@@ -68,48 +59,37 @@ public static class DeveloperProfileManager
 
     public static bool TrySetCurrentProfile(string profileId)
     {
-        if (!DevDebug)
-        {
-            return false;
-        }
+        if (!DevDebug) return false;
 
         DeveloperProfile? target;
-        bool changed = false;
+        var changed = false;
 
         lock (SyncRoot)
         {
             EnsureProfilesReadyLocked();
 
             target = _profiles.FirstOrDefault(p => string.Equals(p.Id, profileId, StringComparison.OrdinalIgnoreCase));
-            if (target is null)
-            {
-                return false;
-            }
+            if (target is null) return false;
 
-            if (_currentProfile is null || !string.Equals(_currentProfile.Id, target.Id, StringComparison.OrdinalIgnoreCase))
+            if (_currentProfile is null ||
+                !string.Equals(_currentProfile.Id, target.Id, StringComparison.OrdinalIgnoreCase))
             {
                 _currentProfile = target;
                 changed = true;
             }
         }
 
-        if (changed && target is not null)
-        {
-            OnCurrentProfileChanged(target, definitionsUpdated: false);
-        }
+        if (changed && target is not null) OnCurrentProfileChanged(target, false);
 
         return changed;
     }
 
     public static void UpdateOriginalProfile(string dataDirectory)
     {
-        if (!DevDebug || string.IsNullOrWhiteSpace(dataDirectory))
-        {
-            return;
-        }
+        if (!DevDebug || string.IsNullOrWhiteSpace(dataDirectory)) return;
 
         DeveloperProfile? profileToNotify = null;
-        bool definitionsUpdated = false;
+        var definitionsUpdated = false;
 
         lock (SyncRoot)
         {
@@ -123,9 +103,11 @@ public static class DeveloperProfileManager
                 return;
             }
 
-            if (_originalProfile is null || !string.Equals(_originalProfile.DataDirectory, normalized, StringComparison.OrdinalIgnoreCase))
+            if (_originalProfile is null || !string.Equals(_originalProfile.DataDirectory, normalized,
+                    StringComparison.OrdinalIgnoreCase))
             {
-                _originalProfile = new DeveloperProfile("original", "My Profile (Original)", normalized, firebaseStateFilePath: null, playerName: null, playerUid: null, isOriginal: true);
+                _originalProfile = new DeveloperProfile("original", "My Profile (Original)", normalized, null, null,
+                    null, true);
                 definitionsUpdated = true;
             }
 
@@ -155,42 +137,27 @@ public static class DeveloperProfileManager
                 profileToNotify = _originalProfile;
             }
 
-            if (!definitionsUpdated && profileToNotify is null)
-            {
-                return;
-            }
+            if (!definitionsUpdated && profileToNotify is null) return;
 
             profileToNotify ??= _currentProfile ?? _originalProfile;
         }
 
-        if (profileToNotify is not null)
-        {
-            OnCurrentProfileChanged(profileToNotify, definitionsUpdated);
-        }
+        if (profileToNotify is not null) OnCurrentProfileChanged(profileToNotify, definitionsUpdated);
     }
 
     public static string? GetFirebaseStateFilePathOverride()
     {
-        if (!DevDebug)
-        {
-            return null;
-        }
+        if (!DevDebug) return null;
 
         lock (SyncRoot)
         {
-            string? path = _currentProfile?.FirebaseStateFilePath;
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return null;
-            }
+            var path = _currentProfile?.FirebaseStateFilePath;
+            if (string.IsNullOrWhiteSpace(path)) return null;
 
             try
             {
-                string? directory = Path.GetDirectoryName(path);
-                if (!string.IsNullOrWhiteSpace(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
+                var directory = Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
             }
             catch (IOException)
             {
@@ -214,30 +181,18 @@ public static class DeveloperProfileManager
             return;
         }
 
-        if (_profilesRoot is null)
-        {
-            _profilesRoot = EnsureProfilesRoot();
-        }
+        if (_profilesRoot is null) _profilesRoot = EnsureProfilesRoot();
 
-        if (_profiles.Count == 0)
-        {
-            RebuildProfilesLocked();
-        }
+        if (_profiles.Count == 0) RebuildProfilesLocked();
 
-        if (_currentProfile is null)
-        {
-            _currentProfile = _originalProfile;
-        }
+        if (_currentProfile is null) _currentProfile = _originalProfile;
     }
 
     private static void RebuildProfilesLocked()
     {
         var profiles = new List<DeveloperProfile>();
 
-        if (_originalProfile is not null)
-        {
-            profiles.Add(_originalProfile);
-        }
+        if (_originalProfile is not null) profiles.Add(_originalProfile);
 
         if (_profilesRoot is null)
         {
@@ -245,16 +200,17 @@ public static class DeveloperProfileManager
             return;
         }
 
-        foreach (DeveloperProfileDefinition definition in FakeProfiles)
+        foreach (var definition in FakeProfiles)
         {
-            string profileRoot = Path.Combine(_profilesRoot, definition.Id);
-            string dataDirectory = Path.Combine(profileRoot, "Data");
-            string firebaseDirectory = Path.Combine(profileRoot, "Firebase");
+            var profileRoot = Path.Combine(_profilesRoot, definition.Id);
+            var dataDirectory = Path.Combine(profileRoot, "Data");
+            var firebaseDirectory = Path.Combine(profileRoot, "Firebase");
 
             EnsureFakeProfileData(profileRoot, dataDirectory, firebaseDirectory, definition);
 
-            string firebaseState = Path.Combine(firebaseDirectory, "firebase-auth.json");
-            profiles.Add(new DeveloperProfile(definition.Id, definition.DisplayName, dataDirectory, firebaseState, definition.PlayerName, definition.PlayerUid, isOriginal: false));
+            var firebaseState = Path.Combine(firebaseDirectory, "firebase-auth.json");
+            profiles.Add(new DeveloperProfile(definition.Id, definition.DisplayName, dataDirectory, firebaseState,
+                definition.PlayerName, definition.PlayerUid, false));
         }
 
         _profiles = profiles;
@@ -262,8 +218,8 @@ public static class DeveloperProfileManager
 
     private static string EnsureProfilesRoot()
     {
-        string? managerDirectory = ModCacheLocator.GetManagerDataDirectory();
-        string root = string.IsNullOrWhiteSpace(managerDirectory)
+        var managerDirectory = ModCacheLocator.GetManagerDataDirectory();
+        var root = string.IsNullOrWhiteSpace(managerDirectory)
             ? Path.Combine(Path.GetTempPath(), "SimpleVSManager", "DeveloperProfiles")
             : Path.Combine(managerDirectory!, "DeveloperProfiles");
 
@@ -271,7 +227,8 @@ public static class DeveloperProfileManager
         return root;
     }
 
-    private static void EnsureFakeProfileData(string profileRoot, string dataDirectory, string firebaseDirectory, DeveloperProfileDefinition definition)
+    private static void EnsureFakeProfileData(string profileRoot, string dataDirectory, string firebaseDirectory,
+        DeveloperProfileDefinition definition)
     {
         try
         {
@@ -291,8 +248,9 @@ public static class DeveloperProfileManager
                 ["stringListSettings"] = new JsonObject()
             };
 
-            string settingsPath = Path.Combine(dataDirectory, "clientsettings.json");
-            File.WriteAllText(settingsPath, JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = true }));
+            var settingsPath = Path.Combine(dataDirectory, "clientsettings.json");
+            File.WriteAllText(settingsPath,
+                JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch (IOException)
         {
@@ -310,12 +268,17 @@ public static class DeveloperProfileManager
         CurrentProfileChanged?.Invoke(null, new DeveloperProfileChangedEventArgs(profile, definitionsUpdated));
     }
 
-    private readonly record struct DeveloperProfileDefinition(string Id, string DisplayName, string PlayerName, string PlayerUid);
+    private readonly record struct DeveloperProfileDefinition(
+        string Id,
+        string DisplayName,
+        string PlayerName,
+        string PlayerUid);
 }
 
 public sealed class DeveloperProfile
 {
-    internal DeveloperProfile(string id, string displayName, string dataDirectory, string? firebaseStateFilePath, string? playerName, string? playerUid, bool isOriginal)
+    internal DeveloperProfile(string id, string displayName, string dataDirectory, string? firebaseStateFilePath,
+        string? playerName, string? playerUid, bool isOriginal)
     {
         Id = id;
         DisplayName = displayName;
@@ -353,4 +316,3 @@ public sealed class DeveloperProfileChangedEventArgs : EventArgs
 
     public bool ProfilesUpdated { get; }
 }
-

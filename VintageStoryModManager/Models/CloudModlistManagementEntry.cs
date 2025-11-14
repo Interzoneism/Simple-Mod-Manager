@@ -1,9 +1,7 @@
-using System;
-
 namespace VintageStoryModManager.Models;
 
 /// <summary>
-/// Represents a cloud modlist owned by the current user for management operations.
+///     Represents a cloud modlist owned by the current user for management operations.
 /// </summary>
 public sealed class CloudModlistManagementEntry
 {
@@ -39,15 +37,9 @@ public sealed class CloudModlistManagementEntry
 
     public override string ToString()
     {
-        if (!string.IsNullOrWhiteSpace(DisplayName))
-        {
-            return DisplayName;
-        }
+        if (!string.IsNullOrWhiteSpace(DisplayName)) return DisplayName;
 
-        if (!string.IsNullOrWhiteSpace(Name))
-        {
-            return Name;
-        }
+        if (!string.IsNullOrWhiteSpace(Name)) return Name;
 
         return SlotLabel;
     }

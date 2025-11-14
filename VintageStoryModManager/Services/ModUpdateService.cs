@@ -1,24 +1,16 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-using VintageStoryModManager.Models;
 
 namespace VintageStoryModManager.Services;
 
 /// <summary>
-/// Downloads and installs mod updates retrieved from the official mod database.
+///     Downloads and installs mod updates retrieved from the official mod database.
 /// </summary>
 public sealed class ModUpdateService
 {
     private static readonly HttpClient HttpClient = new();
-
-    private sealed record DownloadResult(string Path, bool IsTemporary, string? CachePath, bool IsCacheHit);
 
     public async Task<ModUpdateResult> UpdateAsync(
         ModUpdateDescriptor descriptor,
@@ -26,15 +18,12 @@ public sealed class ModUpdateService
         IProgress<ModUpdateProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        if (descriptor is null)
-        {
-            throw new ArgumentNullException(nameof(descriptor));
-        }
+        if (descriptor is null) throw new ArgumentNullException(nameof(descriptor));
 
         try
         {
             ReportProgress(progress, ModUpdateStage.Downloading, "Downloading update package...");
-            DownloadResult download = await DownloadAsync(descriptor, cancellationToken).ConfigureAwait(false);
+            var download = await DownloadAsync(descriptor, cancellationToken).ConfigureAwait(false);
 
             try
             {
@@ -42,28 +31,26 @@ public sealed class ModUpdateService
                 ValidateArchive(download.Path);
 
                 if (cacheDownloads && !download.IsCacheHit && download.CachePath != null)
-                {
                     TryCacheDownload(download.Path, download.CachePath);
-                }
 
-                bool treatAsDirectory = descriptor.TargetIsDirectory;
-                using var installScope = StatusLogService.BeginDebugScope(descriptor.DisplayName, descriptor.ModId, "install");
+                var treatAsDirectory = descriptor.TargetIsDirectory;
+                using var installScope =
+                    StatusLogService.BeginDebugScope(descriptor.DisplayName, descriptor.ModId, "install");
                 if (installScope != null)
                 {
                     installScope.SetDetail("mode", treatAsDirectory ? "dir" : "file");
                     installScope.SetCacheStatus(download.IsCacheHit);
                 }
 
-                ModUpdateResult result = await InstallAsync(descriptor, download.Path, treatAsDirectory, progress, cancellationToken).ConfigureAwait(false);
+                var result =
+                    await InstallAsync(descriptor, download.Path, treatAsDirectory, progress, cancellationToken)
+                        .ConfigureAwait(false);
                 installScope?.SetDetail("success", result.Success ? "y" : "n");
                 return result;
             }
             finally
             {
-                if (download.IsTemporary)
-                {
-                    TryDelete(download.Path);
-                }
+                if (download.IsTemporary) TryDelete(download.Path);
             }
         }
         catch (OperationCanceledException)
@@ -74,36 +61,35 @@ public sealed class ModUpdateService
         catch (InternetAccessDisabledException ex)
         {
             Trace.TraceWarning("Mod update blocked for {0}: {1}", descriptor.TargetPath, ex.Message);
-            return new ModUpdateResult(false, "Internet access is disabled. Enable Internet Access in the File menu to download updates.");
+            return new ModUpdateResult(false,
+                "Internet access is disabled. Enable Internet Access in the File menu to download updates.");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or HttpRequestException or NotSupportedException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
+                                       or HttpRequestException or NotSupportedException)
         {
             Trace.TraceError("Mod update failed for {0}: {1}", descriptor.TargetPath, ex);
             return new ModUpdateResult(false, ex.Message);
         }
     }
 
-    private static async Task<DownloadResult> DownloadAsync(ModUpdateDescriptor descriptor, CancellationToken cancellationToken)
+    private static async Task<DownloadResult> DownloadAsync(ModUpdateDescriptor descriptor,
+        CancellationToken cancellationToken)
     {
         using var logScope = StatusLogService.BeginDebugScope(descriptor.DisplayName, descriptor.ModId, "download");
-        string? fileName = descriptor.ReleaseFileName;
+        var fileName = descriptor.ReleaseFileName;
         if (string.IsNullOrWhiteSpace(fileName))
-        {
-            fileName = descriptor.TargetIsDirectory ? descriptor.ModId + ".zip" : Path.GetFileName(descriptor.TargetPath);
-        }
+            fileName = descriptor.TargetIsDirectory
+                ? descriptor.ModId + ".zip"
+                : Path.GetFileName(descriptor.TargetPath);
 
-        if (string.IsNullOrWhiteSpace(fileName))
-        {
-            fileName = descriptor.ModId + ".zip";
-        }
+        if (string.IsNullOrWhiteSpace(fileName)) fileName = descriptor.ModId + ".zip";
 
-        string? cachePath = ModCacheLocator.GetModCachePath(descriptor.ModId, descriptor.ReleaseVersion, fileName);
+        var cachePath = ModCacheLocator.GetModCachePath(descriptor.ModId, descriptor.ReleaseVersion, fileName);
         if (cachePath != null)
-        {
             ModCacheLocator.TryPromoteLegacyCacheFile(descriptor.ModId, descriptor.ReleaseVersion, fileName, cachePath);
-        }
 
-        if (ModCacheLocator.TryLocateCachedModFile(descriptor.ModId, descriptor.ReleaseVersion, fileName, out string? existingCachePath)
+        if (ModCacheLocator.TryLocateCachedModFile(descriptor.ModId, descriptor.ReleaseVersion, fileName,
+                out var existingCachePath)
             && existingCachePath is not null)
         {
             if (logScope != null)
@@ -112,7 +98,7 @@ public sealed class ModUpdateService
                 logScope.SetDetail("src", "cache");
                 try
                 {
-                    long bytes = new FileInfo(existingCachePath).Length;
+                    var bytes = new FileInfo(existingCachePath).Length;
                     logScope.SetDetail("bytes", bytes);
                 }
                 catch (IOException)
@@ -126,22 +112,22 @@ public sealed class ModUpdateService
             }
 
             return new DownloadResult(
-                Path: existingCachePath,
-                IsTemporary: false,
-                CachePath: cachePath ?? existingCachePath,
-                IsCacheHit: true);
+                existingCachePath,
+                false,
+                cachePath ?? existingCachePath,
+                true);
         }
 
-        string tempDirectory = CreateTemporaryDirectory();
-        string downloadPath = Path.Combine(tempDirectory, fileName);
+        var tempDirectory = CreateTemporaryDirectory();
+        var downloadPath = Path.Combine(tempDirectory, fileName);
 
         logScope?.SetCacheStatus(false);
 
         if (descriptor.DownloadUri.IsFile)
         {
-            string sourcePath = descriptor.DownloadUri.LocalPath;
-            await using FileStream sourceStream = File.OpenRead(sourcePath);
-            await using FileStream destination = File.Create(downloadPath);
+            var sourcePath = descriptor.DownloadUri.LocalPath;
+            await using var sourceStream = File.OpenRead(sourcePath);
+            await using var destination = File.Create(downloadPath);
             await sourceStream.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
             logScope?.SetDetail("src", "file");
         }
@@ -150,20 +136,20 @@ public sealed class ModUpdateService
             InternetAccessManager.ThrowIfInternetAccessDisabled();
 
             using HttpRequestMessage request = new(HttpMethod.Get, descriptor.DownloadUri);
-            using HttpResponseMessage response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            using var response = await HttpClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
-            await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            await using FileStream destination = File.Create(downloadPath);
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await using var destination = File.Create(downloadPath);
             await stream.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
             logScope?.SetDetail("src", "net");
         }
 
         if (logScope != null)
-        {
             try
             {
-                long bytes = new FileInfo(downloadPath).Length;
+                var bytes = new FileInfo(downloadPath).Length;
                 logScope.SetDetail("bytes", bytes);
             }
             catch (IOException)
@@ -174,23 +160,18 @@ public sealed class ModUpdateService
             {
                 // Ignore file size failures.
             }
-        }
 
-        return new DownloadResult(Path: downloadPath, IsTemporary: true, CachePath: cachePath, IsCacheHit: false);
+        return new DownloadResult(downloadPath, true, cachePath, false);
     }
 
     private static void ValidateArchive(string downloadPath)
     {
         try
         {
-            using ZipArchive archive = ZipFile.OpenRead(downloadPath);
-            foreach (ZipArchiveEntry entry in archive.Entries)
-            {
+            using var archive = ZipFile.OpenRead(downloadPath);
+            foreach (var entry in archive.Entries)
                 if (string.Equals(Path.GetFileName(entry.FullName), "modinfo.json", StringComparison.OrdinalIgnoreCase))
-                {
                     return;
-                }
-            }
         }
         catch (InvalidDataException ex)
         {
@@ -200,18 +181,19 @@ public sealed class ModUpdateService
         throw new InvalidDataException("The downloaded file does not contain a modinfo.json manifest.");
     }
 
-    private static Task<ModUpdateResult> InstallAsync(ModUpdateDescriptor descriptor, string downloadPath, bool treatAsDirectory, IProgress<ModUpdateProgress>? progress, CancellationToken cancellationToken)
+    private static Task<ModUpdateResult> InstallAsync(ModUpdateDescriptor descriptor, string downloadPath,
+        bool treatAsDirectory, IProgress<ModUpdateProgress>? progress, CancellationToken cancellationToken)
     {
-        string targetPath = descriptor.TargetPath;
+        var targetPath = descriptor.TargetPath;
 
-        bool targetExists = treatAsDirectory ? Directory.Exists(targetPath) : File.Exists(targetPath);
-        bool isFreshInstall = string.IsNullOrWhiteSpace(descriptor.InstalledVersion) || !targetExists;
-        string completionMessage = isFreshInstall ? "Mod installed." : "Update installed.";
+        var targetExists = treatAsDirectory ? Directory.Exists(targetPath) : File.Exists(targetPath);
+        var isFreshInstall = string.IsNullOrWhiteSpace(descriptor.InstalledVersion) || !targetExists;
+        var completionMessage = isFreshInstall ? "Mod installed." : "Update installed.";
 
         if (treatAsDirectory)
         {
             ReportProgress(progress, ModUpdateStage.Preparing, "Preparing extracted files...");
-            ModUpdateResult result = InstallToDirectory(
+            var result = InstallToDirectory(
                 descriptor,
                 targetPath,
                 downloadPath,
@@ -221,28 +203,27 @@ public sealed class ModUpdateService
             return Task.FromResult(result);
         }
 
-        string replaceMessage = isFreshInstall ? "Installing mod archive..." : "Replacing mod archive...";
+        var replaceMessage = isFreshInstall ? "Installing mod archive..." : "Replacing mod archive...";
         ReportProgress(progress, ModUpdateStage.Replacing, replaceMessage);
         InstallToFile(descriptor, downloadPath);
         ReportProgress(progress, ModUpdateStage.Completed, completionMessage);
         return Task.FromResult(new ModUpdateResult(true, null));
     }
 
-    private static ModUpdateResult InstallToDirectory(ModUpdateDescriptor descriptor, string targetDirectory, string downloadPath, string completionMessage, IProgress<ModUpdateProgress>? progress, CancellationToken cancellationToken)
+    private static ModUpdateResult InstallToDirectory(ModUpdateDescriptor descriptor, string targetDirectory,
+        string downloadPath, string completionMessage, IProgress<ModUpdateProgress>? progress,
+        CancellationToken cancellationToken)
     {
-        string backupPath = CreateUniquePath(targetDirectory, ".immbackup");
-        string extractDirectory = CreateTemporaryDirectory();
+        var backupPath = CreateUniquePath(targetDirectory, ".immbackup");
+        var extractDirectory = CreateTemporaryDirectory();
 
-        bool backupMoved = false;
+        var backupMoved = false;
 
         try
         {
             if (Directory.Exists(targetDirectory))
             {
-                if (Directory.Exists(backupPath))
-                {
-                    Directory.Delete(backupPath, true);
-                }
+                if (Directory.Exists(backupPath)) Directory.Delete(backupPath, true);
 
                 Directory.Move(targetDirectory, backupPath);
                 backupMoved = true;
@@ -252,7 +233,7 @@ public sealed class ModUpdateService
 
             ZipFile.ExtractToDirectory(downloadPath, extractDirectory);
 
-            string payloadRoot = DeterminePayloadRoot(extractDirectory);
+            var payloadRoot = DeterminePayloadRoot(extractDirectory);
             CopyDirectory(payloadRoot, targetDirectory, cancellationToken);
             ReportProgress(progress, ModUpdateStage.Completed, completionMessage);
 
@@ -262,30 +243,22 @@ public sealed class ModUpdateService
         catch (OperationCanceledException)
         {
             TryDelete(targetDirectory);
-            if (backupMoved)
-            {
-                TryRestoreDirectoryBackup(backupPath, targetDirectory);
-            }
+            if (backupMoved) TryRestoreDirectoryBackup(backupPath, targetDirectory);
 
             throw;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or NotSupportedException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
+                                       or NotSupportedException)
         {
             TryDelete(targetDirectory);
-            if (backupMoved)
-            {
-                TryRestoreDirectoryBackup(backupPath, targetDirectory);
-            }
+            if (backupMoved) TryRestoreDirectoryBackup(backupPath, targetDirectory);
 
             return new ModUpdateResult(false, ex.Message);
         }
         catch
         {
             TryDelete(targetDirectory);
-            if (backupMoved)
-            {
-                TryRestoreDirectoryBackup(backupPath, targetDirectory);
-            }
+            if (backupMoved) TryRestoreDirectoryBackup(backupPath, targetDirectory);
 
             throw;
         }
@@ -297,26 +270,20 @@ public sealed class ModUpdateService
 
     private static void InstallToFile(ModUpdateDescriptor descriptor, string downloadPath)
     {
-        string targetPath = descriptor.TargetPath;
-        string existingPath = string.IsNullOrWhiteSpace(descriptor.ExistingPath)
+        var targetPath = descriptor.TargetPath;
+        var existingPath = string.IsNullOrWhiteSpace(descriptor.ExistingPath)
             ? targetPath
             : descriptor.ExistingPath!;
 
-        string? directory = Path.GetDirectoryName(targetPath);
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        var directory = Path.GetDirectoryName(targetPath);
+        if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
 
-        string backupPath = CreateUniquePath(existingPath, ".immbackup");
+        var backupPath = CreateUniquePath(existingPath, ".immbackup");
         string? cachedBackupPath = null;
 
         if (File.Exists(existingPath))
         {
-            if (File.Exists(backupPath))
-            {
-                File.Delete(backupPath);
-            }
+            if (File.Exists(backupPath)) File.Delete(backupPath);
 
             File.Move(existingPath, backupPath);
 
@@ -325,31 +292,19 @@ public sealed class ModUpdateService
 
         try
         {
-            if (File.Exists(targetPath))
-            {
-                File.Delete(targetPath);
-            }
+            if (File.Exists(targetPath)) File.Delete(targetPath);
 
             File.Copy(downloadPath, targetPath, true);
 
-            if (!string.Equals(existingPath, targetPath, StringComparison.OrdinalIgnoreCase))
-            {
-                TryDelete(existingPath);
-            }
+            if (!string.Equals(existingPath, targetPath, StringComparison.OrdinalIgnoreCase)) TryDelete(existingPath);
 
-            if (cachedBackupPath is null)
-            {
-                TryDelete(backupPath);
-            }
+            if (cachedBackupPath is null) TryDelete(backupPath);
         }
         catch (Exception)
         {
             TryDelete(targetPath);
 
-            if (!string.Equals(existingPath, targetPath, StringComparison.OrdinalIgnoreCase))
-            {
-                TryDelete(existingPath);
-            }
+            if (!string.Equals(existingPath, targetPath, StringComparison.OrdinalIgnoreCase)) TryDelete(existingPath);
 
             if (cachedBackupPath is not null && File.Exists(cachedBackupPath))
             {
@@ -357,7 +312,8 @@ public sealed class ModUpdateService
                 {
                     File.Copy(cachedBackupPath, existingPath, true);
                 }
-                catch (Exception copyEx) when (copyEx is IOException or UnauthorizedAccessException or NotSupportedException)
+                catch (Exception copyEx) when (copyEx is IOException or UnauthorizedAccessException
+                                                   or NotSupportedException)
                 {
                     Trace.TraceWarning("Failed to restore mod from cache {0}: {1}", cachedBackupPath, copyEx.Message);
                     try
@@ -365,7 +321,8 @@ public sealed class ModUpdateService
                         File.Move(cachedBackupPath, existingPath);
                         cachedBackupPath = null;
                     }
-                    catch (Exception moveEx) when (moveEx is IOException or UnauthorizedAccessException or NotSupportedException)
+                    catch (Exception moveEx) when (moveEx is IOException or UnauthorizedAccessException
+                                                       or NotSupportedException)
                     {
                         Trace.TraceWarning("Failed to move cached mod back to {0}: {1}", existingPath, moveEx.Message);
                     }
@@ -381,87 +338,58 @@ public sealed class ModUpdateService
         }
         finally
         {
-            if (cachedBackupPath is null)
-            {
-                TryDelete(backupPath);
-            }
+            if (cachedBackupPath is null) TryDelete(backupPath);
         }
     }
 
     private static string DeterminePayloadRoot(string extractDirectory)
     {
-        string[] directories = Directory.GetDirectories(extractDirectory, "*", SearchOption.TopDirectoryOnly);
-        string[] files = Directory.GetFiles(extractDirectory, "*", SearchOption.TopDirectoryOnly);
+        var directories = Directory.GetDirectories(extractDirectory, "*", SearchOption.TopDirectoryOnly);
+        var files = Directory.GetFiles(extractDirectory, "*", SearchOption.TopDirectoryOnly);
 
-        if (directories.Length == 1 && files.Length == 0)
-        {
-            return directories[0];
-        }
+        if (directories.Length == 1 && files.Length == 0) return directories[0];
 
         return extractDirectory;
     }
 
     private static string? TryMoveBackupToCache(ModUpdateDescriptor descriptor, string backupPath)
     {
-        if (string.IsNullOrWhiteSpace(descriptor.InstalledVersion))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(descriptor.InstalledVersion)) return null;
 
-        if (!File.Exists(backupPath))
-        {
-            return null;
-        }
+        if (!File.Exists(backupPath)) return null;
 
-        string? targetFileName = descriptor.ExistingPath is not null
+        var targetFileName = descriptor.ExistingPath is not null
             ? Path.GetFileName(descriptor.ExistingPath)
             : null;
-        if (string.IsNullOrWhiteSpace(targetFileName))
-        {
-            targetFileName = Path.GetFileName(descriptor.TargetPath);
-        }
-        if (string.IsNullOrWhiteSpace(targetFileName))
-        {
-            targetFileName = descriptor.ReleaseFileName;
-        }
+        if (string.IsNullOrWhiteSpace(targetFileName)) targetFileName = Path.GetFileName(descriptor.TargetPath);
+        if (string.IsNullOrWhiteSpace(targetFileName)) targetFileName = descriptor.ReleaseFileName;
 
-        string? cachePath = ModCacheLocator.GetModCachePath(descriptor.ModId, descriptor.InstalledVersion, targetFileName);
-        if (cachePath is null)
-        {
-            return null;
-        }
+        var cachePath = ModCacheLocator.GetModCachePath(descriptor.ModId, descriptor.InstalledVersion, targetFileName);
+        if (cachePath is null) return null;
 
-        if (ModCacheLocator.TryPromoteLegacyCacheFile(descriptor.ModId, descriptor.InstalledVersion, targetFileName, cachePath)
+        if (ModCacheLocator.TryPromoteLegacyCacheFile(descriptor.ModId, descriptor.InstalledVersion, targetFileName,
+                cachePath)
             && File.Exists(cachePath))
-        {
             return null;
-        }
 
-        if (File.Exists(cachePath))
-        {
-            return null;
-        }
+        if (File.Exists(cachePath)) return null;
 
-        if (ModCacheLocator.TryLocateCachedModFile(descriptor.ModId, descriptor.InstalledVersion, targetFileName, out string? existingCacheFile)
+        if (ModCacheLocator.TryLocateCachedModFile(descriptor.ModId, descriptor.InstalledVersion, targetFileName,
+                out var existingCacheFile)
             && existingCacheFile is not null)
         {
-            string? existingDirectory = Path.GetDirectoryName(existingCacheFile);
-            string? cacheDirectory = Path.GetDirectoryName(cachePath);
+            var existingDirectory = Path.GetDirectoryName(existingCacheFile);
+            var cacheDirectory = Path.GetDirectoryName(cachePath);
             if (!string.IsNullOrWhiteSpace(existingDirectory)
                 && !string.IsNullOrWhiteSpace(cacheDirectory)
                 && string.Equals(existingDirectory, cacheDirectory, StringComparison.OrdinalIgnoreCase))
-            {
                 return null;
-            }
         }
 
         try
         {
-            string? cacheDirectory = Path.GetDirectoryName(cachePath);
-            if (!string.IsNullOrWhiteSpace(cacheDirectory))
-            {
-                Directory.CreateDirectory(cacheDirectory);
-            }
+            var cacheDirectory = Path.GetDirectoryName(cachePath);
+            if (!string.IsNullOrWhiteSpace(cacheDirectory)) Directory.CreateDirectory(cacheDirectory);
 
             File.Move(backupPath, cachePath);
             return cachePath;
@@ -472,14 +400,13 @@ public sealed class ModUpdateService
 
             try
             {
-                if (!File.Exists(backupPath) && File.Exists(cachePath))
-                {
-                    File.Move(cachePath, backupPath);
-                }
+                if (!File.Exists(backupPath) && File.Exists(cachePath)) File.Move(cachePath, backupPath);
             }
-            catch (Exception restoreEx) when (restoreEx is IOException or UnauthorizedAccessException or NotSupportedException)
+            catch (Exception restoreEx) when (restoreEx is IOException or UnauthorizedAccessException
+                                                  or NotSupportedException)
             {
-                Trace.TraceWarning("Failed to restore backup after cache failure {0}: {1}", cachePath, restoreEx.Message);
+                Trace.TraceWarning("Failed to restore backup after cache failure {0}: {1}", cachePath,
+                    restoreEx.Message);
             }
 
             return null;
@@ -488,69 +415,50 @@ public sealed class ModUpdateService
 
     private static void TryCacheDirectoryBackup(ModUpdateDescriptor descriptor, string backupPath)
     {
-        if (string.IsNullOrWhiteSpace(descriptor.InstalledVersion))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(descriptor.InstalledVersion)) return;
 
-        if (!Directory.Exists(backupPath))
-        {
-            return;
-        }
+        if (!Directory.Exists(backupPath)) return;
 
-        string? cacheFileName = descriptor.ReleaseFileName ?? Path.GetFileName(descriptor.TargetPath);
-        string? cachePath = ModCacheLocator.GetModCachePath(descriptor.ModId, descriptor.InstalledVersion, cacheFileName);
+        var cacheFileName = descriptor.ReleaseFileName ?? Path.GetFileName(descriptor.TargetPath);
+        var cachePath = ModCacheLocator.GetModCachePath(descriptor.ModId, descriptor.InstalledVersion, cacheFileName);
 
-        if (cachePath is null)
-        {
-            return;
-        }
+        if (cachePath is null) return;
 
-        if (ModCacheLocator.TryPromoteLegacyCacheFile(descriptor.ModId, descriptor.InstalledVersion, cacheFileName, cachePath)
+        if (ModCacheLocator.TryPromoteLegacyCacheFile(descriptor.ModId, descriptor.InstalledVersion, cacheFileName,
+                cachePath)
             && File.Exists(cachePath))
-        {
             return;
-        }
 
-        if (File.Exists(cachePath))
-        {
-            return;
-        }
+        if (File.Exists(cachePath)) return;
 
-        if (ModCacheLocator.TryLocateCachedModFile(descriptor.ModId, descriptor.InstalledVersion, cacheFileName, out string? existingCacheFile)
+        if (ModCacheLocator.TryLocateCachedModFile(descriptor.ModId, descriptor.InstalledVersion, cacheFileName,
+                out var existingCacheFile)
             && existingCacheFile is not null)
         {
-            string? existingDirectory = Path.GetDirectoryName(existingCacheFile);
-            string? cacheDirectory = Path.GetDirectoryName(cachePath);
+            var existingDirectory = Path.GetDirectoryName(existingCacheFile);
+            var cacheDirectory = Path.GetDirectoryName(cachePath);
             if (!string.IsNullOrWhiteSpace(existingDirectory)
                 && !string.IsNullOrWhiteSpace(cacheDirectory)
                 && string.Equals(existingDirectory, cacheDirectory, StringComparison.OrdinalIgnoreCase))
-            {
                 return;
-            }
         }
 
-        string tempDirectory = CreateTemporaryDirectory();
-        string tempArchive = Path.Combine(tempDirectory, Path.GetFileName(cachePath));
+        var tempDirectory = CreateTemporaryDirectory();
+        var tempArchive = Path.Combine(tempDirectory, Path.GetFileName(cachePath));
 
         try
         {
-            string? cacheDirectory = Path.GetDirectoryName(cachePath);
-            if (!string.IsNullOrWhiteSpace(cacheDirectory))
-            {
-                Directory.CreateDirectory(cacheDirectory);
-            }
+            var cacheDirectory = Path.GetDirectoryName(cachePath);
+            if (!string.IsNullOrWhiteSpace(cacheDirectory)) Directory.CreateDirectory(cacheDirectory);
 
-            ZipFile.CreateFromDirectory(backupPath, tempArchive, CompressionLevel.Optimal, includeBaseDirectory: false);
+            ZipFile.CreateFromDirectory(backupPath, tempArchive, CompressionLevel.Optimal, false);
 
-            if (File.Exists(cachePath))
-            {
-                File.Delete(cachePath);
-            }
+            if (File.Exists(cachePath)) File.Delete(cachePath);
 
             File.Move(tempArchive, cachePath);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidDataException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
+                                       or InvalidDataException)
         {
             Trace.TraceWarning("Failed to cache directory mod backup {0}: {1}", backupPath, ex.Message);
             TryDelete(tempArchive);
@@ -561,7 +469,8 @@ public sealed class ModUpdateService
         }
     }
 
-    private static void CopyDirectory(string sourceDirectory, string destinationDirectory, CancellationToken cancellationToken)
+    private static void CopyDirectory(string sourceDirectory, string destinationDirectory,
+        CancellationToken cancellationToken)
     {
         var pending = new Stack<string>();
         pending.Push(sourceDirectory);
@@ -569,42 +478,36 @@ public sealed class ModUpdateService
         while (pending.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string current = pending.Pop();
-            string relative = Path.GetRelativePath(sourceDirectory, current);
-            string target = relative == "." ? destinationDirectory : Path.Combine(destinationDirectory, relative);
+            var current = pending.Pop();
+            var relative = Path.GetRelativePath(sourceDirectory, current);
+            var target = relative == "." ? destinationDirectory : Path.Combine(destinationDirectory, relative);
 
             Directory.CreateDirectory(target);
 
-            foreach (string file in Directory.GetFiles(current))
+            foreach (var file in Directory.GetFiles(current))
             {
-                string fileRelative = Path.GetRelativePath(sourceDirectory, file);
-                string targetFile = Path.Combine(destinationDirectory, fileRelative);
+                var fileRelative = Path.GetRelativePath(sourceDirectory, file);
+                var targetFile = Path.Combine(destinationDirectory, fileRelative);
                 Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
                 File.Copy(file, targetFile, true);
             }
 
-            foreach (string directory in Directory.GetDirectories(current))
-            {
-                pending.Push(directory);
-            }
+            foreach (var directory in Directory.GetDirectories(current)) pending.Push(directory);
         }
     }
 
     private static string CreateTemporaryDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "IMM", Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(Path.GetTempPath(), "IMM", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }
 
     private static string CreateUniquePath(string basePath, string suffix)
     {
-        string candidate = basePath + suffix;
-        int counter = 1;
-        while (File.Exists(candidate) || Directory.Exists(candidate))
-        {
-            candidate = basePath + suffix + counter++;
-        }
+        var candidate = basePath + suffix;
+        var counter = 1;
+        while (File.Exists(candidate) || Directory.Exists(candidate)) candidate = basePath + suffix + counter++;
 
         return candidate;
     }
@@ -613,16 +516,10 @@ public sealed class ModUpdateService
     {
         try
         {
-            if (string.Equals(sourcePath, cachePath, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
+            if (string.Equals(sourcePath, cachePath, StringComparison.OrdinalIgnoreCase)) return;
 
-            string? directory = Path.GetDirectoryName(cachePath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
+            var directory = Path.GetDirectoryName(cachePath);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
 
             File.Copy(sourcePath, cachePath, true);
         }
@@ -637,13 +534,8 @@ public sealed class ModUpdateService
         try
         {
             if (File.Exists(path))
-            {
                 File.Delete(path);
-            }
-            else if (Directory.Exists(path))
-            {
-                Directory.Delete(path, true);
-            }
+            else if (Directory.Exists(path)) Directory.Delete(path, true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -653,17 +545,11 @@ public sealed class ModUpdateService
 
     private static void TryRestoreDirectoryBackup(string backupPath, string targetPath)
     {
-        if (!Directory.Exists(backupPath))
-        {
-            return;
-        }
+        if (!Directory.Exists(backupPath)) return;
 
         try
         {
-            if (Directory.Exists(targetPath))
-            {
-                Directory.Delete(targetPath, true);
-            }
+            if (Directory.Exists(targetPath)) Directory.Delete(targetPath, true);
 
             Directory.Move(backupPath, targetPath);
         }
@@ -677,6 +563,8 @@ public sealed class ModUpdateService
     {
         progress?.Report(new ModUpdateProgress(stage, message));
     }
+
+    private sealed record DownloadResult(string Path, bool IsTemporary, string? CachePath, bool IsCacheHit);
 }
 
 public sealed record ModUpdateDescriptor(
@@ -704,4 +592,3 @@ public enum ModUpdateStage
     Replacing,
     Completed
 }
-

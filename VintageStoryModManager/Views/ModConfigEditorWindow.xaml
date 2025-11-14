@@ -4,7 +4,6 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:viewModels="clr-namespace:VintageStoryModManager.ViewModels"
-        xmlns:ui="http://schemas.modernwpf.com/2019"
         mc:Ignorable="d"
         Title="{Binding WindowTitle}"
         Height="520"
@@ -29,7 +28,8 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border BorderBrush="{DynamicResource Brush.Border.Default}" BorderThickness="1" CornerRadius="10" Background="{DynamicResource Brush.Panel.Primary.Background.Solid}" Padding="4">
+        <Border BorderBrush="{DynamicResource Brush.Border.Default}" BorderThickness="1" CornerRadius="10"
+                Background="{DynamicResource Brush.Panel.Primary.Background.Solid}" Padding="4">
             <Border.Effect>
                 <DropShadowEffect BlurRadius="16"
                                   Direction="270"
@@ -37,7 +37,8 @@
                                   Opacity="0.16"
                                   Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
             </Border.Effect>
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="Transparent">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                          Background="Transparent">
                 <TreeView ItemsSource="{Binding RootNodes}"
                           PreviewMouseWheel="TreeView_OnPreviewMouseWheel"
                           Grid.IsSharedSizeScope="True"
@@ -55,11 +56,14 @@
                                     <Style TargetType="Border">
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Hover}" />
+                                                <Setter Property="Background"
+                                                        Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Hover}" />
                                             </Trigger>
-                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
-                                                         Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Selected}" />
+                                            <DataTrigger
+                                                Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                                                Value="True">
+                                                <Setter Property="Background"
+                                                        Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Selected}" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -71,9 +75,11 @@
                                            IsHitTestVisible="False" />
                             </Border>
                             <HierarchicalDataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
-                                             Value="True">
-                                    <Setter TargetName="ObjectHeaderText" Property="Foreground" Value="{DynamicResource Brush.Text.SelectionForeground}" />
+                                <DataTrigger
+                                    Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                                    Value="True">
+                                    <Setter TargetName="ObjectHeaderText" Property="Foreground"
+                                            Value="{DynamicResource Brush.Text.SelectionForeground}" />
                                 </DataTrigger>
                             </HierarchicalDataTemplate.Triggers>
                         </HierarchicalDataTemplate>
@@ -87,11 +93,14 @@
                                     <Style TargetType="Border">
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource Brush.ModConfig.Value.Background.Hover}" />
+                                                <Setter Property="Background"
+                                                        Value="{DynamicResource Brush.ModConfig.Value.Background.Hover}" />
                                             </Trigger>
-                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
-                                                         Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Selected}" />
+                                            <DataTrigger
+                                                Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                                                Value="True">
+                                                <Setter Property="Background"
+                                                        Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Selected}" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -122,9 +131,11 @@
                                 </StackPanel>
                             </Border>
                             <HierarchicalDataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
-                                             Value="True">
-                                    <Setter TargetName="ArrayHeaderText" Property="Foreground" Value="{DynamicResource Brush.Text.SelectionForeground}" />
+                                <DataTrigger
+                                    Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                                    Value="True">
+                                    <Setter TargetName="ArrayHeaderText" Property="Foreground"
+                                            Value="{DynamicResource Brush.Text.SelectionForeground}" />
                                 </DataTrigger>
                             </HierarchicalDataTemplate.Triggers>
                         </HierarchicalDataTemplate>
@@ -137,11 +148,14 @@
                                     <Style TargetType="Border">
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource Brush.ModConfig.Value.Background.Hover}" />
+                                                <Setter Property="Background"
+                                                        Value="{DynamicResource Brush.ModConfig.Value.Background.Hover}" />
                                             </Trigger>
-                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
-                                                         Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource Brush.ModConfig.Value.Background.Selected}" />
+                                            <DataTrigger
+                                                Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                                                Value="True">
+                                                <Setter Property="Background"
+                                                        Value="{DynamicResource Brush.ModConfig.Value.Background.Selected}" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -182,7 +196,8 @@
                                                   IsChecked="{Binding BooleanValue, Mode=TwoWay}"
                                                   Visibility="Collapsed">
                                         <ToggleButton.Style>
-                                            <Style TargetType="ToggleButton" BasedOn="{StaticResource IMM.ToggleButtonBaseStyle}">
+                                            <Style TargetType="ToggleButton"
+                                                   BasedOn="{StaticResource IMM.ToggleButtonBaseStyle}">
                                                 <Setter Property="Content" Value="Off" />
                                                 <Setter Property="Padding" Value="12,2" />
                                                 <Style.Triggers>
@@ -214,7 +229,8 @@
                        VerticalAlignment="Center"
                        Margin="0,0,16,0"
                        TextTrimming="CharacterEllipsis" />
-            <StackPanel x:Name="ActionButtonsPanel" Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+            <StackPanel x:Name="ActionButtonsPanel" Orientation="Horizontal" HorizontalAlignment="Right"
+                        DockPanel.Dock="Right">
                 <Button Content="Browse..."
                         Width="110"
                         Margin="0,0,8,0"

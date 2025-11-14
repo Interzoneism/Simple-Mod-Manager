@@ -1,15 +1,10 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Windows;
 
 namespace VintageStoryModManager.Views;
 
 public partial class BulkUpdateChangelogWindow : Window
 {
-    public sealed record BulkUpdateChangelogItem(string Title, string Changelog);
-
     public BulkUpdateChangelogWindow(IEnumerable<BulkUpdateChangelogItem> items)
     {
         InitializeComponent();
@@ -25,4 +20,6 @@ public partial class BulkUpdateChangelogWindow : Window
         DialogResult = true;
         Close();
     }
+
+    public sealed record BulkUpdateChangelogItem(string Title, string Changelog);
 }

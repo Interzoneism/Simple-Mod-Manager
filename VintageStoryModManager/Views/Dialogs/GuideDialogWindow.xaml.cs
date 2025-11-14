@@ -1,12 +1,8 @@
-using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Documents;
-using System.Windows.Media;
 using System.Windows.Navigation;
-using VintageStoryModManager.Services;
-
 using WpfMessageBox = VintageStoryModManager.Services.ModManagerMessageBox;
 
 namespace VintageStoryModManager.Views.Dialogs;
@@ -16,57 +12,21 @@ public partial class GuideDialogWindow : Window
     public GuideDialogWindow(string managerDirectory, string? cachedModsDirectory, string configurationFilePath)
     {
         InitializeComponent();
-
-        ConfigureHyperlink(ManagerFolderHyperlink, managerDirectory, ensureDirectory: true);
-        ConfigureHyperlink(CachedModsHyperlink, cachedModsDirectory, ensureDirectory: true);
-        ConfigureHyperlink(ConfigurationFileHyperlink, Path.GetDirectoryName(configurationFilePath), ensureDirectory: true);
-    }
-
-    private void ConfigureHyperlink(Hyperlink hyperlink, string? path, bool ensureDirectory)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            hyperlink.IsEnabled = false;
-            hyperlink.Tag = null;
-            hyperlink.NavigateUri = null;
-            hyperlink.ToolTip = "Location not available";
-            hyperlink.Foreground = System.Windows.SystemColors.GrayTextBrush;
-            hyperlink.TextDecorations = null;
-            return;
-        }
-
-        if (ensureDirectory)
-        {
-            try
-            {
-                Directory.CreateDirectory(path);
-            }
-            catch (Exception)
-            {
-                // Ignore failures; the navigation handler will surface errors if needed.
-            }
-        }
-
-        hyperlink.Tag = path;
-        hyperlink.NavigateUri = TryCreateUri(path);
-        hyperlink.ToolTip = path;
     }
 
     private static Uri? TryCreateUri(string path)
     {
-        return Uri.TryCreate(path, UriKind.Absolute, out Uri? uri) ? uri : null;
+        return Uri.TryCreate(path, UriKind.Absolute, out var uri) ? uri : null;
     }
 
     private void OnHyperlinkRequestNavigate(object sender, RequestNavigateEventArgs e)
     {
         e.Handled = true;
 
-        if (sender is not Hyperlink hyperlink || hyperlink.Tag is not string target || string.IsNullOrWhiteSpace(target))
-        {
-            return;
-        }
+        if (sender is not Hyperlink hyperlink || hyperlink.Tag is not string target ||
+            string.IsNullOrWhiteSpace(target)) return;
 
-        string? destination = ResolveDestinationPath(target);
+        var destination = ResolveDestinationPath(target);
         if (destination is null)
         {
             WpfMessageBox.Show(this,
@@ -97,16 +57,10 @@ public partial class GuideDialogWindow : Window
 
     private static string? ResolveDestinationPath(string path)
     {
-        if (Directory.Exists(path) || File.Exists(path))
-        {
-            return path;
-        }
+        if (Directory.Exists(path) || File.Exists(path)) return path;
 
-        string? directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
-        {
-            return directory;
-        }
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory)) return directory;
 
         return null;
     }

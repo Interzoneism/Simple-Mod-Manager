@@ -1,4 +1,4 @@
-using System;
+using System.Globalization;
 
 namespace VintageStoryModManager.Services;
 
@@ -18,14 +18,14 @@ public readonly struct ModUsageTrackingKey : IEquatable<ModUsageTrackingKey>
     public string GameVersion { get; }
 
     public bool IsValid => !string.IsNullOrEmpty(ModId)
-        && !string.IsNullOrEmpty(ModVersion)
-        && !string.IsNullOrEmpty(GameVersion);
+                           && !string.IsNullOrEmpty(ModVersion)
+                           && !string.IsNullOrEmpty(GameVersion);
 
     public bool Equals(ModUsageTrackingKey other)
     {
         return string.Equals(ModId, other.ModId, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(ModVersion, other.ModVersion, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(GameVersion, other.GameVersion, StringComparison.OrdinalIgnoreCase);
+               && string.Equals(ModVersion, other.ModVersion, StringComparison.OrdinalIgnoreCase)
+               && string.Equals(GameVersion, other.GameVersion, StringComparison.OrdinalIgnoreCase);
     }
 
     public override bool Equals(object? obj)
@@ -44,7 +44,7 @@ public readonly struct ModUsageTrackingKey : IEquatable<ModUsageTrackingKey>
     public override string ToString()
     {
         return string.Format(
-            System.Globalization.CultureInfo.InvariantCulture,
+            CultureInfo.InvariantCulture,
             "{0} | {1} | {2}",
             ModId,
             ModVersion,

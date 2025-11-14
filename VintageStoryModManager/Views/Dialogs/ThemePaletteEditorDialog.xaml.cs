@@ -1,8 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -38,18 +36,14 @@ public partial class ThemePaletteEditorDialog : Window
     {
         PaletteItems.Clear();
 
-        foreach (var pair in _configuration.GetThemePaletteColors().OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
-        {
+        foreach (var pair in _configuration.GetThemePaletteColors()
+                     .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
             PaletteItems.Add(new PaletteColorEntry(pair.Key, pair.Value, PickColor));
-        }
     }
 
     private void PickColor(PaletteColorEntry? entry)
     {
-        if (entry is null)
-        {
-            return;
-        }
+        if (entry is null) return;
 
         using var dialog = new FormsColorDialog
         {
@@ -57,23 +51,18 @@ public partial class ThemePaletteEditorDialog : Window
             AnyColor = true
         };
 
-        if (TryParseColor(entry.HexValue, out Color currentColor))
-        {
+        if (TryParseColor(entry.HexValue, out var currentColor))
             dialog.Color = DrawingColor.FromArgb(currentColor.A, currentColor.R, currentColor.G, currentColor.B);
-        }
 
-        IntPtr ownerHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        FormsDialogResult result = ownerHandle != IntPtr.Zero
+        var ownerHandle = new WindowInteropHelper(this).Handle;
+        var result = ownerHandle != IntPtr.Zero
             ? dialog.ShowDialog(new Win32Window(ownerHandle))
             : dialog.ShowDialog();
 
-        if (result != FormsDialogResult.OK)
-        {
-            return;
-        }
+        if (result != FormsDialogResult.OK) return;
 
-        DrawingColor selected = dialog.Color;
-        string hex = $"#{selected.A:X2}{selected.R:X2}{selected.G:X2}{selected.B:X2}";
+        var selected = dialog.Color;
+        var hex = $"#{selected.A:X2}{selected.R:X2}{selected.G:X2}{selected.B:X2}";
 
         ApplyPaletteEntry(entry, hex);
     }
@@ -97,7 +86,7 @@ public partial class ThemePaletteEditorDialog : Window
 
     private void ApplyTheme()
     {
-        IReadOnlyDictionary<string, string> palette = _configuration.GetThemePaletteColors();
+        var palette = _configuration.GetThemePaletteColors();
         App.ApplyTheme(_configuration.ColorTheme, palette.Count > 0 ? palette : null);
     }
 
@@ -105,14 +94,11 @@ public partial class ThemePaletteEditorDialog : Window
     {
         color = default;
 
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(value)) return false;
 
         try
         {
-            object? converted = MediaColorConverter.ConvertFromString(value);
+            var converted = MediaColorConverter.ConvertFromString(value);
             if (converted is Color parsed)
             {
                 color = parsed;
@@ -153,8 +139,8 @@ public partial class ThemePaletteEditorDialog : Window
 public sealed class PaletteColorEntry : ObservableObject
 {
     private readonly Action<PaletteColorEntry> _selectColorAction;
-    private MediaBrush _previewBrush;
     private string _hexValue;
+    private MediaBrush _previewBrush;
 
     public PaletteColorEntry(string key, string hexValue, Action<PaletteColorEntry> selectColorAction)
     {
@@ -193,7 +179,7 @@ public sealed class PaletteColorEntry : ObservableObject
     {
         try
         {
-            object? converted = MediaColorConverter.ConvertFromString(hexValue);
+            var converted = MediaColorConverter.ConvertFromString(hexValue);
             if (converted is Color color)
             {
                 var brush = new SolidColorBrush(color);

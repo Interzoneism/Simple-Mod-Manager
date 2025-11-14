@@ -1,9 +1,7 @@
-using System;
-
 namespace VintageStoryModManager.Models;
 
 /// <summary>
-/// Represents a modlist entry stored in the global cloud registry.
+///     Represents a modlist entry stored in the global cloud registry.
 /// </summary>
 public sealed class CloudModlistRegistryEntry
 {

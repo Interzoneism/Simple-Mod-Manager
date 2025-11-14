@@ -1,10 +1,9 @@
-using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace VintageStoryModManager.ViewModels;
 
 /// <summary>
-/// Represents a selectable tag filter option.
+///     Represents a selectable tag filter option.
 /// </summary>
 public sealed class TagFilterOptionViewModel : ObservableObject
 {
@@ -13,9 +12,7 @@ public sealed class TagFilterOptionViewModel : ObservableObject
     public TagFilterOptionViewModel(string name, bool isSelected = false)
     {
         if (string.IsNullOrWhiteSpace(name))
-        {
             throw new ArgumentException("Tag name cannot be null or whitespace.", nameof(name));
-        }
 
         Name = name.Trim();
         _isSelected = isSelected;

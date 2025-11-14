@@ -1,32 +1,22 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
 namespace VintageStoryModManager.Services;
 
 /// <summary>
-/// Provides helpers for locating and naming cached mod archives.
+///     Provides helpers for locating and naming cached mod archives.
 /// </summary>
 internal static class ModCacheLocator
 {
     public static string? GetManagerDataDirectory()
     {
-        string path = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var path = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (string.IsNullOrWhiteSpace(path))
-        {
             path = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        }
 
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            path = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        }
+        if (string.IsNullOrWhiteSpace(path)) path = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            path = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
-        }
+        if (string.IsNullOrWhiteSpace(path)) path = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
 
         return string.IsNullOrWhiteSpace(path)
             ? null
@@ -35,7 +25,7 @@ internal static class ModCacheLocator
 
     public static string? GetCachedModsDirectory()
     {
-        string? managerDirectory = GetManagerDataDirectory();
+        var managerDirectory = GetManagerDataDirectory();
         return managerDirectory is null
             ? null
             : Path.Combine(managerDirectory, "Cached Mods");
@@ -43,19 +33,16 @@ internal static class ModCacheLocator
 
     public static string? GetModCacheDirectory(string modId)
     {
-        string? cachedModsDirectory = GetCachedModsDirectory();
-        if (string.IsNullOrWhiteSpace(cachedModsDirectory))
-        {
-            return null;
-        }
+        var cachedModsDirectory = GetCachedModsDirectory();
+        if (string.IsNullOrWhiteSpace(cachedModsDirectory)) return null;
 
-        string directoryName = SanitizeFileName(modId, "mod");
+        var directoryName = SanitizeFileName(modId, "mod");
         return Path.Combine(cachedModsDirectory, directoryName);
     }
 
     public static string? GetModDatabaseCacheDirectory()
     {
-        string? managerDirectory = GetManagerDataDirectory();
+        var managerDirectory = GetManagerDataDirectory();
         return managerDirectory is null
             ? null
             : Path.Combine(managerDirectory, "Mod Database Cache");
@@ -63,42 +50,31 @@ internal static class ModCacheLocator
 
     public static string? GetModCachePath(string modId, string? version, string? fileName)
     {
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(version)) return null;
 
-        string? modCacheDirectory = GetModCacheDirectory(modId);
-        if (string.IsNullOrWhiteSpace(modCacheDirectory))
-        {
-            return null;
-        }
+        var modCacheDirectory = GetModCacheDirectory(modId);
+        if (string.IsNullOrWhiteSpace(modCacheDirectory)) return null;
 
-        string versionSegment = SanitizeFileName(version!, "version");
-        string versionDirectory = Path.Combine(modCacheDirectory, versionSegment);
-        string cacheFileName = SanitizeCacheFileName(fileName, modId, versionSegment);
+        var versionSegment = SanitizeFileName(version!, "version");
+        var versionDirectory = Path.Combine(modCacheDirectory, versionSegment);
+        var cacheFileName = SanitizeCacheFileName(fileName, modId, versionSegment);
 
         return Path.Combine(versionDirectory, cacheFileName);
     }
 
-    public static bool TryLocateCachedModFile(string modId, string? version, string? fileName, out string? cacheFilePath)
+    public static bool TryLocateCachedModFile(string modId, string? version, string? fileName,
+        out string? cacheFilePath)
     {
         cacheFilePath = null;
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(version)) return false;
 
-        string? modCacheDirectory = GetModCacheDirectory(modId);
-        if (string.IsNullOrWhiteSpace(modCacheDirectory))
-        {
-            return false;
-        }
+        var modCacheDirectory = GetModCacheDirectory(modId);
+        if (string.IsNullOrWhiteSpace(modCacheDirectory)) return false;
 
-        string versionSegment = SanitizeFileName(version!, "version");
-        string versionDirectory = Path.Combine(modCacheDirectory, versionSegment);
-        string preferredFileName = SanitizeCacheFileName(fileName, modId, versionSegment);
-        string preferredPath = Path.Combine(versionDirectory, preferredFileName);
+        var versionSegment = SanitizeFileName(version!, "version");
+        var versionDirectory = Path.Combine(modCacheDirectory, versionSegment);
+        var preferredFileName = SanitizeCacheFileName(fileName, modId, versionSegment);
+        var preferredPath = Path.Combine(versionDirectory, preferredFileName);
 
         if (File.Exists(preferredPath))
         {
@@ -107,10 +83,9 @@ internal static class ModCacheLocator
         }
 
         if (Directory.Exists(versionDirectory))
-        {
             try
             {
-                foreach (string file in Directory.EnumerateFiles(versionDirectory, "*", SearchOption.TopDirectoryOnly))
+                foreach (var file in Directory.EnumerateFiles(versionDirectory, "*", SearchOption.TopDirectoryOnly))
                 {
                     cacheFilePath = file;
                     return true;
@@ -120,9 +95,8 @@ internal static class ModCacheLocator
             {
                 // Ignore enumeration failures.
             }
-        }
 
-        string? legacyPath = GetLegacyModCachePath(modCacheDirectory, versionSegment, fileName);
+        var legacyPath = GetLegacyModCachePath(modCacheDirectory, versionSegment, fileName);
         if (legacyPath is not null && File.Exists(legacyPath))
         {
             cacheFilePath = legacyPath;
@@ -134,36 +108,21 @@ internal static class ModCacheLocator
 
     public static bool TryPromoteLegacyCacheFile(string modId, string? version, string? fileName, string targetPath)
     {
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(version)) return false;
 
-        string? modCacheDirectory = GetModCacheDirectory(modId);
-        if (string.IsNullOrWhiteSpace(modCacheDirectory))
-        {
-            return false;
-        }
+        var modCacheDirectory = GetModCacheDirectory(modId);
+        if (string.IsNullOrWhiteSpace(modCacheDirectory)) return false;
 
-        string versionSegment = SanitizeFileName(version!, "version");
-        string? legacyPath = GetLegacyModCachePath(modCacheDirectory, versionSegment, fileName);
-        if (legacyPath is null || !File.Exists(legacyPath))
-        {
-            return false;
-        }
+        var versionSegment = SanitizeFileName(version!, "version");
+        var legacyPath = GetLegacyModCachePath(modCacheDirectory, versionSegment, fileName);
+        if (legacyPath is null || !File.Exists(legacyPath)) return false;
 
-        if (string.Equals(legacyPath, targetPath, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
+        if (string.Equals(legacyPath, targetPath, StringComparison.OrdinalIgnoreCase)) return true;
 
         try
         {
-            string? directory = Path.GetDirectoryName(targetPath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
+            var directory = Path.GetDirectoryName(targetPath);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
 
             File.Move(legacyPath, targetPath);
             return true;
@@ -176,11 +135,8 @@ internal static class ModCacheLocator
 
     public static IEnumerable<string> EnumerateCachedFiles(string modId)
     {
-        string? cacheDirectory = GetModCacheDirectory(modId);
-        if (string.IsNullOrWhiteSpace(cacheDirectory))
-        {
-            yield break;
-        }
+        var cacheDirectory = GetModCacheDirectory(modId);
+        if (string.IsNullOrWhiteSpace(cacheDirectory)) yield break;
 
         var yielded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -194,7 +150,7 @@ internal static class ModCacheLocator
             versionDirectories = Array.Empty<string>();
         }
 
-        foreach (string versionDirectory in versionDirectories)
+        foreach (var versionDirectory in versionDirectories)
         {
             IEnumerable<string> versionFiles;
             try
@@ -206,13 +162,9 @@ internal static class ModCacheLocator
                 continue;
             }
 
-            foreach (string file in versionFiles)
-            {
+            foreach (var file in versionFiles)
                 if (yielded.Add(file))
-                {
                     yield return file;
-                }
-            }
         }
 
         IEnumerable<string> legacyFiles;
@@ -225,37 +177,24 @@ internal static class ModCacheLocator
             yield break;
         }
 
-        foreach (string file in legacyFiles)
-        {
+        foreach (var file in legacyFiles)
             if (yielded.Add(file))
-            {
                 yield return file;
-            }
-        }
     }
 
     public static string SanitizeFileName(string? input, string fallback)
     {
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            return fallback;
-        }
+        if (string.IsNullOrWhiteSpace(input)) return fallback;
 
-        char[] invalidChars = Path.GetInvalidFileNameChars();
+        var invalidChars = Path.GetInvalidFileNameChars();
         var builder = new StringBuilder(input.Length);
-        foreach (char c in input)
-        {
+        foreach (var c in input)
             if (Array.IndexOf(invalidChars, c) >= 0)
-            {
                 builder.Append('_');
-            }
             else
-            {
                 builder.Append(c);
-            }
-        }
 
-        string sanitized = builder.ToString().Trim();
+        var sanitized = builder.ToString().Trim();
         return string.IsNullOrEmpty(sanitized) ? fallback : sanitized;
     }
 
@@ -263,13 +202,10 @@ internal static class ModCacheLocator
     {
         if (!string.IsNullOrWhiteSpace(fileName))
         {
-            string sanitized = ReplaceInvalidCacheFileCharacters(fileName);
+            var sanitized = ReplaceInvalidCacheFileCharacters(fileName);
             if (!string.IsNullOrWhiteSpace(sanitized))
             {
-                if (string.IsNullOrWhiteSpace(Path.GetExtension(sanitized)))
-                {
-                    sanitized += ".zip";
-                }
+                if (string.IsNullOrWhiteSpace(Path.GetExtension(sanitized))) sanitized += ".zip";
 
                 return sanitized;
             }
@@ -280,30 +216,24 @@ internal static class ModCacheLocator
 
     private static string BuildFallbackFileName(string modId, string versionSegment)
     {
-        string safeModId = SanitizeFileName(modId, "mod");
+        var safeModId = SanitizeFileName(modId, "mod");
         return string.Concat(safeModId, '-', versionSegment, ".zip");
     }
 
     private static string ReplaceInvalidCacheFileCharacters(string value)
     {
-        char[] invalidChars = Path.GetInvalidFileNameChars();
+        var invalidChars = Path.GetInvalidFileNameChars();
         var builder = new StringBuilder(value.Length);
-        foreach (char c in value.Trim())
-        {
-            builder.Append(Array.IndexOf(invalidChars, c) >= 0 ? '_' : c);
-        }
+        foreach (var c in value.Trim()) builder.Append(Array.IndexOf(invalidChars, c) >= 0 ? '_' : c);
 
-        string sanitized = builder.ToString().TrimEnd('.');
+        var sanitized = builder.ToString().TrimEnd('.');
         return string.IsNullOrWhiteSpace(sanitized) ? string.Empty : sanitized;
     }
 
     private static string? GetLegacyModCachePath(string modCacheDirectory, string versionSegment, string? fileName)
     {
-        string extension = string.IsNullOrWhiteSpace(fileName) ? ".zip" : Path.GetExtension(fileName);
-        if (string.IsNullOrWhiteSpace(extension))
-        {
-            extension = ".zip";
-        }
+        var extension = string.IsNullOrWhiteSpace(fileName) ? ".zip" : Path.GetExtension(fileName);
+        if (string.IsNullOrWhiteSpace(extension)) extension = ".zip";
 
         return Path.Combine(modCacheDirectory, versionSegment + extension);
     }

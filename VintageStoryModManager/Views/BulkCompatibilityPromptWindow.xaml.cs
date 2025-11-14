@@ -1,11 +1,11 @@
-using System;
 using System.Windows;
 
 namespace VintageStoryModManager.Views;
 
 public partial class BulkCompatibilityPromptWindow : Window
 {
-    public BulkCompatibilityPromptWindow(string message, string latestVersion, string? compatibleVersion, bool hasCompatible)
+    public BulkCompatibilityPromptWindow(string message, string latestVersion, string? compatibleVersion,
+        bool hasCompatible)
     {
         InitializeComponent();
 
@@ -18,14 +18,15 @@ public partial class BulkCompatibilityPromptWindow : Window
             ? "Install latest release for all mods"
             : $"Install latest release for all mods ({latestVersion})";
 
-        bool showCompatible = hasCompatible
-            && !string.IsNullOrWhiteSpace(compatibleVersion)
-            && !string.Equals(latestVersion, compatibleVersion, StringComparison.OrdinalIgnoreCase);
+        var showCompatible = hasCompatible
+                             && !string.IsNullOrWhiteSpace(compatibleVersion)
+                             && !string.Equals(latestVersion, compatibleVersion, StringComparison.OrdinalIgnoreCase);
 
         if (showCompatible)
         {
             InstallCompatibleButton.Content = $"Install latest compatible version ({compatibleVersion})";
-            InstallCompatibleAllButton.Content = $"Install latest compatible version for all mods ({compatibleVersion})";
+            InstallCompatibleAllButton.Content =
+                $"Install latest compatible version for all mods ({compatibleVersion})";
             InstallCompatibleButton.Visibility = Visibility.Visible;
             InstallCompatibleAllButton.Visibility = Visibility.Visible;
         }

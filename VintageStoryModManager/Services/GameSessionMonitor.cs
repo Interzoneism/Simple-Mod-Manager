@@ -1,49 +1,25 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Windows.Threading;
 
 namespace VintageStoryModManager.Services;
 
 /// <summary>
-/// Monitors Vintage Story log files to detect long-running game sessions.
+///     Monitors Vintage Story log files to detect long-running game sessions.
 /// </summary>
 public sealed class GameSessionMonitor : IDisposable
 {
-    private enum LogCategory
-    {
-        Client,
-        Server
-    }
-
-    private sealed class LogTailState
-    {
-        public LogTailState(long initialPosition)
-        {
-            Position = initialPosition < 0 ? 0 : initialPosition;
-        }
-
-        public long Position { get; set; }
-
-        public object SyncRoot { get; } = new();
-
-        public string? FirstLineReference { get; set; }
-
-        public bool HasProcessedReference { get; set; }
-    }
-
     private static readonly TimeSpan MinimumSessionDuration = DevConfig.MinimumSessionDuration;
 
-    private static readonly Regex VintageStoryTimestampRegex = new(@"^(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})", RegexOptions.Compiled);
+    private static readonly Regex VintageStoryTimestampRegex =
+        new(@"^(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})", RegexOptions.Compiled);
 
-    private static readonly Regex Iso8601TimestampRegex = new(@"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})", RegexOptions.Compiled);
+    private static readonly Regex Iso8601TimestampRegex =
+        new(@"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})", RegexOptions.Compiled);
 
     private static readonly string[] ClientStartMarkers =
     {
@@ -60,20 +36,21 @@ public sealed class GameSessionMonitor : IDisposable
         "server shutting down"
     };
 
-    private readonly string _logsDirectory;
-    private readonly Dispatcher _dispatcher;
-    private readonly UserConfigurationService _configuration;
     private readonly Func<IReadOnlyList<ModUsageTrackingEntry>> _activeModProvider;
+    private readonly UserConfigurationService _configuration;
+    private readonly Dispatcher _dispatcher;
+
+    private readonly string _logsDirectory;
     private readonly ConcurrentDictionary<string, LogTailState> _logStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _sessionLock = new();
 
     private FileSystemWatcher? _clientWatcher;
-    private FileSystemWatcher? _serverWatcher;
-    private bool _sessionActive;
-    private DateTimeOffset _sessionStartUtc;
-    private List<ModUsageTrackingEntry> _sessionModEntries = new();
     private bool _disposed;
     private bool _lastPromptState;
+    private FileSystemWatcher? _serverWatcher;
+    private bool _sessionActive;
+    private List<ModUsageTrackingEntry> _sessionModEntries = new();
+    private DateTimeOffset _sessionStartUtc;
 
     public GameSessionMonitor(
         string logsDirectory,
@@ -103,14 +80,9 @@ public sealed class GameSessionMonitor : IDisposable
         _lastPromptState = _configuration.HasPendingModUsagePrompt;
     }
 
-    public event EventHandler? PromptRequired;
-
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
 
         _disposed = true;
         _clientWatcher?.Dispose();
@@ -118,6 +90,8 @@ public sealed class GameSessionMonitor : IDisposable
         _serverWatcher?.Dispose();
         _serverWatcher = null;
     }
+
+    public event EventHandler? PromptRequired;
 
     public void RefreshPromptState()
     {
@@ -180,10 +154,7 @@ public sealed class GameSessionMonitor : IDisposable
     {
         try
         {
-            foreach (string path in EnumerateCategoryFiles(category))
-            {
-                EnsureLogState(path);
-            }
+            foreach (var path in EnumerateCategoryFiles(category)) EnsureLogState(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -195,67 +166,45 @@ public sealed class GameSessionMonitor : IDisposable
 
     private IEnumerable<string> EnumerateCategoryFiles(LogCategory category)
     {
-        string prefix = category == LogCategory.Client ? "client-main" : "server-main";
+        var prefix = category == LogCategory.Client ? "client-main" : "server-main";
 
         IEnumerable<string> Enumerate(string pattern)
         {
             return Directory.EnumerateFiles(_logsDirectory, pattern, SearchOption.TopDirectoryOnly);
         }
 
-        foreach (string file in Enumerate(prefix + "*.log"))
-        {
-            yield return file;
-        }
+        foreach (var file in Enumerate(prefix + "*.log")) yield return file;
 
-        foreach (string file in Enumerate(prefix + "*.txt"))
-        {
-            yield return file;
-        }
+        foreach (var file in Enumerate(prefix + "*.txt")) yield return file;
 
-        foreach (string file in Enumerate(prefix + "*.json"))
-        {
-            yield return file;
-        }
+        foreach (var file in Enumerate(prefix + "*.json")) yield return file;
     }
 
     private void HandleLogEvent(string? path, LogCategory category)
     {
-        if (_disposed || string.IsNullOrWhiteSpace(path))
-        {
-            return;
-        }
+        if (_disposed || string.IsNullOrWhiteSpace(path)) return;
 
         _ = Task.Run(() => ProcessLogChangesAsync(category, path));
     }
 
     private void RemoveLogState(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(path)) return;
 
         _logStates.TryRemove(Path.GetFullPath(path), out _);
     }
 
     private async Task ProcessLogChangesAsync(LogCategory category, string path)
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
 
-        string fullPath = Path.GetFullPath(path);
-        if (!IsSupportedLog(fullPath))
-        {
-            return;
-        }
+        var fullPath = Path.GetFullPath(path);
+        if (!IsSupportedLog(fullPath)) return;
 
-        LogTailState state = EnsureLogState(fullPath);
-        string? currentFirstLine = TryReadFirstLine(fullPath);
+        var state = EnsureLogState(fullPath);
+        var currentFirstLine = TryReadFirstLine(fullPath);
 
         if (currentFirstLine is not null)
-        {
             lock (state.SyncRoot)
             {
                 if (!string.Equals(state.FirstLineReference, currentFirstLine, StringComparison.Ordinal))
@@ -269,7 +218,6 @@ public sealed class GameSessionMonitor : IDisposable
                     return;
                 }
             }
-        }
 
         var newLines = new List<string>();
         try
@@ -277,30 +225,18 @@ public sealed class GameSessionMonitor : IDisposable
             using FileStream stream = new(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             lock (state.SyncRoot)
             {
-                if (state.Position > stream.Length)
-                {
-                    state.Position = 0;
-                }
+                if (state.Position > stream.Length) state.Position = 0;
 
-                if (stream.Length == state.Position)
-                {
-                    return;
-                }
+                if (stream.Length == state.Position) return;
 
                 stream.Seek(state.Position, SeekOrigin.Begin);
-                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096, leaveOpen: true);
+                using var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, true);
                 while (!reader.EndOfStream)
                 {
-                    string? line = reader.ReadLine();
-                    if (line is null)
-                    {
-                        break;
-                    }
+                    var line = reader.ReadLine();
+                    if (line is null) break;
 
-                    if (line.Length > 0)
-                    {
-                        newLines.Add(line);
-                    }
+                    if (line.Length > 0) newLines.Add(line);
                 }
 
                 state.Position = stream.Position;
@@ -315,33 +251,29 @@ public sealed class GameSessionMonitor : IDisposable
             return;
         }
 
-        foreach (string line in newLines)
+        foreach (var line in newLines)
         {
-            bool recorded = await HandleLogLineAsync(category, line, state).ConfigureAwait(false);
-            if (recorded)
-            {
-                break;
-            }
+            var recorded = await HandleLogLineAsync(category, line, state).ConfigureAwait(false);
+            if (recorded) break;
         }
     }
+
     private static bool IsSupportedLog(string path)
     {
-        string extension = Path.GetExtension(path);
+        var extension = Path.GetExtension(path);
         if (!extension.Equals(".log", StringComparison.OrdinalIgnoreCase)
             && !extension.Equals(".txt", StringComparison.OrdinalIgnoreCase)
             && !extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
-        {
             return false;
-        }
 
-        string fileName = Path.GetFileName(path);
+        var fileName = Path.GetFileName(path);
         return fileName.Contains("client-main", StringComparison.OrdinalIgnoreCase)
-            || fileName.Contains("server-main", StringComparison.OrdinalIgnoreCase);
+               || fileName.Contains("server-main", StringComparison.OrdinalIgnoreCase);
     }
 
     private LogTailState EnsureLogState(string path)
     {
-        string fullPath = Path.GetFullPath(path);
+        var fullPath = Path.GetFullPath(path);
         return _logStates.GetOrAdd(fullPath, CreateInitialLogState);
     }
 
@@ -367,19 +299,13 @@ public sealed class GameSessionMonitor : IDisposable
         try
         {
             using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            using var reader = new StreamReader(stream, Encoding.UTF8, true);
             while (!reader.EndOfStream)
             {
-                string? line = reader.ReadLine();
-                if (line is null)
-                {
-                    break;
-                }
+                var line = reader.ReadLine();
+                if (line is null) break;
 
-                if (line.Length == 0)
-                {
-                    continue;
-                }
+                if (line.Length == 0) continue;
 
                 return line;
             }
@@ -399,47 +325,35 @@ public sealed class GameSessionMonitor : IDisposable
     private static bool TryExtractTimestamp(string line, out DateTimeOffset timestamp)
     {
         timestamp = default;
-        if (string.IsNullOrWhiteSpace(line))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(line)) return false;
 
-        string trimmed = line.Trim();
-        if (trimmed.Length == 0)
-        {
-            return false;
-        }
+        var trimmed = line.Trim();
+        if (trimmed.Length == 0) return false;
 
         if (trimmed.StartsWith("{", StringComparison.Ordinal))
-        {
             try
             {
-                using JsonDocument document = JsonDocument.Parse(trimmed);
-                if (TryGetJsonTimestamp(document.RootElement, out timestamp))
-                {
-                    return true;
-                }
+                using var document = JsonDocument.Parse(trimmed);
+                if (TryGetJsonTimestamp(document.RootElement, out timestamp)) return true;
             }
             catch (JsonException)
             {
             }
-        }
 
         // Try Vintage Story log format: DD.MM.YYYY HH:MM:SS
-        Match vsMatch = VintageStoryTimestampRegex.Match(trimmed);
+        var vsMatch = VintageStoryTimestampRegex.Match(trimmed);
         if (vsMatch.Success)
-        {
             try
             {
-                int day = int.Parse(vsMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-                int month = int.Parse(vsMatch.Groups[2].Value, CultureInfo.InvariantCulture);
-                int year = int.Parse(vsMatch.Groups[3].Value, CultureInfo.InvariantCulture);
-                int hour = int.Parse(vsMatch.Groups[4].Value, CultureInfo.InvariantCulture);
-                int minute = int.Parse(vsMatch.Groups[5].Value, CultureInfo.InvariantCulture);
-                int second = int.Parse(vsMatch.Groups[6].Value, CultureInfo.InvariantCulture);
+                var day = int.Parse(vsMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+                var month = int.Parse(vsMatch.Groups[2].Value, CultureInfo.InvariantCulture);
+                var year = int.Parse(vsMatch.Groups[3].Value, CultureInfo.InvariantCulture);
+                var hour = int.Parse(vsMatch.Groups[4].Value, CultureInfo.InvariantCulture);
+                var minute = int.Parse(vsMatch.Groups[5].Value, CultureInfo.InvariantCulture);
+                var second = int.Parse(vsMatch.Groups[6].Value, CultureInfo.InvariantCulture);
 
                 var dateTime = new DateTime(year, month, day, hour, minute, second, DateTimeKind.Unspecified);
-                TimeSpan offset = TimeZoneInfo.Local.GetUtcOffset(dateTime);
+                var offset = TimeZoneInfo.Local.GetUtcOffset(dateTime);
                 timestamp = new DateTimeOffset(dateTime, offset);
                 return true;
             }
@@ -451,32 +365,26 @@ public sealed class GameSessionMonitor : IDisposable
             {
                 // Failed to parse numbers
             }
-        }
 
         // Try ISO 8601 format: YYYY-MM-DDTHH:MM:SS
-        Match match = Iso8601TimestampRegex.Match(trimmed);
-        if (match.Success && DateTimeOffset.TryParse(match.Value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out timestamp))
-        {
-            return true;
-        }
+        var match = Iso8601TimestampRegex.Match(trimmed);
+        if (match.Success && DateTimeOffset.TryParse(match.Value, CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind, out timestamp)) return true;
 
         return false;
     }
 
     private static bool TryGetJsonTimestamp(JsonElement element, out DateTimeOffset timestamp)
     {
-        if (TryReadJsonString(element, "@t", out string? value)
+        if (TryReadJsonString(element, "@t", out var value)
             || TryReadJsonString(element, "time", out value)
             || TryReadJsonString(element, "timestamp", out value)
             || TryReadJsonString(element, "Time", out value)
             || TryReadJsonString(element, "Timestamp", out value))
-        {
             if (!string.IsNullOrEmpty(value)
-                && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out timestamp))
-            {
+                && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind,
+                    out timestamp))
                 return true;
-            }
-        }
 
         timestamp = default;
         return false;
@@ -484,14 +392,12 @@ public sealed class GameSessionMonitor : IDisposable
 
     private static bool TryReadJsonString(JsonElement element, string propertyName, out string? value)
     {
-        if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out JsonElement property))
-        {
+        if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out var property))
             if (property.ValueKind == JsonValueKind.String)
             {
                 value = property.GetString();
                 return !string.IsNullOrEmpty(value);
             }
-        }
 
         value = null;
         return false;
@@ -499,7 +405,7 @@ public sealed class GameSessionMonitor : IDisposable
 
     private async Task<bool> HandleLogLineAsync(LogCategory category, string line, LogTailState state)
     {
-        DateTimeOffset? timestamp = TryExtractTimestamp(line, out DateTimeOffset parsedTimestamp)
+        DateTimeOffset? timestamp = TryExtractTimestamp(line, out var parsedTimestamp)
             ? parsedTimestamp
             : null;
 
@@ -541,13 +447,9 @@ public sealed class GameSessionMonitor : IDisposable
 
     private static bool ContainsMarker(string line, IReadOnlyList<string> markers)
     {
-        foreach (string marker in markers)
-        {
+        foreach (var marker in markers)
             if (line.IndexOf(marker, StringComparison.OrdinalIgnoreCase) >= 0)
-            {
                 return true;
-            }
-        }
 
         return false;
     }
@@ -570,10 +472,7 @@ public sealed class GameSessionMonitor : IDisposable
 
         lock (_sessionLock)
         {
-            if (_sessionActive && _sessionStartUtc != default)
-            {
-                return;
-            }
+            if (_sessionActive && _sessionStartUtc != default) return;
 
             _sessionActive = true;
             _sessionStartUtc = logTimestamp ?? DateTimeOffset.UtcNow;
@@ -589,10 +488,7 @@ public sealed class GameSessionMonitor : IDisposable
         DateTimeOffset start;
         lock (_sessionLock)
         {
-            if (!_sessionActive)
-            {
-                return false;
-            }
+            if (!_sessionActive) return false;
 
             _sessionActive = false;
             start = _sessionStartUtc;
@@ -601,18 +497,12 @@ public sealed class GameSessionMonitor : IDisposable
             _sessionModEntries = new List<ModUsageTrackingEntry>();
         }
 
-        if (start == default)
-        {
-            return false;
-        }
+        if (start == default) return false;
 
-        DateTimeOffset end = logTimestamp ?? DateTimeOffset.UtcNow;
-        if (end < start)
-        {
-            end = start;
-        }
+        var end = logTimestamp ?? DateTimeOffset.UtcNow;
+        if (end < start) end = start;
 
-        TimeSpan duration = end - start;
+        var duration = end - start;
         if (duration < MinimumSessionDuration)
         {
             StatusLogService.AppendStatus(
@@ -625,13 +515,13 @@ public sealed class GameSessionMonitor : IDisposable
             return false;
         }
 
-        bool recordedUsage = false;
-        bool shouldPrompt = false;
+        var recordedUsage = false;
+        var shouldPrompt = false;
         try
         {
             shouldPrompt = await _dispatcher.InvokeAsync(() =>
             {
-                bool prompt = _configuration.RecordLongRunningSession(modEntries, out bool recorded);
+                var prompt = _configuration.RecordLongRunningSession(modEntries, out var recorded);
                 recordedUsage = recorded;
                 return prompt;
             });
@@ -649,7 +539,7 @@ public sealed class GameSessionMonitor : IDisposable
                 source),
             false);
 
-        bool isPending = _configuration.HasPendingModUsagePrompt;
+        var isPending = _configuration.HasPendingModUsagePrompt;
         if (shouldPrompt && !_lastPromptState)
         {
             _lastPromptState = true;
@@ -665,32 +555,21 @@ public sealed class GameSessionMonitor : IDisposable
 
     private static List<ModUsageTrackingEntry> NormalizeEntries(IReadOnlyList<ModUsageTrackingEntry>? entries)
     {
-        if (entries is null || entries.Count == 0)
-        {
-            return new List<ModUsageTrackingEntry>();
-        }
+        if (entries is null || entries.Count == 0) return new List<ModUsageTrackingEntry>();
 
         var distinct = new HashSet<ModUsageTrackingKey>();
         var normalized = new List<ModUsageTrackingEntry>(entries.Count);
-        foreach (ModUsageTrackingEntry entry in entries)
+        foreach (var entry in entries)
         {
             if (string.IsNullOrEmpty(entry.ModId)
                 || string.IsNullOrEmpty(entry.ModVersion)
                 || string.IsNullOrEmpty(entry.GameVersion))
-            {
                 continue;
-            }
 
-            if (!entry.CanSubmitVote || entry.HasUserVote)
-            {
-                continue;
-            }
+            if (!entry.CanSubmitVote || entry.HasUserVote) continue;
 
             var key = new ModUsageTrackingKey(entry.ModId, entry.ModVersion, entry.GameVersion);
-            if (!distinct.Add(key))
-            {
-                continue;
-            }
+            if (!distinct.Add(key)) continue;
 
             normalized.Add(new ModUsageTrackingEntry(
                 entry.ModId,
@@ -701,5 +580,27 @@ public sealed class GameSessionMonitor : IDisposable
         }
 
         return normalized;
+    }
+
+    private enum LogCategory
+    {
+        Client,
+        Server
+    }
+
+    private sealed class LogTailState
+    {
+        public LogTailState(long initialPosition)
+        {
+            Position = initialPosition < 0 ? 0 : initialPosition;
+        }
+
+        public long Position { get; set; }
+
+        public object SyncRoot { get; } = new();
+
+        public string? FirstLineReference { get; set; }
+
+        public bool HasProcessedReference { get; set; }
     }
 }

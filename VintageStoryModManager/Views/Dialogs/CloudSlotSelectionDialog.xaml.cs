@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -30,18 +27,12 @@ public partial class CloudSlotSelectionDialog : Window
 
         if (!string.IsNullOrWhiteSpace(defaultSlotKey))
         {
-            int index = _slots.FindIndex(slot =>
+            var index = _slots.FindIndex(slot =>
                 string.Equals(slot.SlotKey, defaultSlotKey, StringComparison.OrdinalIgnoreCase));
-            if (index >= 0)
-            {
-                SlotsListBox.SelectedIndex = index;
-            }
+            if (index >= 0) SlotsListBox.SelectedIndex = index;
         }
 
-        if (SlotsListBox.SelectedIndex < 0 && _slots.Count > 0)
-        {
-            SlotsListBox.SelectedIndex = 0;
-        }
+        if (SlotsListBox.SelectedIndex < 0 && _slots.Count > 0) SlotsListBox.SelectedIndex = 0;
 
         UpdateSelectButtonState();
     }
@@ -50,20 +41,14 @@ public partial class CloudSlotSelectionDialog : Window
 
     private void SelectButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedSlot is null)
-        {
-            return;
-        }
+        if (SelectedSlot is null) return;
 
         DialogResult = true;
     }
 
     private void SlotsListBox_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (SelectedSlot is null)
-        {
-            return;
-        }
+        if (SelectedSlot is null) return;
 
         DialogResult = true;
     }

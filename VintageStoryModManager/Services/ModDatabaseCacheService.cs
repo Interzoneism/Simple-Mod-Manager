@@ -1,23 +1,22 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Text.Json.Serialization;
 using VintageStoryModManager.Models;
 
 namespace VintageStoryModManager.Services;
 
 /// <summary>
-/// Provides persistence for metadata retrieved from the Vintage Story mod database so that
-/// subsequent requests can be served without repeatedly downloading large payloads.
+///     Provides persistence for metadata retrieved from the Vintage Story mod database so that
+///     subsequent requests can be served without repeatedly downloading large payloads.
 /// </summary>
 internal sealed class ModDatabaseCacheService
 {
     private static readonly int CacheSchemaVersion = DevConfig.ModDatabaseCacheSchemaVersion;
-    private static readonly int MinimumSupportedCacheSchemaVersion = DevConfig.ModDatabaseMinimumSupportedCacheSchemaVersion;
+
+    private static readonly int MinimumSupportedCacheSchemaVersion =
+        DevConfig.ModDatabaseMinimumSupportedCacheSchemaVersion;
+
     private static readonly string AnyGameVersionToken = DevConfig.ModDatabaseAnyGameVersionToken;
     private static readonly TimeSpan CacheEntryMaxAge = TimeSpan.FromHours(12);
 
@@ -25,22 +24,19 @@ internal sealed class ModDatabaseCacheService
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new(StringComparer.OrdinalIgnoreCase);
 
     internal static void ClearCacheDirectory()
     {
-        string? baseDirectory = ModCacheLocator.GetModDatabaseCacheDirectory();
-        if (string.IsNullOrWhiteSpace(baseDirectory) || !Directory.Exists(baseDirectory))
-        {
-            return;
-        }
+        var baseDirectory = ModCacheLocator.GetModDatabaseCacheDirectory();
+        if (string.IsNullOrWhiteSpace(baseDirectory) || !Directory.Exists(baseDirectory)) return;
 
         try
         {
-            Directory.Delete(baseDirectory, recursive: true);
+            Directory.Delete(baseDirectory, true);
         }
         catch (Exception ex)
         {
@@ -56,36 +52,30 @@ internal sealed class ModDatabaseCacheService
         bool requireExactVersionMatch,
         CancellationToken cancellationToken)
     {
-        string? cachePath = GetCacheFilePath(modId, normalizedGameVersion);
-        if (string.IsNullOrWhiteSpace(cachePath) || !File.Exists(cachePath))
-        {
-            return null;
-        }
+        var cachePath = GetCacheFilePath(modId, normalizedGameVersion);
+        if (string.IsNullOrWhiteSpace(cachePath) || !File.Exists(cachePath)) return null;
 
-        SemaphoreSlim fileLock = await AcquireLockAsync(cachePath, cancellationToken).ConfigureAwait(false);
+        var fileLock = await AcquireLockAsync(cachePath, cancellationToken).ConfigureAwait(false);
         try
         {
             await using FileStream stream = new(cachePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            CachedModDatabaseInfo? cached = await JsonSerializer
+            var cached = await JsonSerializer
                 .DeserializeAsync<CachedModDatabaseInfo>(stream, SerializerOptions, cancellationToken)
                 .ConfigureAwait(false);
 
             if (cached is null
                 || !IsSupportedSchemaVersion(cached.SchemaVersion)
                 || !IsGameVersionMatch(cached.GameVersion, normalizedGameVersion))
-            {
                 return null;
-            }
 
             if (IsCacheEntryExpired(cached.CachedUtc))
             {
-                bool canRefreshExpiredEntry = allowExpiredEntryRefresh
-                    && !InternetAccessManager.IsInternetAccessDisabled;
+                var canRefreshExpiredEntry = allowExpiredEntryRefresh
+                                             && !InternetAccessManager.IsInternetAccessDisabled;
 
                 if (!canRefreshExpiredEntry)
-                {
-                    return ConvertToDatabaseInfo(cached, normalizedGameVersion, installedModVersion, requireExactVersionMatch);
-                }
+                    return ConvertToDatabaseInfo(cached, normalizedGameVersion, installedModVersion,
+                        requireExactVersionMatch);
 
                 return null;
             }
@@ -113,22 +103,13 @@ internal sealed class ModDatabaseCacheService
         string? installedModVersion,
         CancellationToken cancellationToken)
     {
-        if (info is null)
-        {
-            return;
-        }
+        if (info is null) return;
 
-        string? cachePath = GetCacheFilePath(modId, normalizedGameVersion);
-        if (string.IsNullOrWhiteSpace(cachePath))
-        {
-            return;
-        }
+        var cachePath = GetCacheFilePath(modId, normalizedGameVersion);
+        if (string.IsNullOrWhiteSpace(cachePath)) return;
 
-        string? directory = Path.GetDirectoryName(cachePath);
-        if (string.IsNullOrWhiteSpace(directory))
-        {
-            return;
-        }
+        var directory = Path.GetDirectoryName(cachePath);
+        if (string.IsNullOrWhiteSpace(directory)) return;
 
         try
         {
@@ -139,26 +120,21 @@ internal sealed class ModDatabaseCacheService
             return;
         }
 
-        SemaphoreSlim fileLock = await AcquireLockAsync(cachePath, cancellationToken).ConfigureAwait(false);
+        var fileLock = await AcquireLockAsync(cachePath, cancellationToken).ConfigureAwait(false);
         try
         {
-            Dictionary<string, string[]> tagsByModVersion = await LoadExistingTagsByVersionAsync(cachePath, cancellationToken)
+            var tagsByModVersion = await LoadExistingTagsByVersionAsync(cachePath, cancellationToken)
                 .ConfigureAwait(false);
 
-            string? tagsVersionKey = NormalizeModVersion(info.CachedTagsVersion);
-            if (string.IsNullOrWhiteSpace(tagsVersionKey))
-            {
-                tagsVersionKey = NormalizeModVersion(installedModVersion);
-            }
+            var tagsVersionKey = NormalizeModVersion(info.CachedTagsVersion);
+            if (string.IsNullOrWhiteSpace(tagsVersionKey)) tagsVersionKey = NormalizeModVersion(installedModVersion);
 
             if (!string.IsNullOrWhiteSpace(tagsVersionKey))
-            {
                 tagsByModVersion[tagsVersionKey] = info.Tags?.ToArray() ?? Array.Empty<string>();
-            }
 
-            string tempPath = cachePath + ".tmp";
+            var tempPath = cachePath + ".tmp";
 
-            CachedModDatabaseInfo cacheModel = CreateCacheModel(modId, normalizedGameVersion, info, tagsByModVersion);
+            var cacheModel = CreateCacheModel(modId, normalizedGameVersion, info, tagsByModVersion);
 
             await using (FileStream tempStream = new(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
@@ -168,21 +144,18 @@ internal sealed class ModDatabaseCacheService
 
             try
             {
-                File.Move(tempPath, cachePath, overwrite: true);
+                File.Move(tempPath, cachePath, true);
             }
             catch (IOException)
             {
                 try
                 {
                     // Retry with replace semantics when running on platforms that require it.
-                    File.Replace(tempPath, cachePath, destinationBackupFileName: null);
+                    File.Replace(tempPath, cachePath, null);
                 }
                 finally
                 {
-                    if (File.Exists(tempPath))
-                    {
-                        File.Delete(tempPath);
-                    }
+                    if (File.Exists(tempPath)) File.Delete(tempPath);
                 }
             }
         }
@@ -204,22 +177,17 @@ internal sealed class ModDatabaseCacheService
         string cachePath,
         CancellationToken cancellationToken)
     {
-        if (!File.Exists(cachePath))
-        {
-            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
-        }
+        if (!File.Exists(cachePath)) return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
             await using FileStream stream = new(cachePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            CachedModDatabaseInfo? cached = await JsonSerializer
+            var cached = await JsonSerializer
                 .DeserializeAsync<CachedModDatabaseInfo>(stream, SerializerOptions, cancellationToken)
                 .ConfigureAwait(false);
 
             if (cached?.TagsByModVersion is { Count: > 0 })
-            {
                 return new Dictionary<string, string[]>(cached.TagsByModVersion, StringComparer.OrdinalIgnoreCase);
-            }
         }
         catch (OperationCanceledException)
         {
@@ -235,10 +203,7 @@ internal sealed class ModDatabaseCacheService
 
     private static string? NormalizeModVersion(string? version)
     {
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(version)) return null;
 
         return VersionStringUtility.Normalize(version);
     }
@@ -252,12 +217,9 @@ internal sealed class ModDatabaseCacheService
         var releases = info.Releases ?? Array.Empty<ModReleaseInfo>();
         var releaseModels = new List<CachedModRelease>(releases.Count);
 
-        foreach (ModReleaseInfo release in releases)
+        foreach (var release in releases)
         {
-            if (release?.DownloadUri is not Uri downloadUri)
-            {
-                continue;
-            }
+            if (release?.DownloadUri is not Uri downloadUri) continue;
 
             releaseModels.Add(new CachedModRelease
             {
@@ -307,19 +269,19 @@ internal sealed class ModDatabaseCacheService
         string? installedModVersion,
         bool requireExactVersionMatch)
     {
-        string? normalizedInstalledVersion = NormalizeModVersion(installedModVersion);
+        var normalizedInstalledVersion = NormalizeModVersion(installedModVersion);
 
-        IReadOnlyList<string> tags = GetTagsForInstalledVersion(
+        var tags = GetTagsForInstalledVersion(
             cached,
             normalizedInstalledVersion,
-            out string? cachedTagsVersion);
+            out var cachedTagsVersion);
 
-        IReadOnlyList<ModReleaseInfo> releases = BuildReleases(cached.Releases, normalizedGameVersion, requireExactVersionMatch);
+        var releases = BuildReleases(cached.Releases, normalizedGameVersion, requireExactVersionMatch);
 
-        ModReleaseInfo? latestRelease = releases.Count > 0 ? releases[0] : null;
-        ModReleaseInfo? latestCompatibleRelease = releases.FirstOrDefault(r => r.IsCompatibleWithInstalledGame);
+        var latestRelease = releases.Count > 0 ? releases[0] : null;
+        var latestCompatibleRelease = releases.FirstOrDefault(r => r.IsCompatibleWithInstalledGame);
 
-        IReadOnlyList<string> requiredVersions = DetermineRequiredGameVersions(
+        var requiredVersions = DetermineRequiredGameVersions(
             cached.Releases,
             installedModVersion);
 
@@ -357,27 +319,18 @@ internal sealed class ModDatabaseCacheService
 
         if (!string.IsNullOrWhiteSpace(normalizedInstalledVersion)
             && cached.TagsByModVersion is { Count: > 0 }
-            && cached.TagsByModVersion.TryGetValue(normalizedInstalledVersion, out string[]? versionTags))
+            && cached.TagsByModVersion.TryGetValue(normalizedInstalledVersion, out var versionTags))
         {
             cachedTagsVersion = normalizedInstalledVersion;
             return versionTags is { Length: > 0 } ? versionTags : Array.Empty<string>();
         }
 
-        if (cached.Tags is { Length: > 0 })
-        {
-            return cached.Tags;
-        }
+        if (cached.Tags is { Length: > 0 }) return cached.Tags;
 
         if (cached.TagsByModVersion is { Count: > 0 })
-        {
-            foreach (KeyValuePair<string, string[]> entry in cached.TagsByModVersion)
-            {
+            foreach (var entry in cached.TagsByModVersion)
                 if (entry.Value is { Length: > 0 })
-                {
                     return entry.Value;
-                }
-            }
-        }
 
         return Array.Empty<string>();
     }
@@ -387,34 +340,25 @@ internal sealed class ModDatabaseCacheService
         string? normalizedGameVersion,
         bool requireExactVersionMatch)
     {
-        if (cachedReleases is null || cachedReleases.Count == 0)
-        {
-            return Array.Empty<ModReleaseInfo>();
-        }
+        if (cachedReleases is null || cachedReleases.Count == 0) return Array.Empty<ModReleaseInfo>();
 
         var releases = new List<ModReleaseInfo>(cachedReleases.Count);
 
-        foreach (CachedModRelease release in cachedReleases)
+        foreach (var release in cachedReleases)
         {
             if (string.IsNullOrWhiteSpace(release.Version)
                 || string.IsNullOrWhiteSpace(release.DownloadUrl)
-                || !Uri.TryCreate(release.DownloadUrl, UriKind.Absolute, out Uri? downloadUri))
-            {
+                || !Uri.TryCreate(release.DownloadUrl, UriKind.Absolute, out var downloadUri))
                 continue;
-            }
 
-            bool isCompatible = false;
+            var isCompatible = false;
             if (normalizedGameVersion != null && release.GameVersionTags is { Length: > 0 })
-            {
-                foreach (string tag in release.GameVersionTags)
-                {
+                foreach (var tag in release.GameVersionTags)
                     if (VersionStringUtility.SupportsVersion(tag, normalizedGameVersion, requireExactVersionMatch))
                     {
                         isCompatible = true;
                         break;
                     }
-                }
-            }
 
             releases.Add(new ModReleaseInfo
             {
@@ -440,18 +384,13 @@ internal sealed class ModDatabaseCacheService
         if (string.IsNullOrWhiteSpace(installedModVersion)
             || cachedReleases is null
             || cachedReleases.Count == 0)
-        {
             return Array.Empty<string>();
-        }
 
-        string? normalizedInstalledVersion = VersionStringUtility.Normalize(installedModVersion);
+        var normalizedInstalledVersion = VersionStringUtility.Normalize(installedModVersion);
 
-        foreach (CachedModRelease release in cachedReleases)
+        foreach (var release in cachedReleases)
         {
-            if (string.IsNullOrWhiteSpace(release.Version))
-            {
-                continue;
-            }
+            if (string.IsNullOrWhiteSpace(release.Version)) continue;
 
             if (ReleaseMatchesInstalledVersion(
                     release.Version,
@@ -459,7 +398,7 @@ internal sealed class ModDatabaseCacheService
                     installedModVersion,
                     normalizedInstalledVersion))
             {
-                string[] tags = release.GameVersionTags ?? Array.Empty<string>();
+                var tags = release.GameVersionTags ?? Array.Empty<string>();
                 return tags.Length == 0 ? Array.Empty<string>() : tags;
             }
         }
@@ -473,70 +412,58 @@ internal sealed class ModDatabaseCacheService
         string installedVersion,
         string? normalizedInstalledVersion)
     {
-        if (string.Equals(releaseVersion, installedVersion, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
+        if (string.Equals(releaseVersion, installedVersion, StringComparison.OrdinalIgnoreCase)) return true;
 
-        if (string.IsNullOrWhiteSpace(normalizedReleaseVersion) || string.IsNullOrWhiteSpace(normalizedInstalledVersion))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(normalizedReleaseVersion) ||
+            string.IsNullOrWhiteSpace(normalizedInstalledVersion)) return false;
 
         return string.Equals(normalizedReleaseVersion, normalizedInstalledVersion, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<SemaphoreSlim> AcquireLockAsync(string path, CancellationToken cancellationToken)
     {
-        SemaphoreSlim gate = _fileLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
+        var gate = _fileLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         return gate;
     }
 
     private static bool IsCacheEntryExpired(DateTime cachedUtc)
     {
-        if (cachedUtc == default)
-        {
-            return true;
-        }
+        if (cachedUtc == default) return true;
 
-        DateTime expirationThreshold = DateTime.UtcNow - CacheEntryMaxAge;
+        var expirationThreshold = DateTime.UtcNow - CacheEntryMaxAge;
         return cachedUtc < expirationThreshold;
     }
 
     private static bool IsSupportedSchemaVersion(int schemaVersion)
     {
         return schemaVersion >= MinimumSupportedCacheSchemaVersion
-            && schemaVersion <= CacheSchemaVersion;
+               && schemaVersion <= CacheSchemaVersion;
     }
 
     private static string? GetCacheFilePath(string modId, string? normalizedGameVersion)
     {
-        if (string.IsNullOrWhiteSpace(modId))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(modId)) return null;
 
-        string? baseDirectory = ModCacheLocator.GetModDatabaseCacheDirectory();
-        if (string.IsNullOrWhiteSpace(baseDirectory))
-        {
-            return null;
-        }
+        var baseDirectory = ModCacheLocator.GetModDatabaseCacheDirectory();
+        if (string.IsNullOrWhiteSpace(baseDirectory)) return null;
 
-        string safeModId = ModCacheLocator.SanitizeFileName(modId, "mod");
-        string safeGameVersion = string.IsNullOrWhiteSpace(normalizedGameVersion)
+        var safeModId = ModCacheLocator.SanitizeFileName(modId, "mod");
+        var safeGameVersion = string.IsNullOrWhiteSpace(normalizedGameVersion)
             ? AnyGameVersionToken
             : ModCacheLocator.SanitizeFileName(normalizedGameVersion!, "game");
 
-        string fileName = $"{safeModId}__{safeGameVersion}.json";
+        var fileName = $"{safeModId}__{safeGameVersion}.json";
 
         return Path.Combine(baseDirectory, fileName);
     }
 
     private static bool IsGameVersionMatch(string? cachedGameVersion, string? normalizedGameVersion)
     {
-        string cachedValue = string.IsNullOrWhiteSpace(cachedGameVersion) ? AnyGameVersionToken : cachedGameVersion;
-        string currentValue = string.IsNullOrWhiteSpace(normalizedGameVersion) ? AnyGameVersionToken : normalizedGameVersion;
+        var cachedValue = string.IsNullOrWhiteSpace(cachedGameVersion) ? AnyGameVersionToken : cachedGameVersion;
+        var currentValue = string.IsNullOrWhiteSpace(normalizedGameVersion)
+            ? AnyGameVersionToken
+            : normalizedGameVersion;
         return string.Equals(cachedValue, currentValue, StringComparison.OrdinalIgnoreCase);
     }
 

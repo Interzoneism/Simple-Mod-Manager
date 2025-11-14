@@ -87,7 +87,8 @@
                     <DataGrid.Resources>
                         <Style TargetType="{x:Type DataGridColumnHeader}">
                             <Setter Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background}" />
-                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                            <Setter Property="BorderBrush"
+                                    Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
                             <Setter Property="BorderThickness" Value="1,0,0,1" />
                             <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
                             <Setter Property="Padding" Value="12,10" />
@@ -96,8 +97,8 @@
                         </Style>
                     </DataGrid.Resources>
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Line" 
-                                            Binding="{Binding Text, Mode=OneWay}" 
+                        <DataGridTextColumn Header="Line"
+                                            Binding="{Binding Text, Mode=OneWay}"
                                             SortMemberPath="Text"
                                             Width="*"
                                             MinWidth="200">
@@ -109,8 +110,8 @@
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
-                        <DataGridTextColumn Header="Mod" 
-                                            Binding="{Binding ModName, Mode=OneWay}" 
+                        <DataGridTextColumn Header="Mod"
+                                            Binding="{Binding ModName, Mode=OneWay}"
                                             SortMemberPath="ModName"
                                             Width="200"
                                             MinWidth="100">

@@ -1,14 +1,11 @@
-using System;
-using System.Collections.Generic;
 using System.Reflection;
-using System.Threading.Tasks;
 using VintageStoryModManager.Models;
 using VintageStoryModManager.ViewModels;
 
 namespace VintageStoryModManager.Design;
 
 /// <summary>
-/// Creates design-time instances of view models.
+///     Creates design-time instances of view models.
 /// </summary>
 internal static class DesignDataFactory
 {
@@ -20,89 +17,89 @@ internal static class DesignDataFactory
         var mods = new List<ModListItemViewModel>
         {
             CreateMod(
-                modId: "betterhud",
-                name: "Better HUD",
-                version: "1.4.2",
-                networkVersion: "1.21.0",
-                website: "https://example.com/betterhud",
-                sourcePath: "Mods/betterhud_v1.4.2.zip",
-                location: "Mods/betterhud_v1.4.2.zip",
-                sourceKind: ModSourceKind.ZipArchive,
-                authors: new[] { "Aurora" },
-                contributors: new[] { "Vega" },
-                dependencies: new[] { new ModDependencyInfo("game", "1.21.0") },
-                description: "Adds additional HUD widgets and customization options.",
-                side: "Client",
-                requiredOnClient: true,
-                requiredOnServer: false,
-                isActive: true,
-                error: null,
-                loadError: null,
-                activationError: null),
+                "betterhud",
+                "Better HUD",
+                "1.4.2",
+                "1.21.0",
+                "https://example.com/betterhud",
+                "Mods/betterhud_v1.4.2.zip",
+                "Mods/betterhud_v1.4.2.zip",
+                ModSourceKind.ZipArchive,
+                new[] { "Aurora" },
+                new[] { "Vega" },
+                new[] { new ModDependencyInfo("game", "1.21.0") },
+                "Adds additional HUD widgets and customization options.",
+                "Client",
+                true,
+                false,
+                true,
+                null,
+                null,
+                null),
             CreateMod(
-                modId: "expandedstorage",
-                name: "Expanded Storage",
-                version: "2.0.0",
-                networkVersion: "1.21.0",
-                website: "https://mods.vintagestory.at/expandedstorage",
-                sourcePath: "Mods/expandedstorage",
-                location: "Mods/expandedstorage",
-                sourceKind: ModSourceKind.Folder,
-                authors: new[] { "Epsilon" },
-                contributors: Array.Empty<string>(),
-                dependencies: new[]
+                "expandedstorage",
+                "Expanded Storage",
+                "2.0.0",
+                "1.21.0",
+                "https://mods.vintagestory.at/expandedstorage",
+                "Mods/expandedstorage",
+                "Mods/expandedstorage",
+                ModSourceKind.Folder,
+                new[] { "Epsilon" },
+                Array.Empty<string>(),
+                new[]
                 {
                     new ModDependencyInfo("game", "1.21.0"),
                     new ModDependencyInfo("survival", "1.21.0")
                 },
-                description: "Improves and rebalances all storage-related blocks and recipes.",
-                side: "Both",
-                requiredOnClient: true,
-                requiredOnServer: true,
-                isActive: false,
-                error: "Missing dependency: CarryCapacity ≥ 1.3.0",
-                loadError: null,
-                activationError: null),
+                "Improves and rebalances all storage-related blocks and recipes.",
+                "Both",
+                true,
+                true,
+                false,
+                "Missing dependency: CarryCapacity ≥ 1.3.0",
+                null,
+                null),
             CreateMod(
-                modId: "utilityscripts",
-                name: "Utility Scripts",
-                version: "0.9.1",
-                networkVersion: "1.21.0",
-                website: null,
-                sourcePath: "Mods/utilityscripts.dll",
-                location: "Mods/utilityscripts.dll",
-                sourceKind: ModSourceKind.Assembly,
-                authors: new[] { "Nova", "Rigel" },
-                contributors: Array.Empty<string>(),
-                dependencies: new[] { new ModDependencyInfo("game", "1.21.0") },
-                description: "Assortment of server utilities and chat commands.",
-                side: "Server",
-                requiredOnClient: false,
-                requiredOnServer: true,
-                isActive: true,
-                error: null,
-                loadError: "Unable to load mod. Requires dependency CarryCapacity v1.3.0",
-                activationError: "Failed to enable scripts due to permission error."),
+                "utilityscripts",
+                "Utility Scripts",
+                "0.9.1",
+                "1.21.0",
+                null,
+                "Mods/utilityscripts.dll",
+                "Mods/utilityscripts.dll",
+                ModSourceKind.Assembly,
+                new[] { "Nova", "Rigel" },
+                Array.Empty<string>(),
+                new[] { new ModDependencyInfo("game", "1.21.0") },
+                "Assortment of server utilities and chat commands.",
+                "Server",
+                false,
+                true,
+                true,
+                null,
+                "Unable to load mod. Requires dependency CarryCapacity v1.3.0",
+                "Failed to enable scripts due to permission error."),
             CreateMod(
-                modId: "worldeditplus",
-                name: "World Edit Plus",
-                version: "3.5.0",
-                networkVersion: "1.21.0",
-                website: "https://example.com/worldeditplus",
-                sourcePath: "Mods/worldeditplus_v3.5.0.zip",
-                location: "Mods/worldeditplus_v3.5.0.zip",
-                sourceKind: ModSourceKind.ZipArchive,
-                authors: new[] { "Lyra" },
-                contributors: new[] { "Orion" },
-                dependencies: new[] { new ModDependencyInfo("game", "1.21.0") },
-                description: "Advanced world editing tools with region presets and macros.",
-                side: "Both",
-                requiredOnClient: true,
-                requiredOnServer: true,
-                isActive: true,
-                error: null,
-                loadError: null,
-                activationError: null)
+                "worldeditplus",
+                "World Edit Plus",
+                "3.5.0",
+                "1.21.0",
+                "https://example.com/worldeditplus",
+                "Mods/worldeditplus_v3.5.0.zip",
+                "Mods/worldeditplus_v3.5.0.zip",
+                ModSourceKind.ZipArchive,
+                new[] { "Lyra" },
+                new[] { "Orion" },
+                new[] { new ModDependencyInfo("game", "1.21.0") },
+                "Advanced world editing tools with region presets and macros.",
+                "Both",
+                true,
+                true,
+                true,
+                null,
+                null,
+                null)
         };
 
         return mods;
@@ -134,6 +131,7 @@ internal static class DesignDataFactory
         {
             ModId = modId,
             Name = name,
+            ManifestName = name,
             Version = version,
             NetworkVersion = networkVersion,
             Website = website,
@@ -152,12 +150,10 @@ internal static class DesignDataFactory
             DatabaseInfo = databaseInfo
         };
 
-        var viewModel = new ModListItemViewModel(entry, isActive, location, (_, _) => Task.FromResult(new ActivationResult(true, null)));
+        var viewModel = new ModListItemViewModel(entry, isActive, location,
+            (_, _) => Task.FromResult(new ActivationResult(true, null)));
 
-        if (!string.IsNullOrWhiteSpace(activationError))
-        {
-            SetActivationError(viewModel, activationError);
-        }
+        if (!string.IsNullOrWhiteSpace(activationError)) SetActivationError(viewModel, activationError);
 
         return viewModel;
     }
@@ -165,7 +161,8 @@ internal static class DesignDataFactory
     private static void SetActivationError(ModListItemViewModel viewModel, string error)
     {
         var setter = typeof(ModListItemViewModel)
-            .GetProperty(nameof(ModListItemViewModel.ActivationError), BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)?
+            .GetProperty(nameof(ModListItemViewModel.ActivationError),
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)?
             .GetSetMethod(true);
 
         setter?.Invoke(viewModel, new object?[] { error });

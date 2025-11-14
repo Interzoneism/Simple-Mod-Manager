@@ -1,6 +1,6 @@
-using System.Linq;
 using System.Windows;
 using VintageStoryModManager.Views.Dialogs;
+using Application = System.Windows.Application;
 
 namespace VintageStoryModManager.Services;
 
@@ -38,13 +38,14 @@ public static class ModManagerMessageBox
         MessageDialogExtraButton? extraButton,
         MessageDialogButtonContentOverrides? buttonContentOverrides)
     {
-        Window? resolvedOwner = owner ?? GetActiveWindow();
-        bool hasVisibleOwner = resolvedOwner?.IsVisible == true;
+        var resolvedOwner = owner ?? GetActiveWindow();
+        var hasVisibleOwner = resolvedOwner?.IsVisible == true;
 
         var dialog = new MessageDialogWindow
         {
             Owner = hasVisibleOwner ? resolvedOwner : null,
-            WindowStartupLocation = hasVisibleOwner ? WindowStartupLocation.CenterOwner : WindowStartupLocation.CenterScreen,
+            WindowStartupLocation =
+                hasVisibleOwner ? WindowStartupLocation.CenterOwner : WindowStartupLocation.CenterScreen,
             Topmost = resolvedOwner is null || !hasVisibleOwner
         };
 
@@ -55,14 +56,11 @@ public static class ModManagerMessageBox
 
     private static Window? GetActiveWindow()
     {
-        if (System.Windows.Application.Current == null)
-        {
-            return null;
-        }
+        if (Application.Current == null) return null;
 
-        return System.Windows.Application.Current.Windows
-            .OfType<Window>()
-            .FirstOrDefault(window => window.IsActive)
-            ?? System.Windows.Application.Current.MainWindow;
+        return Application.Current.Windows
+                   .OfType<Window>()
+                   .FirstOrDefault(window => window.IsActive)
+               ?? Application.Current.MainWindow;
     }
 }

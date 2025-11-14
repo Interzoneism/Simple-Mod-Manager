@@ -1,19 +1,18 @@
-using System;
 using System.ComponentModel;
-using System.Drawing;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Button = System.Windows.Controls.Button;
 
 namespace VintageStoryModManager.Views.Dialogs;
 
 public partial class MessageDialogWindow : Window
 {
-    private MessageBoxButton _buttons;
-    private bool _resultSet;
-    private Action? _extraButtonCallback;
     private MessageDialogButtonContentOverrides? _buttonContentOverrides;
+    private MessageBoxButton _buttons;
+    private Action? _extraButtonCallback;
+    private bool _resultSet;
 
     public MessageDialogWindow()
     {
@@ -59,23 +58,23 @@ public partial class MessageDialogWindow : Window
         switch (buttons)
         {
             case MessageBoxButton.OK:
-                ConfigureButton(ButtonOne, MessageBoxResult.OK, "OK", isDefault: true, isCancel: true);
+                ConfigureButton(ButtonOne, MessageBoxResult.OK, "OK", true, true);
                 break;
             case MessageBoxButton.OKCancel:
                 ConfigureButton(ButtonOne, MessageBoxResult.Cancel, "Cancel", isCancel: true);
-                ConfigureButton(ButtonTwo, MessageBoxResult.OK, "OK", isDefault: true);
+                ConfigureButton(ButtonTwo, MessageBoxResult.OK, "OK", true);
                 break;
             case MessageBoxButton.YesNo:
-                ConfigureButton(ButtonOne, MessageBoxResult.Yes, "Yes", isDefault: true);
+                ConfigureButton(ButtonOne, MessageBoxResult.Yes, "Yes", true);
                 ConfigureButton(ButtonTwo, MessageBoxResult.No, "No");
                 break;
             case MessageBoxButton.YesNoCancel:
                 ConfigureButton(ButtonOne, MessageBoxResult.Cancel, "Cancel", isCancel: true);
-                ConfigureButton(ButtonTwo, MessageBoxResult.Yes, "Yes", isDefault: true);
+                ConfigureButton(ButtonTwo, MessageBoxResult.Yes, "Yes", true);
                 ConfigureButton(ButtonThree, MessageBoxResult.No, "No");
                 break;
             default:
-                ConfigureButton(ButtonOne, MessageBoxResult.OK, "OK", isDefault: true, isCancel: true);
+                ConfigureButton(ButtonOne, MessageBoxResult.OK, "OK", true, true);
                 break;
         }
     }
@@ -98,7 +97,8 @@ public partial class MessageDialogWindow : Window
         _extraButtonCallback = extraButton.OnClick;
     }
 
-    private void ConfigureButton(System.Windows.Controls.Button button, MessageBoxResult result, string defaultContent, bool isDefault = false, bool isCancel = false)
+    private void ConfigureButton(Button button, MessageBoxResult result, string defaultContent, bool isDefault = false,
+        bool isCancel = false)
     {
         button.Content = GetButtonContent(result, defaultContent);
         button.Tag = result;
@@ -109,13 +109,13 @@ public partial class MessageDialogWindow : Window
 
     private object GetButtonContent(MessageBoxResult result, string defaultContent)
     {
-        string? overrideContent = _buttonContentOverrides?.GetContent(result);
+        var overrideContent = _buttonContentOverrides?.GetContent(result);
         return string.IsNullOrEmpty(overrideContent) ? defaultContent : overrideContent;
     }
 
     private void ConfigureIcon(MessageBoxImage icon)
     {
-        ImageSource? source = icon switch
+        var source = icon switch
         {
             MessageBoxImage.Error => ConvertIcon(SystemIcons.Error),
             MessageBoxImage.Warning => ConvertIcon(SystemIcons.Warning),
@@ -138,7 +138,7 @@ public partial class MessageDialogWindow : Window
 
     private static ImageSource? ConvertIcon(Icon icon)
     {
-        BitmapSource source = Imaging.CreateBitmapSourceFromHIcon(
+        var source = Imaging.CreateBitmapSourceFromHIcon(
             icon.Handle,
             Int32Rect.Empty,
             BitmapSizeOptions.FromWidthAndHeight(icon.Width, icon.Height));
@@ -148,12 +148,9 @@ public partial class MessageDialogWindow : Window
 
     private void OnButtonClick(object sender, RoutedEventArgs e)
     {
-        if (sender is System.Windows.Controls.Button button && button.Tag is MessageBoxResult result)
+        if (sender is Button button && button.Tag is MessageBoxResult result)
         {
-            if (ReferenceEquals(button, ButtonExtra))
-            {
-                _extraButtonCallback?.Invoke();
-            }
+            if (ReferenceEquals(button, ButtonExtra)) _extraButtonCallback?.Invoke();
 
             Result = result;
             _resultSet = true;
@@ -165,10 +162,7 @@ public partial class MessageDialogWindow : Window
     {
         base.OnClosing(e);
 
-        if (_resultSet)
-        {
-            return;
-        }
+        if (_resultSet) return;
 
         Result = _buttons switch
         {

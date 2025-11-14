@@ -1,13 +1,12 @@
-using System;
-
 namespace VintageStoryModManager.Models;
 
 /// <summary>
-/// Represents a cloud modlist slot entry exposed to the UI.
+///     Represents a cloud modlist slot entry exposed to the UI.
 /// </summary>
 public sealed class CloudModlistSlot
 {
-    public CloudModlistSlot(string slotKey, bool isOccupied, string displayName, string? name, string? version, string? cachedContent)
+    public CloudModlistSlot(string slotKey, bool isOccupied, string displayName, string? name, string? version,
+        string? cachedContent)
     {
         SlotKey = slotKey ?? throw new ArgumentNullException(nameof(slotKey));
         IsOccupied = isOccupied;
@@ -29,5 +28,8 @@ public sealed class CloudModlistSlot
 
     public string? CachedContent { get; }
 
-    public override string ToString() => DisplayName;
+    public override string ToString()
+    {
+        return DisplayName;
+    }
 }
