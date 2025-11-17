@@ -248,6 +248,8 @@ public sealed class UserConfigurationService
 
     public bool FirebaseAuthBackupCreated { get; private set; }
 
+    public bool ClientSettingsCleanupCompleted { get; private set; }
+
     public IReadOnlyList<string> GetGameProfileNames()
     {
         return _gameProfiles.Keys
@@ -498,6 +500,14 @@ public sealed class UserConfigurationService
         if (FirebaseAuthBackupCreated) return;
 
         FirebaseAuthBackupCreated = true;
+        Save();
+    }
+
+    public void SetClientSettingsCleanupCompleted()
+    {
+        if (ClientSettingsCleanupCompleted) return;
+
+        ClientSettingsCleanupCompleted = true;
         Save();
     }
 
@@ -1255,6 +1265,7 @@ public sealed class UserConfigurationService
             CloudUploaderName = NormalizeUploaderName(GetOptionalString(obj["cloudUploaderName"]));
             MigrationCheckCompleted = obj["migrationCheckCompleted"]?.GetValue<bool?>() ?? false;
             FirebaseAuthBackupCreated = obj["firebaseAuthBackupCreated"]?.GetValue<bool?>() ?? false;
+            ClientSettingsCleanupCompleted = obj["clientSettingsCleanupCompleted"]?.GetValue<bool?>() ?? false;
 
             var profilesFound = false;
             if (obj["gameProfiles"] is JsonObject profilesObj)
@@ -1368,6 +1379,7 @@ public sealed class UserConfigurationService
             MigrationCheckCompleted = false;
             FirebaseAuthBackupCreated = false;
             GameProfileCreationWarningAcknowledged = false;
+            ClientSettingsCleanupCompleted = false;
         }
 
         LoadPersistentModConfigPaths();
@@ -1436,6 +1448,7 @@ public sealed class UserConfigurationService
                 ["cloudUploaderName"] = CloudUploaderName,
                 ["migrationCheckCompleted"] = MigrationCheckCompleted,
                 ["firebaseAuthBackupCreated"] = FirebaseAuthBackupCreated,
+                ["clientSettingsCleanupCompleted"] = ClientSettingsCleanupCompleted,
                 ["gameProfiles"] = BuildGameProfilesJson()
             };
 

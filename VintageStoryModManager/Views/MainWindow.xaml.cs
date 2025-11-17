@@ -1,9 +1,11 @@
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security;
@@ -59,6 +61,7 @@ using WinForms = System.Windows.Forms;
 using WpfButton = System.Windows.Controls.Button;
 using WpfMessageBox = VintageStoryModManager.Services.ModManagerMessageBox;
 using WpfToolTip = System.Windows.Controls.ToolTip;
+using TabControl = System.Windows.Controls.TabControl;
 
 namespace VintageStoryModManager.Views;
 
@@ -82,6 +85,7 @@ public partial class MainWindow : Window
     private static readonly string PresetDirectoryName = DevConfig.PresetDirectoryName;
     private static readonly string ModListDirectoryName = DevConfig.ModListDirectoryName;
     private static readonly string CloudModListCacheDirectoryName = DevConfig.CloudModListCacheDirectoryName;
+    private static readonly string RebuiltModListDirectoryName = DevConfig.RebuiltModListDirectoryName;
     private static readonly int AutomaticConfigMaxWordDistance = DevConfig.AutomaticConfigMaxWordDistance;
 
     private static readonly HttpClient ConnectivityTestHttpClient = new()
@@ -189,6 +193,7 @@ public partial class MainWindow : Window
     private bool _isDraggingModInfoPanel;
     private bool _isFullRefreshInProgress;
     private bool _isInitializing;
+    private bool _isUpdatingModlistsTabSelection;
     private bool _isModUpdateInProgress;
     private bool _isModUsageDialogOpen;
     private bool _isRefreshingAfterModlistLoad;
@@ -204,6 +209,8 @@ public partial class MainWindow : Window
     private string? _recentLocalModBackupDirectory;
     private List<string>? _recentLocalModBackupModNames;
     private bool _refreshAfterModlistLoadPending;
+    private bool _localModlistsLoaded;
+    private readonly List<LocalModlistListEntry> _selectedLocalModlists = new();
     private CloudModlistListEntry? _selectedCloudModlist;
     private ModListItemViewModel? _selectionAnchor;
     private bool _suppressSortPreferenceSave;
@@ -276,6 +283,7 @@ public partial class MainWindow : Window
         InternetAccessManager.InternetAccessChanged += InternetAccessManager_OnInternetAccessChanged;
 
         UpdateCloudModlistControlsEnabledState();
+        UpdateLocalModlistControlsEnabledState();
     }
 
     public IAsyncRelayCommand RefreshModsUiCommand { get; }
@@ -2042,6 +2050,7 @@ public partial class MainWindow : Window
         DataContext = _viewModel;
         ApplyPlayerIdentityToUiAndCloudStore();
         _cloudModlistsLoaded = false;
+        _localModlistsLoaded = false;
         _selectedCloudModlist = null;
         UpdateSearchColumnVisibility(_viewModel.SearchModDatabase);
         AttachToModsView(_viewModel.CurrentModsView);
@@ -2102,7 +2111,10 @@ public partial class MainWindow : Window
             if (_viewModel != null)
                 Dispatcher.InvokeAsync(() =>
                 {
-                    if (_viewModel != null) UpdateSearchColumnVisibility(_viewModel.SearchModDatabase);
+                    if (_viewModel == null) return;
+
+                    UpdateSearchColumnVisibility(_viewModel.SearchModDatabase);
+                    if (!_viewModel.SearchModDatabase) ClearModDatabaseSelections();
                 }, DispatcherPriority.Background);
         }
         else if (e.PropertyName == nameof(MainViewModel.ModDatabaseAutoLoadMode))
@@ -2114,7 +2126,7 @@ public partial class MainWindow : Window
             if (_viewModel != null)
                 Dispatcher.InvokeAsync(() =>
                 {
-                    if (_viewModel != null) HandleCloudModlistsVisibilityChanged(_viewModel.IsViewingCloudModlists);
+                    if (_viewModel != null) HandleModlistsVisibilityChanged(_viewModel.IsViewingCloudModlists);
                 }, DispatcherPriority.Background);
         }
         else if (e.PropertyName == nameof(MainViewModel.IsLoadMoreModDatabaseButtonVisible))
@@ -2161,22 +2173,46 @@ public partial class MainWindow : Window
         UpdateSearchSortingBehavior(isSearchingModDatabase);
     }
 
-    private void HandleCloudModlistsVisibilityChanged(bool isVisible)
+    private void HandleModlistsVisibilityChanged(bool isVisible)
     {
         if (isVisible)
         {
-            if (!EnsureCloudModlistsConsent())
-            {
-                _viewModel?.ShowInstalledModsCommand.Execute(null);
-                return;
-            }
-
-            _ = RefreshCloudModlistsAsync(!_cloudModlistsLoaded);
+            RefreshLocalModlists(false);
             return;
         }
 
+        SetLocalModlistSelection(Array.Empty<LocalModlistListEntry>());
+        if (LocalModlistsDataGrid is not null) LocalModlistsDataGrid.SelectedItems.Clear();
         SetCloudModlistSelection(null);
         if (CloudModlistsDataGrid != null) CloudModlistsDataGrid.SelectedItem = null;
+    }
+
+    private void ModlistsTabControl_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingModlistsTabSelection) return;
+        if (_viewModel?.IsViewingCloudModlists != true) return;
+        if (sender is not TabControl tabControl) return;
+        if (OnlineModlistsTabItem is null || LocalModlistsTabItem is null) return;
+        if (!Equals(tabControl.SelectedItem, OnlineModlistsTabItem)) return;
+
+        if (HasFirebaseAuthStateFile()) EnsureFirebaseAuthBackedUpIfAvailable();
+
+        if (!EnsureCloudModlistsConsent())
+        {
+            _isUpdatingModlistsTabSelection = true;
+            try
+            {
+                tabControl.SelectedItem = LocalModlistsTabItem;
+            }
+            finally
+            {
+                _isUpdatingModlistsTabSelection = false;
+            }
+
+            return;
+        }
+
+        _ = RefreshCloudModlistsAsync(!_cloudModlistsLoaded);
     }
 
     private void InternetAccessManager_OnInternetAccessChanged(object? sender, EventArgs e)
@@ -2231,6 +2267,12 @@ public partial class MainWindow : Window
             buttonContentOverrides: buttonOverrides);
 
         return result == MessageBoxResult.OK;
+    }
+
+    private static bool HasFirebaseAuthStateFile()
+    {
+        var stateFilePath = FirebaseAnonymousAuthenticator.GetStateFilePath();
+        return !string.IsNullOrWhiteSpace(stateFilePath) && File.Exists(stateFilePath);
     }
 
     private bool EnsureUserReportVotingConsent()
@@ -5165,21 +5207,13 @@ public partial class MainWindow : Window
 
         var configOptions = BuildModConfigOptions();
 
-        if (configOptions.Count > 0)
-        {
-            var configDialog = new ModConfigSelectionDialog(configOptions)
-            {
-                Owner = this
-            };
-
-            var configResult = configDialog.ShowDialog();
-            if (configResult != true) return;
-        }
-
         var metadataDialog = new SaveInstalledModsDialog(
             BuildCloudModlistName(),
             configOptions,
-            GetUploaderNameForPdf())
+            GetUploaderNameForPdf(),
+            defaultVersion: null,
+            defaultGameVersion: _viewModel?.InstalledGameVersion,
+            SaveInstalledModsDialogResult.SavePdf)
         {
             Owner = this
         };
@@ -5188,46 +5222,118 @@ public partial class MainWindow : Window
         if (metadataResult != true) return;
 
         var listName = metadataDialog.ListName;
+        var version = metadataDialog.Version;
         var description = metadataDialog.Description;
-        var uploaderName = metadataDialog.CreatedBy ?? string.Empty;
+        var uploaderName = metadataDialog.CreatedBy;
         if (string.IsNullOrWhiteSpace(uploaderName)) uploaderName = GetUploaderNameForPdf();
+        else uploaderName = uploaderName!.Trim();
+        var gameVersion = ResolveGameVersion(metadataDialog.VintageStoryVersion);
 
         var selectedConfigOptions = metadataDialog.GetSelectedConfigOptions();
         var includedConfigurations = TryReadModConfigurations(selectedConfigOptions);
 
-        var saveFileDialog = new SaveFileDialog
+        TrySaveInstalledModsPdf(
+            listName,
+            version,
+            description,
+            uploaderName,
+            includedConfigurations,
+            gameVersion,
+            mods);
+    }
+
+    private bool TrySaveInstalledModsPdf(
+        string listName,
+        string? version,
+        string? description,
+        string uploaderName,
+        IReadOnlyDictionary<string, ModConfigurationSnapshot>? includedConfigurations,
+        string? gameVersion,
+        IReadOnlyList<ModListItemViewModel>? preFetchedMods = null)
+    {
+        if (_viewModel is null)
         {
-            Title = "Save Modlist PDF",
-            DefaultExt = ".pdf",
-            Filter = "PDF files (*.pdf)|*.pdf",
-            AddExtension = true,
-            FileName = BuildPdfFileName(listName)
-        };
+            WpfMessageBox.Show(
+                "Mods are still loading. Please try again once loading is complete.",
+                "Simple VS Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return false;
+        }
 
-        var saveResult = saveFileDialog.ShowDialog(this);
-        if (saveResult != true) return;
+        var mods = preFetchedMods ?? _viewModel.GetInstalledModsSnapshot();
+        if (mods.Count == 0)
+        {
+            WpfMessageBox.Show(
+                "No installed mods were found to include in the PDF.",
+                "Simple VS Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return false;
+        }
 
-        var filePath = saveFileDialog.FileName;
+        string filePath;
+        try
+        {
+            var modListDirectory = EnsureModListDirectory();
+            var entryName = BuildSuggestedFileName(listName, "Modlist");
+            filePath = Path.Combine(modListDirectory, entryName + ".pdf");
+
+            if (File.Exists(filePath))
+            {
+                var message =
+                    $"A modlist PDF named \"{Path.GetFileName(filePath)}\" already exists in the Modlists folder. Do you want to replace it?";
+                var confirmation = WpfMessageBox.Show(
+                    this,
+                    message,
+                    "Replace Modlist PDF",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (confirmation != MessageBoxResult.Yes) return false;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
+                                       or PathTooLongException or SecurityException)
+        {
+            WpfMessageBox.Show($"Failed to prepare the Modlists folder:\n{ex.Message}",
+                "Simple VS Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return false;
+        }
 
         var presetName = string.IsNullOrWhiteSpace(listName)
             ? "Installed Mods"
             : listName.Trim();
+        var resolvedGameVersion = ResolveGameVersion(gameVersion);
         var serializable = BuildSerializablePreset(
             presetName,
             true,
             true,
-            includedConfigurations);
+            includedConfigurations,
+            resolvedGameVersion);
+
+        serializable.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        serializable.Version = string.IsNullOrWhiteSpace(version) ? null : version.Trim();
+        serializable.Uploader = string.IsNullOrWhiteSpace(uploaderName) ? null : uploaderName.Trim();
+        if (!string.IsNullOrWhiteSpace(listName)) serializable.Name = listName.Trim();
 
         var serializableConfigList = BuildSerializableConfigList(includedConfigurations);
+
+        var normalizedUploader = string.IsNullOrWhiteSpace(uploaderName)
+            ? GetUploaderNameForPdf()
+            : uploaderName.Trim();
 
         try
         {
             GenerateInstalledModsPdf(
                 filePath,
                 listName,
+                version,
                 description,
-                uploaderName,
-                _viewModel.InstalledGameVersion,
+                normalizedUploader,
+                resolvedGameVersion,
                 mods,
                 serializable,
                 serializableConfigList);
@@ -5239,6 +5345,8 @@ public partial class MainWindow : Window
                 "Simple VS Manager",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
+
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
                                        or PathTooLongException)
@@ -5257,6 +5365,8 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+
+        return false;
     }
 
     private void ManagerDataFolderMenuItem_OnClick(object sender, RoutedEventArgs e)
@@ -7100,7 +7210,8 @@ public partial class MainWindow : Window
         string failureContext,
         bool includeModVersions,
         bool exclusive,
-        IReadOnlyDictionary<string, ModConfigurationSnapshot>? includedConfigurations = null)
+        IReadOnlyDictionary<string, ModConfigurationSnapshot>? includedConfigurations = null,
+        Action<SerializablePreset>? configureSerializable = null)
     {
         if (_viewModel is null) return false;
 
@@ -7137,7 +7248,12 @@ public partial class MainWindow : Window
         if (!string.Equals(entryName, Path.GetFileNameWithoutExtension(filePath), StringComparison.Ordinal))
             filePath = Path.Combine(directory, entryName + ".json");
 
-        var serializable = BuildSerializablePreset(entryName, includeModVersions, exclusive, includedConfigurations);
+        var serializable = BuildSerializablePreset(entryName,
+            includeModVersions,
+            exclusive,
+            includedConfigurations,
+            ResolveGameVersion(null));
+        configureSerializable?.Invoke(serializable);
 
         try
         {
@@ -7168,7 +7284,8 @@ public partial class MainWindow : Window
         string entryName,
         bool includeModVersions,
         bool exclusive,
-        IReadOnlyDictionary<string, ModConfigurationSnapshot>? includedConfigurations = null)
+        IReadOnlyDictionary<string, ModConfigurationSnapshot>? includedConfigurations = null,
+        string? gameVersion = null)
     {
         if (_viewModel is null) throw new InvalidOperationException("View model is not initialized.");
 
@@ -7217,8 +7334,17 @@ public partial class MainWindow : Window
             IncludeModStatus = true,
             IncludeModVersions = includeModVersions ? true : null,
             Exclusive = exclusive ? true : null,
-            Mods = mods
+            Mods = mods,
+            GameVersion = string.IsNullOrWhiteSpace(gameVersion) ? null : gameVersion.Trim()
         };
+    }
+
+    private string? ResolveGameVersion(string? requestedVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedVersion)) return requestedVersion.Trim();
+
+        var installed = _viewModel?.InstalledGameVersion;
+        return string.IsNullOrWhiteSpace(installed) ? null : installed!.Trim();
     }
 
     private static SerializableConfigList? BuildSerializableConfigList(
@@ -7348,36 +7474,107 @@ public partial class MainWindow : Window
 
     private bool TrySaveModlist()
     {
+        return TrySaveModlist(null, out _);
+    }
+
+    private bool TrySaveModlist(Func<string?>? suggestedNameProvider, out string? savedFilePath)
+    {
+        savedFilePath = null;
+
         var configOptions = BuildModConfigOptions();
-        IReadOnlyDictionary<string, ModConfigurationSnapshot>? includedConfigurations = null;
+        var suggestedName = suggestedNameProvider?.Invoke();
 
-        if (configOptions.Count > 0)
+        var metadataDialog = new SaveInstalledModsDialog(
+            suggestedName,
+            configOptions,
+            GetUploaderNameForPdf(),
+            defaultVersion: null,
+            defaultGameVersion: _viewModel?.InstalledGameVersion,
+            SaveInstalledModsDialogResult.SaveJson)
         {
-            var configDialog = new ModConfigSelectionDialog(configOptions)
-            {
-                Owner = this
-            };
+            Owner = this
+        };
 
-            var dialogResult = configDialog.ShowDialog();
-            if (dialogResult != true) return false;
+        var dialogResult = metadataDialog.ShowDialog();
+        if (dialogResult != true) return false;
 
-            var selectedConfigOptions = configDialog.GetSelectedOptions();
-            includedConfigurations = TryReadModConfigurations(selectedConfigOptions);
+        var listName = metadataDialog.ListName;
+        var version = metadataDialog.Version;
+        var description = metadataDialog.Description;
+        var createdBy = metadataDialog.CreatedBy;
+        createdBy = string.IsNullOrWhiteSpace(createdBy)
+            ? GetUploaderNameForPdf()
+            : createdBy!.Trim();
+        var gameVersion = ResolveGameVersion(metadataDialog.VintageStoryVersion);
+
+        var selectedConfigOptions = metadataDialog.GetSelectedConfigOptions();
+        var includedConfigurations = TryReadModConfigurations(selectedConfigOptions);
+
+        if (metadataDialog.SelectedAction == SaveInstalledModsDialogResult.SavePdf)
+        {
+            return TrySaveInstalledModsPdf(
+                listName,
+                version,
+                description,
+                createdBy,
+                includedConfigurations,
+                gameVersion);
         }
 
-        var modListDirectory = EnsureModListDirectory();
-        return TrySaveSnapshot(
-            modListDirectory,
-            "Save Modlist",
-            "Modlist files (*.json)|*.json|All files (*.*)|*.*",
-            "Modlists must be saved inside the Modlists folder.",
-            "Modlist",
-            null,
-            name => _viewModel?.ReportStatus($"Saved modlist \"{name}\"."),
-            "modlist",
-            true,
-            true,
-            includedConfigurations);
+        try
+        {
+            var modListDirectory = EnsureModListDirectory();
+            var suggestedEntryName = !string.IsNullOrWhiteSpace(listName)
+                ? listName
+                : suggestedName;
+            var entryName = BuildSuggestedFileName(suggestedEntryName, "Modlist");
+            var filePath = Path.Combine(modListDirectory, entryName + ".json");
+
+            if (File.Exists(filePath))
+            {
+                var message =
+                    $"A modlist named \"{Path.GetFileName(filePath)}\" already exists in the Modlists folder. Do you want to replace it?";
+                var confirmation = WpfMessageBox.Show(
+                    this,
+                    message,
+                    "Replace Modlist",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (confirmation != MessageBoxResult.Yes) return false;
+            }
+
+            var serializable = BuildSerializablePreset(entryName, true, true, includedConfigurations, gameVersion);
+            if (!string.IsNullOrWhiteSpace(listName)) serializable.Name = listName.Trim();
+            serializable.Description = description;
+            serializable.Version = version;
+            serializable.Uploader = string.IsNullOrWhiteSpace(createdBy)
+                ? null
+                : createdBy.Trim();
+
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            };
+
+            var json = JsonSerializer.Serialize(serializable, options);
+            File.WriteAllText(filePath, json);
+
+            _viewModel?.ReportStatus($"Saved modlist \"{entryName}\".");
+            savedFilePath = filePath;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
+                                      or PathTooLongException)
+        {
+            WpfMessageBox.Show($"Failed to save the modlist:\n{ex.Message}",
+                "Simple VS Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return false;
+        }
     }
 
     private bool TrySaveAutomaticModlist(string requestedName, out string savedName, out string filePath)
@@ -7387,11 +7584,11 @@ public partial class MainWindow : Window
 
         if (_viewModel is null) return false;
 
-        var modListDirectory = EnsureModListDirectory();
+        var modListDirectory = EnsureRebuiltModListDirectory();
         savedName = BuildSuggestedFileName(requestedName, "Modlist");
         filePath = Path.Combine(modListDirectory, savedName + ".json");
 
-        var serializable = BuildSerializablePreset(savedName, true, true);
+        var serializable = BuildSerializablePreset(savedName, true, true, gameVersion: ResolveGameVersion(null));
 
         try
         {
@@ -7678,7 +7875,19 @@ public partial class MainWindow : Window
 
         if (prompt == MessageBoxResult.Cancel) return false;
 
-        if (prompt == MessageBoxResult.Yes) return TrySaveModlist();
+        if (prompt == MessageBoxResult.Yes)
+        {
+            var result = TrySaveModlist(null, out var savedFilePath);
+            if (result)
+            {
+                if (!string.IsNullOrWhiteSpace(savedFilePath))
+                    RefreshLocalModlists(true, new[] { savedFilePath });
+                else
+                    RefreshLocalModlists(true);
+            }
+
+            return result;
+        }
 
         return true;
     }
@@ -7689,6 +7898,7 @@ public partial class MainWindow : Window
         string? version,
         string uploader,
         IReadOnlyDictionary<string, ModConfigurationSnapshot>? includedConfigurations,
+        string? gameVersion,
         out string json)
     {
         json = string.Empty;
@@ -7696,7 +7906,7 @@ public partial class MainWindow : Window
         var trimmedName = string.IsNullOrWhiteSpace(modlistName) ? null : modlistName.Trim();
         if (string.IsNullOrEmpty(trimmedName) || _viewModel is null) return false;
 
-        var serializable = BuildSerializablePreset(trimmedName, true, true, includedConfigurations);
+        var serializable = BuildSerializablePreset(trimmedName, true, true, includedConfigurations, gameVersion);
         serializable.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
         serializable.Version = string.IsNullOrWhiteSpace(version) ? null : version.Trim();
         serializable.Uploader = string.IsNullOrWhiteSpace(uploader) ? null : uploader.Trim();
@@ -7775,7 +7985,8 @@ public partial class MainWindow : Window
                 displayName,
                 true,
                 true,
-                includedConfigurations);
+                includedConfigurations,
+                ResolveGameVersion(null));
 
             var options = new JsonSerializerOptions
             {
@@ -7923,24 +8134,6 @@ public partial class MainWindow : Window
         return $"Modlist {DateTime.Now:yyyy-MM-dd HH:mm}";
     }
 
-    private static string BuildPdfFileName(string listName)
-    {
-        if (string.IsNullOrWhiteSpace(listName)) return "Installed Mods";
-
-        var invalidCharacters = Path.GetInvalidFileNameChars();
-        var builder = new StringBuilder(listName.Length);
-
-        foreach (var character in listName.Trim())
-            builder.Append(Array.IndexOf(invalidCharacters, character) >= 0 ? '_' : character);
-
-        var sanitized = builder.ToString().Trim();
-        if (string.IsNullOrWhiteSpace(sanitized)) return "Installed Mods";
-
-        if (sanitized.Length > 120) sanitized = sanitized[..120];
-
-        return sanitized;
-    }
-
     private static void EnsureQuestPdfLicense()
     {
         if (_isQuestPdfLicenseInitialized) return;
@@ -7960,9 +8153,10 @@ public partial class MainWindow : Window
     private static void GenerateInstalledModsPdf(
         string filePath,
         string listName,
+        string? modlistVersion,
         string? description,
         string uploaderName,
-        string? installedGameVersion,
+        string? gameVersion,
         IReadOnlyList<ModListItemViewModel> mods,
         SerializablePreset serializable,
         SerializableConfigList? configList)
@@ -7970,8 +8164,9 @@ public partial class MainWindow : Window
         EnsureQuestPdfLicense();
 
         var normalizedListName = string.IsNullOrWhiteSpace(listName) ? "Installed Mods" : listName.Trim();
+        var normalizedVersion = string.IsNullOrWhiteSpace(modlistVersion) ? null : modlistVersion.Trim();
         var normalizedDescription = description?.Trim() ?? string.Empty;
-        var gameVersion = string.IsNullOrWhiteSpace(installedGameVersion) ? "Unknown" : installedGameVersion.Trim();
+        var resolvedGameVersion = string.IsNullOrWhiteSpace(gameVersion) ? "Unknown" : gameVersion.Trim();
         var encodedModlist = PdfModlistSerializer.SerializeToBase64(serializable);
         var encodedConfigList =
             configList is null ? null : PdfModlistSerializer.SerializeConfigListToBase64(configList);
@@ -8002,6 +8197,10 @@ public partial class MainWindow : Window
                     column.Spacing(6);
 
                     column.Item().Text(normalizedListName).FontSize(32).Bold();
+                    if (!string.IsNullOrEmpty(normalizedVersion))
+                        column.Item().Text($"Version: {normalizedVersion}")
+                            .FontSize(12)
+                            .Italic();
                     column.Item().Text(text =>
                     {
                         text.DefaultTextStyle(style => style.FontSize(10));
@@ -8015,7 +8214,7 @@ public partial class MainWindow : Window
                             .FontColor(Colors.Blue.Medium);
                         text.Span(" to easily load this pdf as a modlist!");
                     });
-                    column.Item().Text($"For Vintage Story {gameVersion}").FontSize(14);
+                    column.Item().Text($"Made for VS version {resolvedGameVersion}").FontSize(14);
                     column.Item().Text($"Modlist by {uploaderName}").FontSize(14);
                     column.Item().Text(text =>
                     {
@@ -8088,7 +8287,13 @@ public partial class MainWindow : Window
 
     private void SaveModlistMenuItem_OnClick(object sender, RoutedEventArgs e)
     {
-        TrySaveModlist();
+        if (TrySaveModlist(null, out var savedFilePath))
+        {
+            if (!string.IsNullOrWhiteSpace(savedFilePath))
+                RefreshLocalModlists(true, new[] { savedFilePath });
+            else
+                RefreshLocalModlists(true);
+        }
     }
 
     private Task SaveModlistToCloudAsync()
@@ -8097,7 +8302,11 @@ public partial class MainWindow : Window
         {
             var suggestedName = BuildCloudModlistName();
             var configOptions = BuildModConfigOptions();
-            var detailsDialog = new CloudModlistDetailsDialog(this, suggestedName, configOptions);
+            var detailsDialog = new CloudModlistDetailsDialog(
+                this,
+                suggestedName,
+                configOptions,
+                _viewModel?.InstalledGameVersion);
             var dialogResult = detailsDialog.ShowDialog();
             if (dialogResult != true) return;
 
@@ -8111,7 +8320,14 @@ public partial class MainWindow : Window
             var selectedConfigOptions = detailsDialog.GetSelectedConfigOptions();
             includedConfigurations = TryReadModConfigurations(selectedConfigOptions);
 
-            if (!TryBuildCurrentModlistJson(modlistName, description, version, uploader, includedConfigurations,
+            var gameVersion = ResolveGameVersion(detailsDialog.ModlistGameVersion);
+
+            if (!TryBuildCurrentModlistJson(modlistName,
+                    description,
+                    version,
+                    uploader,
+                    includedConfigurations,
+                    gameVersion,
                     out var json)) return;
 
             var slots = await GetCloudModlistSlotsAsync(store, true, false);
@@ -8329,6 +8545,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.InvokeAsync(() =>
         {
+            RefreshLocalModlists(true);
             if (_viewModel?.IsViewingCloudModlists == true) _ = RefreshCloudModlistsAsync(true);
         }, DispatcherPriority.Background);
     }
@@ -8368,13 +8585,235 @@ public partial class MainWindow : Window
                 string.Equals(entry.OwnerId, currentUserId, StringComparison.Ordinal))
                 continue;
 
-            var metadata = ExtractCloudModlistMetadata(entry.ContentJson);
+            var metadata = ExtractModlistMetadata(entry.ContentJson);
             if (metadata.Uploader is not null &&
                 string.Equals(metadata.Uploader, trimmedUploader, StringComparison.OrdinalIgnoreCase))
                 return false;
         }
 
         return true;
+    }
+
+    private void LocalModlistsDataGrid_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (LocalModlistsDataGrid is null)
+        {
+            SetLocalModlistSelection(Array.Empty<LocalModlistListEntry>());
+            return;
+        }
+
+        var selectedEntries = LocalModlistsDataGrid.SelectedItems
+            .OfType<LocalModlistListEntry>()
+            .ToList();
+
+        SetLocalModlistSelection(selectedEntries);
+    }
+
+    private void SaveLocalModlistButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        var preservedSelection = _selectedLocalModlists
+            .Where(entry => entry is not null && !string.IsNullOrWhiteSpace(entry.FilePath))
+            .Select(entry => entry.FilePath)
+            .ToList();
+
+        if (TrySaveModlist(null, out var savedFilePath))
+        {
+            if (!string.IsNullOrWhiteSpace(savedFilePath)) preservedSelection.Add(savedFilePath);
+            RefreshLocalModlists(true, preservedSelection);
+        }
+    }
+
+    private async void InstallLocalModlistButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_selectedLocalModlists.Count != 1) return;
+
+        var entry = _selectedLocalModlists[0];
+
+        if (string.IsNullOrWhiteSpace(entry.FilePath) || !File.Exists(entry.FilePath))
+        {
+            WpfMessageBox.Show(
+                "The selected modlist file could not be found. It may have been moved or deleted.",
+                "Simple VS Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            RefreshLocalModlists(true);
+            return;
+        }
+
+        await LoadModlistFromFileAsync(entry.FilePath).ConfigureAwait(true);
+    }
+
+    private void OpenModlistsFolderButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        string directory;
+        try
+        {
+            directory = EnsureModListDirectory();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
+        {
+            WpfMessageBox.Show($"Failed to open the Modlists folder:\n{ex.Message}",
+                "Simple VS Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
+        OpenFolder(directory, "Modlists");
+    }
+
+    private void DeleteLocalModlistsButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_selectedLocalModlists.Count == 0) return;
+
+        var entries = _selectedLocalModlists
+            .Where(entry => entry is not null && !string.IsNullOrWhiteSpace(entry.FilePath))
+            .ToList();
+
+        if (entries.Count == 0) return;
+
+        string message;
+        if (entries.Count == 1)
+        {
+            var name = entries[0].DisplayName;
+            message = $"Are you sure you want to delete the modlist \"{name}\"? This cannot be undone.";
+        }
+        else
+        {
+            message = $"Are you sure you want to delete the {entries.Count} selected modlists? This cannot be undone.";
+        }
+
+        var confirmation = WpfMessageBox.Show(
+            this,
+            message,
+            "Delete Modlists",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (confirmation != MessageBoxResult.Yes) return;
+
+        var errors = new List<string>();
+        var deletedCount = 0;
+
+        foreach (var entry in entries)
+        {
+            try
+            {
+                if (!File.Exists(entry.FilePath)) continue;
+                File.Delete(entry.FilePath);
+                deletedCount++;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                errors.Add($"{entry.DisplayName}: {ex.Message}");
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            var summary = string.Join("\n", errors.Select(err => $"• {err}"));
+            WpfMessageBox.Show(
+                this,
+                "Some modlists could not be deleted:\n" + summary,
+                "Simple VS Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        else if (deletedCount > 0)
+        {
+            var statusMessage = deletedCount == 1
+                ? "Deleted local modlist."
+                : $"Deleted {deletedCount} local modlists.";
+            _viewModel?.ReportStatus(statusMessage);
+        }
+
+        RefreshLocalModlists(true, Array.Empty<string>());
+    }
+
+    private void ModifyLocalModlistButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_selectedLocalModlists.Count != 1) return;
+
+        var entry = _selectedLocalModlists[0];
+        if (entry is null || string.IsNullOrWhiteSpace(entry.FilePath)) return;
+
+        var dialog = new LocalModlistEditDialog(this, entry.DisplayName, entry.Description, entry.Version,
+            entry.GameVersion);
+        var dialogResult = dialog.ShowDialog();
+        if (dialogResult != true) return;
+
+        string json;
+        try
+        {
+            json = File.ReadAllText(entry.FilePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            WpfMessageBox.Show(
+                this,
+                $"Failed to read the modlist:\n{ex.Message}",
+                "Modify Modlist",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
+        if (!PdfModlistSerializer.TryDeserializeFromJson(json, out var preset, out var errorMessage) || preset is null)
+        {
+            var message = string.IsNullOrWhiteSpace(errorMessage)
+                ? "The modlist could not be read."
+                : errorMessage!;
+            WpfMessageBox.Show(
+                this,
+                message,
+                "Modify Modlist",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
+        var updatedName = dialog.ModlistName?.Trim();
+        var updatedDescription = string.IsNullOrWhiteSpace(dialog.ModlistDescription)
+            ? null
+            : dialog.ModlistDescription!.Trim();
+        var updatedVersion = string.IsNullOrWhiteSpace(dialog.ModlistVersion)
+            ? null
+            : dialog.ModlistVersion!.Trim();
+        var updatedGameVersion = string.IsNullOrWhiteSpace(dialog.ModlistGameVersion)
+            ? null
+            : dialog.ModlistGameVersion!.Trim();
+
+        preset.Name = updatedName;
+        preset.Description = updatedDescription;
+        preset.Version = updatedVersion;
+        preset.GameVersion = updatedGameVersion;
+
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+
+        try
+        {
+            var updatedJson = JsonSerializer.Serialize(preset, options);
+            File.WriteAllText(entry.FilePath, updatedJson);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            WpfMessageBox.Show(
+                this,
+                $"Failed to update the modlist:\n{ex.Message}",
+                "Modify Modlist",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
+        var statusName = string.IsNullOrWhiteSpace(updatedName) ? entry.DisplayName : updatedName!;
+        _viewModel?.ReportStatus($"Updated modlist \"{statusName}\".");
+        RefreshLocalModlists(true, new[] { entry.FilePath });
     }
 
     private async void RefreshCloudModlistsButton_OnClick(object sender, RoutedEventArgs e)
@@ -9464,12 +9903,12 @@ public partial class MainWindow : Window
             if (!includeEmptySlots && !isOccupied) continue;
 
             string? json = null;
-            var metadata = CloudModlistMetadata.Empty;
+            var metadata = ModlistMetadata.Empty;
             if (isOccupied)
                 try
                 {
                     json = await store.LoadAsync(slotKey);
-                    metadata = ExtractCloudModlistMetadata(json);
+                    metadata = ExtractModlistMetadata(json);
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException
                                                or TaskCanceledException)
@@ -9485,6 +9924,217 @@ public partial class MainWindow : Window
         }
 
         return result;
+    }
+
+    private void RefreshLocalModlists(bool force, IReadOnlyCollection<string>? preferredSelection = null)
+    {
+        if (!force && _localModlistsLoaded) return;
+
+        IReadOnlyList<LocalModlistListEntry> entries;
+        List<string> errors;
+
+        try
+        {
+            entries = BuildLocalModlistEntries(out errors);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            WpfMessageBox.Show($"Failed to read local modlists:\n{ex.Message}",
+                "Simple VS Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            entries = Array.Empty<LocalModlistListEntry>();
+            errors = new List<string>();
+        }
+
+        _viewModel?.ReplaceLocalModlists(entries);
+        _localModlistsLoaded = true;
+
+        var preferred = preferredSelection is not null
+            ? new HashSet<string>(preferredSelection.Where(path => !string.IsNullOrWhiteSpace(path)),
+                StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(_selectedLocalModlists
+                .Where(entry => !string.IsNullOrWhiteSpace(entry?.FilePath))
+                .Select(entry => entry.FilePath), StringComparer.OrdinalIgnoreCase);
+
+        if (LocalModlistsDataGrid is not null)
+        {
+            LocalModlistsDataGrid.SelectedItems.Clear();
+
+            if (preferred.Count > 0)
+            {
+                foreach (var item in LocalModlistsDataGrid.Items.OfType<LocalModlistListEntry>())
+                    if (!string.IsNullOrWhiteSpace(item?.FilePath) && preferred.Contains(item.FilePath))
+                        LocalModlistsDataGrid.SelectedItems.Add(item);
+            }
+        }
+
+        if (LocalModlistsDataGrid is not null && LocalModlistsDataGrid.SelectedItems.Count > 0)
+        {
+            var selected = LocalModlistsDataGrid.SelectedItems.OfType<LocalModlistListEntry>().ToList();
+            SetLocalModlistSelection(selected);
+        }
+        else
+        {
+            SetLocalModlistSelection(Array.Empty<LocalModlistListEntry>());
+        }
+
+        if (errors.Count > 0)
+        {
+            var summary = string.Join("\n", errors.Select(error => $"• {error}"));
+            WpfMessageBox.Show(
+                this,
+                "Some local modlists could not be loaded:\n" + summary,
+                "Simple VS Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private IReadOnlyList<LocalModlistListEntry> BuildLocalModlistEntries(out List<string> errors)
+    {
+        errors = new List<string>();
+
+        var directory = EnsureModListDirectory();
+        if (!Directory.Exists(directory)) return Array.Empty<LocalModlistListEntry>();
+
+        var list = new List<LocalModlistListEntry>();
+
+        foreach (var filePath in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+        {
+            if (!HasSupportedModlistExtension(filePath)) continue;
+
+            if (TryCreateLocalModlistEntry(filePath, out var entry, out var error))
+            {
+                if (entry is not null) list.Add(entry);
+            }
+            else if (!string.IsNullOrWhiteSpace(error))
+            {
+                errors.Add($"{Path.GetFileName(filePath)}: {error}");
+            }
+        }
+
+        list.Sort((left, right) =>
+        {
+            var compare = string.Compare(left.DisplayName, right.DisplayName, StringComparison.OrdinalIgnoreCase);
+            if (compare != 0) return compare;
+
+            return string.Compare(left.FilePath, right.FilePath, StringComparison.OrdinalIgnoreCase);
+        });
+
+        return list;
+    }
+
+    private bool TryCreateLocalModlistEntry(string filePath, out LocalModlistListEntry? entry, out string? error)
+    {
+        entry = null;
+        error = null;
+
+        try
+        {
+            if (string.Equals(Path.GetExtension(filePath), ".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                using var document = PdfDocument.Open(filePath);
+                string? json = null;
+
+                var information = document.Information;
+                var hasMetadata = PdfModlistSerializer.TryExtractModlistJsonFromMetadata(
+                    information?.Subject,
+                    out json,
+                    out var metadataError);
+
+                if (!hasMetadata)
+                {
+                    if (metadataError is not null)
+                    {
+                        error = metadataError;
+                        return false;
+                    }
+
+                    var textBuilder = new StringBuilder();
+
+                    foreach (var page in document.GetPages())
+                    {
+                        var pageBuilder = new StringBuilder();
+
+                        foreach (var letter in page.Letters)
+                        {
+                            var value = letter.Value;
+                            if (string.IsNullOrEmpty(value)) continue;
+
+                            if (value == "\r") continue;
+
+                            pageBuilder.Append(value);
+                        }
+
+                        var pageText = pageBuilder.ToString();
+                        if (string.IsNullOrWhiteSpace(pageText)) continue;
+
+                        if (textBuilder.Length > 0) textBuilder.Append('\n');
+                        textBuilder.Append(pageText);
+                    }
+
+                    var pdfText = textBuilder.ToString();
+                    if (string.IsNullOrWhiteSpace(pdfText))
+                    {
+                        error = "The PDF did not contain any readable text.";
+                        return false;
+                    }
+
+                    if (!PdfModlistSerializer.TryExtractModlistJson(pdfText!, out json, out var extractionError))
+                    {
+                        error = extractionError;
+                        return false;
+                    }
+                }
+
+                return TryCreateLocalModlistEntryFromJson(filePath, json!, out entry, out error);
+            }
+
+            var jsonText = File.ReadAllText(filePath);
+            return TryCreateLocalModlistEntryFromJson(filePath, jsonText, out entry, out error);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private bool TryCreateLocalModlistEntryFromJson(
+        string filePath,
+        string json,
+        out LocalModlistListEntry? entry,
+        out string? error)
+    {
+        entry = null;
+        error = null;
+
+        if (!PdfModlistSerializer.TryDeserializeFromJson(json, out var preset, out var errorMessage))
+        {
+            error = string.IsNullOrWhiteSpace(errorMessage)
+                ? "The file is not a valid SVSM modlist."
+                : errorMessage;
+            return false;
+        }
+
+        var metadata = ExtractModlistMetadata(json);
+        var mods = metadata.Mods ?? Array.Empty<string>();
+        var lastWriteUtc = File.GetLastWriteTimeUtc(filePath);
+        DateTimeOffset? lastModified = lastWriteUtc == DateTime.MinValue
+            ? null
+            : new DateTimeOffset(lastWriteUtc, TimeSpan.Zero);
+
+        var name = metadata.Name ?? preset?.Name;
+        var description = metadata.Description ?? preset?.Description;
+        var version = metadata.Version ?? preset?.Version;
+        var uploader = metadata.Uploader ?? preset?.Uploader;
+
+        var gameVersion = metadata.GameVersion ?? preset?.GameVersion;
+
+        entry = new LocalModlistListEntry(filePath, name, description, version, uploader, mods, lastModified,
+            gameVersion);
+        return true;
     }
 
     private async Task RefreshCloudModlistsAsync(bool force)
@@ -9533,7 +10183,7 @@ public partial class MainWindow : Window
             if (!seen.Add(entry.RegistryKey)) continue;
 
             var slotLabel = FormatCloudSlotLabel(entry.SlotKey);
-            var metadata = ExtractCloudModlistMetadata(entry.ContentJson);
+            var metadata = ExtractModlistMetadata(entry.ContentJson);
             list.Add(new CloudModlistListEntry(
                 entry.OwnerId,
                 entry.SlotKey,
@@ -9544,7 +10194,8 @@ public partial class MainWindow : Window
                 metadata.Uploader,
                 metadata.Mods,
                 entry.ContentJson,
-                entry.DateAdded));
+                entry.DateAdded,
+                metadata.GameVersion));
         }
 
         list.Sort((left, right) =>
@@ -9559,6 +10210,34 @@ public partial class MainWindow : Window
         });
 
         return list;
+    }
+
+    private void SetLocalModlistSelection(IReadOnlyList<LocalModlistListEntry> selection)
+    {
+        _selectedLocalModlists.Clear();
+
+        if (selection is not null)
+            foreach (var entry in selection)
+                if (entry is not null)
+                    _selectedLocalModlists.Add(entry);
+
+        var primary = _selectedLocalModlists.FirstOrDefault();
+
+        if (SelectedLocalModlistTitle is not null)
+            SelectedLocalModlistTitle.Text = primary?.DisplayName ?? string.Empty;
+
+        if (SelectedLocalModlistDescription is not null)
+            SelectedLocalModlistDescription.Text = primary?.Description ?? string.Empty;
+
+        if (InstallLocalModlistButton is not null)
+        {
+            if (_selectedLocalModlists.Count == 1 && primary is not null)
+                InstallLocalModlistButton.ToolTip = $"Install \"{primary.DisplayName}\"";
+            else
+                InstallLocalModlistButton.ToolTip = null;
+        }
+
+        UpdateLocalModlistControlsEnabledState();
     }
 
     private void SetCloudModlistSelection(CloudModlistListEntry? entry)
@@ -9603,6 +10282,21 @@ public partial class MainWindow : Window
             var hasSelection = _selectedCloudModlist is not null;
             InstallCloudModlistButton.IsEnabled = internetEnabled && hasSelection;
         }
+    }
+
+    private void UpdateLocalModlistControlsEnabledState()
+    {
+        var hasSelection = _selectedLocalModlists.Count > 0;
+        var hasSingleSelection = _selectedLocalModlists.Count == 1;
+
+        if (DeleteLocalModlistsButton is not null)
+            DeleteLocalModlistsButton.IsEnabled = hasSelection;
+
+        if (ModifyLocalModlistButton is not null)
+            ModifyLocalModlistButton.IsEnabled = _selectedLocalModlists.Count == 1;
+
+        if (InstallLocalModlistButton is not null)
+            InstallLocalModlistButton.IsEnabled = hasSingleSelection;
     }
 
     private async Task RefreshManagerUpdateLinkAsync()
@@ -9670,7 +10364,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private static string BuildCloudSlotDisplay(string slotKey, CloudModlistMetadata metadata, bool isOccupied)
+    private static string BuildCloudSlotDisplay(string slotKey, ModlistMetadata metadata, bool isOccupied)
     {
         if (!isOccupied) return $"{FormatCloudSlotLabel(slotKey)} (Empty)";
 
@@ -9692,17 +10386,17 @@ public partial class MainWindow : Window
 
     private static string? ExtractModlistName(string? json)
     {
-        return ExtractCloudModlistMetadata(json).Name;
+        return ExtractModlistMetadata(json).Name;
     }
 
-    private static CloudModlistMetadata ExtractCloudModlistMetadata(string? json)
+    private static ModlistMetadata ExtractModlistMetadata(string? json)
     {
-        if (string.IsNullOrWhiteSpace(json)) return CloudModlistMetadata.Empty;
+        if (string.IsNullOrWhiteSpace(json)) return ModlistMetadata.Empty;
 
         try
         {
             using var document = JsonDocument.Parse(json);
-            if (document.RootElement.ValueKind != JsonValueKind.Object) return CloudModlistMetadata.Empty;
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return ModlistMetadata.Empty;
 
             var root = document.RootElement;
             var name = TryGetTrimmedProperty(root, "name");
@@ -9710,6 +10404,8 @@ public partial class MainWindow : Window
             var version = TryGetTrimmedProperty(root, "version");
             var uploader = TryGetTrimmedProperty(root, "uploader")
                            ?? TryGetTrimmedProperty(root, "uploaderName");
+            var gameVersion = TryGetTrimmedProperty(root, "gameVersion")
+                              ?? TryGetTrimmedProperty(root, "vsVersion");
 
             var mods = new List<string>();
             if (root.TryGetProperty("mods", out var modsElement) && modsElement.ValueKind == JsonValueKind.Array)
@@ -9727,11 +10423,11 @@ public partial class MainWindow : Window
                     mods.Add(display);
                 }
 
-            return new CloudModlistMetadata(name, description, version, uploader, mods);
+            return new ModlistMetadata(name, description, version, uploader, mods, gameVersion);
         }
         catch (JsonException)
         {
-            return CloudModlistMetadata.Empty;
+            return ModlistMetadata.Empty;
         }
     }
 
@@ -9853,6 +10549,14 @@ public partial class MainWindow : Window
         var modListDirectory = Path.Combine(baseDirectory, ModListDirectoryName);
         Directory.CreateDirectory(modListDirectory);
         return modListDirectory;
+    }
+
+    private string EnsureRebuiltModListDirectory()
+    {
+        var modListBaseDirectory = EnsureModListDirectory();
+        var rebuiltModListDirectory = Path.Combine(modListBaseDirectory, RebuiltModListDirectoryName);
+        Directory.CreateDirectory(rebuiltModListDirectory);
+        return rebuiltModListDirectory;
     }
 
     private string EnsureCloudModListCacheDirectory()
@@ -10775,6 +11479,45 @@ public partial class MainWindow : Window
         UpdateSelectedModButtons();
     }
 
+    private void ClearModDatabaseSelections()
+    {
+        if (_selectedMods.Count > 0)
+        {
+            var removedAny = false;
+
+            for (var i = _selectedMods.Count - 1; i >= 0; i--)
+            {
+                var mod = _selectedMods[i];
+                if (!mod.IsModDatabaseEntry) continue;
+
+                _selectedMods.RemoveAt(i);
+                mod.IsSelected = false;
+                UnsubscribeFromSelectedMod(mod);
+                removedAny = true;
+            }
+
+            if (removedAny)
+            {
+                if (_selectionAnchor is { } anchor && anchor.IsModDatabaseEntry) _selectionAnchor = null;
+                UpdateSelectedModButtons();
+            }
+        }
+
+        if (ModDbDataGrid != null)
+        {
+            ModDbDataGrid.SelectedIndex = -1;
+            ModDbDataGrid.SelectedItem = null;
+            ModDbDataGrid.UnselectAll();
+        }
+
+        if (ModDatabaseCardsListView != null)
+        {
+            ModDatabaseCardsListView.SelectedIndex = -1;
+            ModDatabaseCardsListView.SelectedItem = null;
+            ModDatabaseCardsListView.UnselectAll();
+        }
+    }
+
     private void RestoreSelectionFromSourcePaths(IReadOnlyList<string> sourcePaths, string? anchorSourcePath)
     {
         if (_viewModel is null || _viewModel.SearchModDatabase) return;
@@ -11554,18 +12297,19 @@ public partial class MainWindow : Window
         }
     }
 
-    private sealed class CloudModlistMetadata
+    private sealed class ModlistMetadata
     {
-        public static readonly CloudModlistMetadata Empty = new(null, null, null, null, Array.Empty<string>());
+        public static readonly ModlistMetadata Empty = new(null, null, null, null, Array.Empty<string>(), null);
 
-        public CloudModlistMetadata(string? name, string? description, string? version, string? uploader,
-            IReadOnlyList<string> mods)
+        public ModlistMetadata(string? name, string? description, string? version, string? uploader,
+            IReadOnlyList<string> mods, string? gameVersion)
         {
             Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
             Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
             Version = string.IsNullOrWhiteSpace(version) ? null : version.Trim();
             Uploader = string.IsNullOrWhiteSpace(uploader) ? null : uploader.Trim();
             Mods = mods ?? Array.Empty<string>();
+            GameVersion = string.IsNullOrWhiteSpace(gameVersion) ? null : gameVersion.Trim();
         }
 
         public string? Name { get; }
@@ -11577,6 +12321,8 @@ public partial class MainWindow : Window
         public string? Uploader { get; }
 
         public IReadOnlyList<string> Mods { get; }
+
+        public string? GameVersion { get; }
     }
 
     private sealed record ModConfigurationSnapshot(string FileName, string Content);

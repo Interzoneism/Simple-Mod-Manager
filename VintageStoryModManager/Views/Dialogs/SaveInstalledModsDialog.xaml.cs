@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
@@ -13,7 +14,10 @@ public partial class SaveInstalledModsDialog : Window
     public SaveInstalledModsDialog(
         string? defaultListName = null,
         IEnumerable<ModConfigOption>? configOptions = null,
-        string? defaultCreatedBy = null)
+        string? defaultCreatedBy = null,
+        string? defaultVersion = null,
+        string? defaultGameVersion = null,
+        SaveInstalledModsDialogResult defaultAction = SaveInstalledModsDialogResult.SaveJson)
     {
         ConfigOptions = new ObservableCollection<ModConfigOption>(
             (configOptions ?? Array.Empty<ModConfigOption>())
@@ -23,6 +27,8 @@ public partial class SaveInstalledModsDialog : Window
         InitializeComponent();
 
         if (!string.IsNullOrWhiteSpace(defaultListName)) NameTextBox.Text = defaultListName.Trim();
+        if (!string.IsNullOrWhiteSpace(defaultVersion)) VersionTextBox.Text = defaultVersion.Trim();
+        if (!string.IsNullOrWhiteSpace(defaultGameVersion)) GameVersionTextBox.Text = defaultGameVersion.Trim();
 
         if (!string.IsNullOrWhiteSpace(defaultCreatedBy))
             CreatedByTextBox.Text = defaultCreatedBy.Trim();
@@ -30,7 +36,9 @@ public partial class SaveInstalledModsDialog : Window
 
         foreach (var option in ConfigOptions) option.PropertyChanged += ConfigOption_OnPropertyChanged;
 
-        UpdateConfirmButtonState();
+        SetDefaultAction(defaultAction);
+
+        UpdateActionButtonsState();
         UpdateSelectAllState();
     }
 
@@ -40,9 +48,15 @@ public partial class SaveInstalledModsDialog : Window
 
     public string ListName => NameTextBox.Text.Trim();
 
+    public string? Version => NormalizeOptionalText(VersionTextBox.Text);
+
+    public string? VintageStoryVersion => NormalizeOptionalText(GameVersionTextBox.Text);
+
     public string? Description => NormalizeOptionalText(DescriptionTextBox.Text);
 
     public string? CreatedBy => NormalizeOptionalText(CreatedByTextBox.Text);
+
+    public SaveInstalledModsDialogResult SelectedAction { get; private set; } = SaveInstalledModsDialogResult.SaveJson;
 
     public IReadOnlyList<ModConfigOption> GetSelectedConfigOptions()
     {
@@ -56,7 +70,7 @@ public partial class SaveInstalledModsDialog : Window
 
     private void Window_OnLoaded(object sender, RoutedEventArgs e)
     {
-        UpdateConfirmButtonState();
+        UpdateActionButtonsState();
         NameTextBox.Focus();
         NameTextBox.SelectAll();
         UpdateSelectAllState();
@@ -64,22 +78,41 @@ public partial class SaveInstalledModsDialog : Window
 
     private void NameTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
     {
-        UpdateConfirmButtonState();
+        UpdateActionButtonsState();
     }
 
-    private void UpdateConfirmButtonState()
+    private void UpdateActionButtonsState()
     {
-        if (ConfirmButton is null) return;
+        var hasName = !string.IsNullOrWhiteSpace(NameTextBox?.Text);
 
-        ConfirmButton.IsEnabled = !string.IsNullOrWhiteSpace(NameTextBox.Text);
+        if (ConfirmButton is not null) ConfirmButton.IsEnabled = hasName;
+        if (SaveAsPdfButton is not null) SaveAsPdfButton.IsEnabled = hasName;
     }
 
     private void ConfirmButton_OnClick(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(NameTextBox.Text)) return;
 
+        SelectedAction = SaveInstalledModsDialogResult.SaveJson;
         DialogResult = true;
         Close();
+    }
+
+    private void SaveAsPdfButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(NameTextBox.Text)) return;
+
+        SelectedAction = SaveInstalledModsDialogResult.SavePdf;
+        DialogResult = true;
+        Close();
+    }
+
+    private void SetDefaultAction(SaveInstalledModsDialogResult action)
+    {
+        if (ConfirmButton is null || SaveAsPdfButton is null) return;
+
+        ConfirmButton.IsDefault = action == SaveInstalledModsDialogResult.SaveJson;
+        SaveAsPdfButton.IsDefault = action == SaveInstalledModsDialogResult.SavePdf;
     }
 
     private void SelectAllCheckBox_OnClick(object sender, RoutedEventArgs e)
@@ -128,4 +161,10 @@ public partial class SaveInstalledModsDialog : Window
         };
         _isUpdatingSelectAllCheckBox = false;
     }
+}
+
+public enum SaveInstalledModsDialogResult
+{
+    SaveJson,
+    SavePdf
 }

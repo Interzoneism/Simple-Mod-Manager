@@ -42,6 +42,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly RelayCommand _clearSearchCommand;
     private readonly ClientSettingsWatcher _clientSettingsWatcher;
     private readonly ObservableCollection<CloudModlistListEntry> _cloudModlists = new();
+    private readonly ObservableCollection<LocalModlistListEntry> _localModlists = new();
     private readonly UserConfigurationService _configuration;
     private readonly ModDatabaseService _databaseService;
     private readonly ModDiscoveryService _discoveryService;
@@ -157,6 +158,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _configuration = configuration;
 
         _settingsStore = new ClientSettingsStore(DataDirectory);
+        PerformClientSettingsCleanupIfNeeded();
         _discoveryService = new ModDiscoveryService(_settingsStore);
         _databaseService = new ModDatabaseService();
         _modDatabaseSearchResultLimit = Math.Clamp(modDatabaseSearchResultLimit, 1, MaxModDatabaseResultLimit);
@@ -175,6 +177,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ModsView.Filter = FilterMod;
         SearchResultsView = CollectionViewSource.GetDefaultView(_searchResults);
         CloudModlistsView = CollectionViewSource.GetDefaultView(_cloudModlists);
+        LocalModlistsView = CollectionViewSource.GetDefaultView(_localModlists);
         InstalledTagFilters = new ReadOnlyObservableCollection<TagFilterOptionViewModel>(_installedTagFilters);
         ModDatabaseTagFilters = new ReadOnlyObservableCollection<TagFilterOptionViewModel>(_modDatabaseTagFilters);
         ModDatabaseFetchLimitOptions = new ReadOnlyObservableCollection<int>(_modDatabaseFetchLimitOptions);
@@ -235,6 +238,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ICollectionView SearchResultsView { get; }
 
     public ICollectionView CloudModlistsView { get; }
+
+    public ICollectionView LocalModlistsView { get; }
 
     public ReadOnlyObservableCollection<TagFilterOptionViewModel> InstalledTagFilters { get; }
 
@@ -423,6 +428,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool IsViewingInstalledMods => _viewSection == ViewSection.InstalledMods;
 
     public bool HasCloudModlists => _cloudModlists.Count > 0;
+
+    public bool HasLocalModlists => _localModlists.Count > 0;
 
     public bool CanLoadMoreModDatabaseResults
     {
@@ -1161,6 +1168,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasCloudModlists));
     }
 
+    public void ReplaceLocalModlists(IEnumerable<LocalModlistListEntry>? entries)
+    {
+        _localModlists.Clear();
+
+        if (entries is not null)
+            foreach (var entry in entries)
+                if (entry is not null)
+                    _localModlists.Add(entry);
+
+        LocalModlistsView.Refresh();
+        OnPropertyChanged(nameof(HasLocalModlists));
+    }
+
     public IReadOnlyList<string> GetCurrentDisabledEntries()
     {
         return _settingsStore.GetDisabledEntriesSnapshot();
@@ -1276,7 +1296,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                         state.IsActive is not bool desiredState) continue;
 
                     var normalizedId = state.ModId.Trim();
-                    if (!installedMods.TryGetValue(normalizedId, out var installedVersion)) continue;
+                    var hasInstalledMod = installedMods.TryGetValue(normalizedId, out var installedVersion);
 
                     var recordedVersion = string.IsNullOrWhiteSpace(state.Version)
                         ? null
@@ -1284,6 +1304,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
                     if (desiredState)
                     {
+                        if (!hasInstalledMod) continue;
+
                         var versionsToActivate = new HashSet<string?>(StringComparer.OrdinalIgnoreCase)
                         {
                             null
@@ -1302,7 +1324,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     }
                     else
                     {
-                        if (!_settingsStore.TrySetActive(normalizedId, null, false, out var error))
+                        string? versionToDisable;
+
+                        if (hasInstalledMod && !string.IsNullOrWhiteSpace(installedVersion))
+                        {
+                            versionToDisable = installedVersion;
+                        }
+                        else if (!string.IsNullOrWhiteSpace(recordedVersion))
+                        {
+                            versionToDisable = recordedVersion;
+                        }
+                        else
+                        {
+                            versionToDisable = null;
+                        }
+
+                        if (!_settingsStore.TrySetActive(normalizedId, versionToDisable, false, out var error))
                         {
                             localError = error;
                             return false;
@@ -4825,6 +4862,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _disposed = true;
             _busyScope.Dispose();
             _owner.EndUserReportOperation();
+        }
+    }
+
+    private void PerformClientSettingsCleanupIfNeeded()
+    {
+        if (_configuration.ClientSettingsCleanupCompleted) return;
+
+        try
+        {
+            _settingsStore.RemoveInvalidDisabledEntries();
+            _configuration.SetClientSettingsCleanupCompleted();
+        }
+        catch (Exception)
+        {
+            // This cleanup is a best-effort operation.
         }
     }
 

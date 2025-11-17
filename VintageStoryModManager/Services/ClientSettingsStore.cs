@@ -285,6 +285,29 @@ public sealed class ClientSettingsStore
         }
     }
 
+    public bool RemoveInvalidDisabledEntries()
+    {
+        lock (_syncRoot)
+        {
+            var removedAny = false;
+
+            foreach (var entry in _disabledMods.ToList())
+            {
+                if (string.IsNullOrWhiteSpace(entry)) continue;
+
+                var trimmed = entry.Trim();
+                if (trimmed.Contains('@')) continue;
+
+                removedAny |= RemoveDisabledEntry(trimmed);
+            }
+
+            if (!removedAny) return false;
+
+            Persist();
+            return true;
+        }
+    }
+
     private static string? ComposeVersionKey(string modId, string? version)
     {
         if (string.IsNullOrWhiteSpace(version)) return null;

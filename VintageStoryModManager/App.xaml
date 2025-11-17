@@ -345,7 +345,6 @@
                                     <Track x:Name="PART_Track"
                                            Margin="0"
                                            Orientation="{TemplateBinding Orientation}"
-                                           IsDirectionReversed="True"
                                            Maximum="{TemplateBinding Maximum}"
                                            Minimum="{TemplateBinding Minimum}"
                                            Value="{TemplateBinding Value}"
@@ -376,6 +375,7 @@
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="Orientation" Value="Horizontal">
+                                    <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
                                     <Setter TargetName="LineDecreaseButton" Property="Grid.Row" Value="0" />
                                     <Setter TargetName="LineDecreaseButton" Property="Grid.RowSpan" Value="3" />
                                     <Setter TargetName="LineDecreaseButton" Property="Grid.Column" Value="0" />
@@ -399,9 +399,119 @@
                                     <Setter TargetName="IncreasePage" Property="Command"
                                             Value="{x:Static primitives:ScrollBar.PageRightCommand}" />
                                 </Trigger>
+                                <Trigger Property="Orientation" Value="Vertical">
+                                    <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="True" />
+                                </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter TargetName="LineDecreaseButton" Property="IsEnabled" Value="False" />
                                     <Setter TargetName="LineIncreaseButton" Property="IsEnabled" Value="False" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="IMM.SlimScrollBarThumbStyle"
+                   TargetType="{x:Type Thumb}"
+                   BasedOn="{StaticResource IMM.DataGridScrollBarThumbStyle}">
+                <Setter Property="MinHeight" Value="12" />
+                <Setter Property="MinWidth" Value="6" />
+            </Style>
+
+            <Style x:Key="IMM.SlimScrollBarButtonStyle"
+                   TargetType="{x:Type RepeatButton}"
+                   BasedOn="{StaticResource IMM.DataGridScrollBarButtonStyle}">
+                <Setter Property="MinHeight" Value="12" />
+                <Setter Property="MinWidth" Value="6" />
+                <Setter Property="Padding" Value="0" />
+            </Style>
+
+            <Style x:Key="IMM.SlimScrollBarStyle" TargetType="{x:Type ScrollBar}">
+                <Setter Property="Background" Value="{DynamicResource Brush.ScrollBar.Track}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.ScrollBar.Glyph}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.ScrollBar.Track}" />
+                <Setter Property="Width" Value="8" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type ScrollBar}">
+                            <Grid x:Name="Root" Background="Transparent" SnapsToDevicePixels="True">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <RepeatButton x:Name="LineDecreaseButton"
+                                              Grid.Row="0"
+                                              Grid.Column="0"
+                                              Grid.ColumnSpan="3"
+                                              Style="{StaticResource IMM.SlimScrollBarButtonStyle}"
+                                              Command="{x:Static primitives:ScrollBar.LineUpCommand}"
+                                              Tag="0" />
+
+                                <Border x:Name="TrackHost"
+                                        Grid.Row="1"
+                                        Grid.Column="0"
+                                        Grid.ColumnSpan="3"
+                                        Background="{TemplateBinding Background}"
+                                        CornerRadius="3">
+                                    <Track x:Name="PART_Track"
+                                           Margin="0"
+                                           Orientation="{TemplateBinding Orientation}"
+                                           IsDirectionReversed="True"
+                                           Maximum="{TemplateBinding Maximum}"
+                                           Minimum="{TemplateBinding Minimum}"
+                                           Value="{TemplateBinding Value}"
+                                           ViewportSize="{TemplateBinding ViewportSize}">
+                                        <Track.DecreaseRepeatButton>
+                                            <RepeatButton x:Name="DecreasePage"
+                                                          Style="{StaticResource IMM.DataGridScrollBarTrackButtonStyle}"
+                                                          Command="{x:Static primitives:ScrollBar.PageUpCommand}" />
+                                        </Track.DecreaseRepeatButton>
+                                        <Track.Thumb>
+                                            <Thumb Style="{StaticResource IMM.SlimScrollBarThumbStyle}" />
+                                        </Track.Thumb>
+                                        <Track.IncreaseRepeatButton>
+                                            <RepeatButton x:Name="IncreasePage"
+                                                          Style="{StaticResource IMM.DataGridScrollBarTrackButtonStyle}"
+                                                          Command="{x:Static primitives:ScrollBar.PageDownCommand}" />
+                                        </Track.IncreaseRepeatButton>
+                                    </Track>
+                                </Border>
+
+                                <RepeatButton x:Name="LineIncreaseButton"
+                                              Grid.Row="2"
+                                              Grid.Column="0"
+                                              Grid.ColumnSpan="3"
+                                              Style="{StaticResource IMM.SlimScrollBarButtonStyle}"
+                                              Command="{x:Static primitives:ScrollBar.LineDownCommand}"
+                                              Tag="180" />
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="Orientation" Value="Horizontal">
+                                    <Setter TargetName="LineDecreaseButton" Property="Grid.Row" Value="0" />
+                                    <Setter TargetName="LineDecreaseButton" Property="Grid.RowSpan" Value="3" />
+                                    <Setter TargetName="LineDecreaseButton" Property="Grid.Column" Value="0" />
+                                    <Setter TargetName="LineDecreaseButton" Property="Grid.ColumnSpan" Value="1" />
+                                    <Setter TargetName="LineDecreaseButton" Property="Tag" Value="270" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Grid.Row" Value="0" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Grid.RowSpan" Value="3" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Grid.Column" Value="2" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Grid.ColumnSpan" Value="1" />
+                                    <Setter TargetName="LineIncreaseButton" Property="Tag" Value="90" />
+                                    <Setter TargetName="TrackHost" Property="Grid.Row" Value="0" />
+                                    <Setter TargetName="TrackHost" Property="Grid.RowSpan" Value="3" />
+                                    <Setter TargetName="TrackHost" Property="Grid.Column" Value="1" />
+                                    <Setter TargetName="TrackHost" Property="Grid.ColumnSpan" Value="1" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Root" Property="Opacity" Value="0.4" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>

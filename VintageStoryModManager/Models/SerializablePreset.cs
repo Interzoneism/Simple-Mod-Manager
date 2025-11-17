@@ -12,6 +12,8 @@ public sealed class SerializablePreset
 
     public string? Version { get; set; }
 
+    public string? GameVersion { get; set; }
+
     public string? Uploader { get; set; }
 
     public List<string>? DisabledEntries { get; set; }

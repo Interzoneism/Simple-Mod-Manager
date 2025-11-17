@@ -35,6 +35,7 @@ public static class DevConfig
 
     public static string PresetDirectoryName { get; } = "Presets";
     public static string ModListDirectoryName { get; } = "Modlists";
+    public static string RebuiltModListDirectoryName { get; } = "Rebuilt";
     public static string CloudModListCacheDirectoryName { get; } = "Modlists (Cloud Cache)";
     public static string BackupDirectoryName { get; } = "Backups";
     public static int AutomaticConfigMaxWordDistance { get; } = 2;

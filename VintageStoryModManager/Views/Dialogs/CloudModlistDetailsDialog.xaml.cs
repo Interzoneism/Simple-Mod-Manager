@@ -10,7 +10,11 @@ public partial class CloudModlistDetailsDialog : Window
     private bool _isUpdatingConfigOptionSelection;
     private bool _isUpdatingSelectAllCheckBox;
 
-    public CloudModlistDetailsDialog(Window owner, string? suggestedName, IEnumerable<ModConfigOption>? configOptions)
+    public CloudModlistDetailsDialog(
+        Window owner,
+        string? suggestedName,
+        IEnumerable<ModConfigOption>? configOptions,
+        string? defaultGameVersion = null)
     {
         ConfigOptions = new ObservableCollection<ModConfigOption>(
             (configOptions ?? Enumerable.Empty<ModConfigOption>())
@@ -27,6 +31,7 @@ public partial class CloudModlistDetailsDialog : Window
         NameTextBox.Text = string.IsNullOrWhiteSpace(suggestedName)
             ? string.Empty
             : suggestedName;
+        if (!string.IsNullOrWhiteSpace(defaultGameVersion)) GameVersionTextBox.Text = defaultGameVersion.Trim();
         NameTextBox.SelectAll();
         UpdateConfirmButtonState();
     }
@@ -44,6 +49,10 @@ public partial class CloudModlistDetailsDialog : Window
     public string? ModlistVersion => string.IsNullOrWhiteSpace(VersionTextBox.Text)
         ? null
         : VersionTextBox.Text.Trim();
+
+    public string? ModlistGameVersion => string.IsNullOrWhiteSpace(GameVersionTextBox.Text)
+        ? null
+        : GameVersionTextBox.Text.Trim();
 
     public IReadOnlyList<ModConfigOption> GetSelectedConfigOptions()
     {

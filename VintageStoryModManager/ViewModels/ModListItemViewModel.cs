@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -89,6 +90,7 @@ public sealed class ModListItemViewModel : ObservableObject
         Website = entry.Website;
         SourcePath = entry.SourcePath;
         Location = location;
+        IsModDatabaseEntry = string.Equals(location, "Mod Database", StringComparison.Ordinal);
         SourceKind = entry.SourceKind;
         _authors = entry.Authors;
         _contributors = entry.Contributors;
@@ -449,6 +451,8 @@ public sealed class ModListItemViewModel : ObservableObject
     public string SourcePath { get; }
 
     public string Location { get; }
+
+    public bool IsModDatabaseEntry { get; }
 
     public ModSourceKind SourceKind { get; }
 

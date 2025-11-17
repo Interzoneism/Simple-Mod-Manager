@@ -252,6 +252,56 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="IMM.ModlistsTabItemStyle"
+               TargetType="{x:Type TabItem}">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.ModTabs.Background}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.SunkenSurface.Bevel.Dark}" />
+            <Setter Property="BorderThickness" Value="1,1,1,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="20,10" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabItem}">
+                        <Grid SnapsToDevicePixels="True" Background="Transparent">
+                            <Border x:Name="TabBorder"
+                                    Margin="0,0,0,-1"
+                                    CornerRadius="6,6,0,0"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                        <ContentPresenter x:Name="ContentSite"
+                                                  ContentSource="Header"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                  Margin="{TemplateBinding Padding}"
+                                                  TextElement.FontSize="16"
+                                                  RecognizesAccessKey="True" />
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Panel.ZIndex" Value="1" />
+                                <Setter TargetName="TabBorder" Property="Background"
+                                        Value="{DynamicResource Brush.Panel.Primary.Background.Solid}" />
+                                <Setter TargetName="TabBorder" Property="BorderBrush"
+                                        Value="{DynamicResource Brush.Accent.Primary}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background"
+                                        Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Subtle}" />
+                                <Setter TargetName="TabBorder" Property="Opacity" Value="0.6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <!-- Menu item style shared by toggle and standard items -->
         <Style x:Key="ToggleMenuItemStyle" TargetType="{x:Type MenuItem}">
             <Setter Property="Background" Value="{DynamicResource Brush.Panel.Primary.Background.Solid}" />
@@ -2330,380 +2380,895 @@
                             </Style.Triggers>
                         </Style>
                     </Grid.Style>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
 
-                    <Rectangle Grid.RowSpan="2" Margin="0,0,0,166" Fill="{DynamicResource Brush.DataGrid.Background}" />
+                    <TabControl x:Name="ModlistsTabControl"
+                                Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                                BorderThickness="0"
+                                ItemContainerStyle="{StaticResource IMM.ModlistsTabItemStyle}"
+                                SelectionChanged="ModlistsTabControl_OnSelectionChanged">
+                        <TabItem x:Name="LocalModlistsTabItem"
+                                 Header="Local">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
 
-                    <Border Margin="0,0,0,166"
-                            Grid.RowSpan="2"
-                            Background="Transparent"
-                            BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Light}"
-                            BorderThickness="0,0,2,2"
-                            CornerRadius="0"
-                            SnapsToDevicePixels="True">
-                        <Border Background="Transparent"
-                                BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Dark}"
-                                BorderThickness="2,2,0,0"
-                                CornerRadius="0"
-                                SnapsToDevicePixels="True">
-                            <DataGrid x:Name="CloudModlistsDataGrid"
-                                      ItemsSource="{Binding CloudModlistsView}"
-                                      AutoGenerateColumns="False"
-                                      CanUserAddRows="False"
-                                      CanUserDeleteRows="False"
-                                      IsReadOnly="True"
-                                      SelectionMode="Single"
-                                      SelectionUnit="FullRow"
-                                      IsEnabled="{Binding CanAccessCloudModlists}"
-                                      GridLinesVisibility="None"
-                                      RowHeaderWidth="0"
-                                      BorderThickness="0,1,2,1"
-                                      HorizontalGridLinesBrush="Transparent"
-                                      VerticalGridLinesBrush="Transparent"
-                                      HeadersVisibility="Column"
-                                      ui:ControlHelper.CornerRadius="0"
-                                      FontSize="15"
-                                      Foreground="{DynamicResource Brush.Text.Primary}"
-                                      SelectionChanged="CloudModlistsDataGrid_OnSelectionChanged"
-                                      Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
-                                      BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
-                                      RowBackground="{DynamicResource Brush.Panel.Primary.Background.Solid}">
-                                <DataGrid.Resources>
-                                    <Style TargetType="{x:Type ScrollBar}"
-                                           BasedOn="{StaticResource IMM.DataGridScrollBarStyle}" />
-                                    <Style TargetType="{x:Type Thumb}"
-                                           BasedOn="{StaticResource IMM.DataGridScrollBarThumbStyle}" />
-                                    <Style TargetType="{x:Type TextBlock}">
-                                        <Setter Property="TextWrapping" Value="Wrap" />
-                                    </Style>
-                                    <Style TargetType="{x:Type DataGridColumnHeader}"
-                                           BasedOn="{StaticResource IMM.PrimaryDataGridColumnHeaderStyle}" />
-                                </DataGrid.Resources>
-                                <DataGrid.CellStyle>
-                                    <StaticResource ResourceKey="IMM.DataGridCellBaseStyle" />
-                                </DataGrid.CellStyle>
+                                <Rectangle Grid.Row="0"
+                                           Margin="0,0,0,16"
+                                           Fill="{DynamicResource Brush.DataGrid.Background}" />
 
-                                <DataGrid.RowHeaderStyle>
-                                    <Style />
-                                </DataGrid.RowHeaderStyle>
-                                <DataGrid.RowStyle>
-                                    <Style TargetType="{x:Type DataGridRow}">
-                                        <Setter Property="Background" Value="Transparent" />
-                                        <Setter Property="BorderBrush"
-                                                Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
-                                        <Setter Property="BorderThickness" Value="0" />
-                                        <Setter Property="Margin" Value="10,2,10,2" />
-                                        <Setter Property="Foreground"
-                                                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" />
-                                        <Setter Property="Padding">
-                                            <Setter.Value>
-                                                <MultiBinding
-                                                    Converter="{StaticResource IMM.RowPaddingOffsetConverter}">
-                                                    <Binding Source="{StaticResource IMM.RowPaddingBase}" />
-                                                    <Binding Source="{StaticResource IMM.NormalRowHeightOffset}" />
-                                                </MultiBinding>
-                                            </Setter.Value>
-                                        </Setter>
-                                        <Setter Property="Height" Value="{x:Static sys:Double.NaN}" />
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="{x:Type DataGridRow}">
-                                                    <Border x:Name="RowBorder"
-                                                            Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="0"
-                                                            Margin="4,0,4,4"
-                                                            SnapsToDevicePixels="True">
-                                                        <Grid>
-                                                            <Border x:Name="SelectionOverlay"
-                                                                    Background="{DynamicResource Brush.Accent.Primary}"
-                                                                    Opacity="0"
-                                                                    CornerRadius="0"
-                                                                    IsHitTestVisible="False" />
-                                                            <Border x:Name="HoverOverlay"
-                                                                    Background="{DynamicResource Brush.Button.Primary.Background.Hover}"
-                                                                    Opacity="0"
-                                                                    CornerRadius="0"
-                                                                    IsHitTestVisible="False" />
-                                                            <Border Padding="{TemplateBinding Padding}"
-                                                                    Background="Transparent"
-                                                                    CornerRadius="0">
-                                                                <SelectiveScrollingGrid>
-                                                                    <SelectiveScrollingGrid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="*" />
-                                                                    </SelectiveScrollingGrid.ColumnDefinitions>
-                                                                    <SelectiveScrollingGrid.RowDefinitions>
-                                                                        <RowDefinition Height="*" />
-                                                                        <RowDefinition Height="Auto" />
-                                                                    </SelectiveScrollingGrid.RowDefinitions>
-                                                                    <DataGridCellsPresenter Grid.Column="0"
-                                                                            SelectiveScrollingGrid.SelectiveScrollingOrientation="Both" />
-                                                                    <DataGridDetailsPresenter Grid.Column="0"
-                                                                            Grid.Row="1"
-                                                                            SelectiveScrollingGrid.SelectiveScrollingOrientation="Horizontal"
-                                                                            Visibility="{TemplateBinding DetailsVisibility}" />
-                                                                </SelectiveScrollingGrid>
-                                                            </Border>
-                                                        </Grid>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="HoverOverlay" Property="Opacity"
-                                                                    Value="0.1" />
-                                                            <Setter TargetName="RowBorder" Property="BorderBrush"
-                                                                    Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
-                                                        </Trigger>
-                                                        <Trigger Property="IsMouseOver" Value="False">
-                                                            <Setter TargetName="HoverOverlay" Property="Opacity"
-                                                                    Value="0" />
-                                                        </Trigger>
+                                <Border Grid.Row="0"
+
+                                        Margin="0,0,0,16"
+
+                                        Background="Transparent"
+                                        BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Light}"
+                                        BorderThickness="0,0,2,2"
+                                        CornerRadius="0"
+                                        SnapsToDevicePixels="True">
+                                    <Border Background="Transparent"
+                                            BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Dark}"
+                                            BorderThickness="2,2,0,0"
+                                            CornerRadius="0"
+                                            SnapsToDevicePixels="True">
+                                        <DataGrid x:Name="LocalModlistsDataGrid"
+                                                  ItemsSource="{Binding LocalModlistsView}"
+                                                  AutoGenerateColumns="False"
+                                                  CanUserAddRows="False"
+                                                  CanUserDeleteRows="False"
+                                                  IsReadOnly="True"
+                                                  SelectionMode="Extended"
+                                                  SelectionUnit="FullRow"
+                                                  GridLinesVisibility="None"
+                                                  RowHeaderWidth="0"
+                                                  BorderThickness="0,1,2,1"
+                                                  HorizontalGridLinesBrush="Transparent"
+                                                  VerticalGridLinesBrush="Transparent"
+                                                  HeadersVisibility="Column"
+                                                  ui:ControlHelper.CornerRadius="0"
+                                                  FontSize="15"
+                                                  Foreground="{DynamicResource Brush.Text.Primary}"
+                                                  SelectionChanged="LocalModlistsDataGrid_OnSelectionChanged"
+                                                  Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                                                  BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                                                  RowBackground="{DynamicResource Brush.Panel.Primary.Background.Solid}">
+                                            <DataGrid.Resources>
+                                                <Style TargetType="{x:Type ScrollBar}"
+                                                       BasedOn="{StaticResource IMM.DataGridScrollBarStyle}" />
+                                                <Style TargetType="{x:Type Thumb}"
+                                                       BasedOn="{StaticResource IMM.DataGridScrollBarThumbStyle}" />
+                                                <Style TargetType="{x:Type TextBlock}">
+                                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                                </Style>
+                                                <Style TargetType="{x:Type DataGridColumnHeader}"
+                                                       BasedOn="{StaticResource IMM.PrimaryDataGridColumnHeaderStyle}" />
+                                            </DataGrid.Resources>
+                                            <DataGrid.CellStyle>
+                                                <StaticResource ResourceKey="IMM.DataGridCellBaseStyle" />
+                                            </DataGrid.CellStyle>
+
+                                            <DataGrid.RowHeaderStyle>
+                                                <Style />
+                                            </DataGrid.RowHeaderStyle>
+                                            <DataGrid.RowStyle>
+                                                <Style TargetType="{x:Type DataGridRow}">
+                                                    <Setter Property="Background" Value="Transparent" />
+                                                    <Setter Property="BorderBrush"
+                                                            Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                                                    <Setter Property="BorderThickness" Value="0" />
+                                                    <Setter Property="Margin" Value="10,2,10,2" />
+                                                    <Setter Property="Foreground"
+                                                            Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" />
+                                                    <Setter Property="Padding">
+                                                        <Setter.Value>
+                                                            <MultiBinding Converter="{StaticResource IMM.RowPaddingOffsetConverter}">
+                                                                <Binding Source="{StaticResource IMM.RowPaddingBase}" />
+                                                                <Binding Source="{StaticResource IMM.NormalRowHeightOffset}" />
+                                                            </MultiBinding>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Setter Property="Height" Value="{x:Static sys:Double.NaN}" />
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="{x:Type DataGridRow}">
+                                                                <Border x:Name="RowBorder"
+                                                                        Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+                                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                                        CornerRadius="0"
+                                                                        Margin="4,0,4,4"
+                                                                        SnapsToDevicePixels="True">
+                                                                    <Grid>
+                                                                        <Border x:Name="SelectionOverlay"
+                                                                                Background="{DynamicResource Brush.Accent.Primary}"
+                                                                                Opacity="0"
+                                                                                CornerRadius="0"
+                                                                                IsHitTestVisible="False" />
+                                                                        <Border x:Name="HoverOverlay"
+                                                                                Background="{DynamicResource Brush.Button.Primary.Background.Hover}"
+                                                                                Opacity="0"
+                                                                                CornerRadius="0"
+                                                                                IsHitTestVisible="False" />
+                                                                        <Border Padding="{TemplateBinding Padding}"
+                                                                                Background="Transparent"
+                                                                                CornerRadius="0">
+                                                                            <SelectiveScrollingGrid>
+                                                                                <SelectiveScrollingGrid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="*" />
+                                                                                </SelectiveScrollingGrid.ColumnDefinitions>
+                                                                                <SelectiveScrollingGrid.RowDefinitions>
+                                                                                    <RowDefinition Height="*" />
+                                                                                    <RowDefinition Height="Auto" />
+                                                                                </SelectiveScrollingGrid.RowDefinitions>
+                                                                                <DataGridCellsPresenter Grid.Column="0"
+                                                                                        SelectiveScrollingGrid.SelectiveScrollingOrientation="Both" />
+                                                                                <DataGridDetailsPresenter Grid.Column="0"
+                                                                                        Grid.Row="1"
+                                                                                        SelectiveScrollingGrid.SelectiveScrollingOrientation="Horizontal"
+                                                                                        Visibility="{TemplateBinding DetailsVisibility}" />
+                                                                            </SelectiveScrollingGrid>
+                                                                        </Border>
+                                                                    </Grid>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="HoverOverlay" Property="Opacity" Value="0.1" />
+                                                                        <Setter TargetName="RowBorder" Property="BorderBrush"
+                                                                                Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsMouseOver" Value="False">
+                                                                        <Setter TargetName="HoverOverlay" Property="Opacity" Value="0" />
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsSelected" Value="True">
+                                                                        <Setter TargetName="SelectionOverlay" Property="Opacity" Value="0.25" />
+                                                                        <Setter TargetName="HoverOverlay" Property="Opacity" Value="0" />
+                                                                        <Setter TargetName="RowBorder" Property="BorderBrush"
+                                                                                Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                                                                        <Setter TargetName="RowBorder" Property="BorderThickness" Value="0" />
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsSelected" Value="False">
+                                                                        <Setter TargetName="SelectionOverlay" Property="Opacity" Value="0" />
+                                                                        <Setter TargetName="RowBorder" Property="BorderThickness" Value="0" />
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
                                                         <Trigger Property="IsSelected" Value="True">
-                                                            <Setter TargetName="SelectionOverlay" Property="Opacity"
-                                                                    Value="0.25" />
-                                                            <Setter TargetName="HoverOverlay" Property="Opacity"
-                                                                    Value="0" />
-                                                            <Setter TargetName="RowBorder" Property="BorderBrush"
-                                                                    Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
-                                                            <Setter TargetName="RowBorder" Property="BorderThickness"
-                                                                    Value="0" />
+                                                            <Setter Property="Foreground"
+                                                                    Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" />
                                                         </Trigger>
-                                                        <Trigger Property="IsSelected" Value="False">
-                                                            <Setter TargetName="SelectionOverlay" Property="Opacity"
-                                                                    Value="0" />
-                                                            <Setter TargetName="RowBorder" Property="BorderThickness"
-                                                                    Value="0" />
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsSelected" Value="True">
-                                                <Setter Property="Foreground"
-                                                        Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" />
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </DataGrid.RowStyle>
-                                <DataGrid.Style>
-                                    <Style TargetType="{x:Type DataGrid}">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding HasCloudModlists}" Value="False">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </DataGrid.Style>
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Name"
-                                                        Binding="{Binding DisplayName}"
-                                                        Width="260"
-                                                        MinWidth="200"
-                                                        IsReadOnly="True">
-                                        <DataGridTextColumn.ElementStyle>
-                                            <Style TargetType="{x:Type TextBlock}">
-                                                <Setter Property="VerticalAlignment" Value="Center" />
-                                                <Setter Property="ToolTipService.ShowDuration" Value="60000" />
-                                                <Setter Property="ToolTip" Value="{Binding DisplayName}" />
-                                            </Style>
-                                        </DataGridTextColumn.ElementStyle>
-                                        <DataGridTextColumn.CellStyle>
-                                            <Style TargetType="{x:Type DataGridCell}"
-                                                   BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
-                                                <Setter Property="VerticalContentAlignment" Value="Center" />
-                                                <Setter Property="Margin" Value="10,0,0,0" />
-                                                <Setter Property="FontWeight" Value="Bold" />
-                                            </Style>
-                                        </DataGridTextColumn.CellStyle>
-                                    </DataGridTextColumn>
-                                    <DataGridTextColumn Header="Uploader"
-                                                        Binding="{Binding Uploader}"
-                                                        Width="220"
-                                                        MinWidth="180"
-                                                        IsReadOnly="True">
-                                        <DataGridTextColumn.ElementStyle>
-                                            <Style TargetType="{x:Type TextBlock}">
-                                                <Setter Property="VerticalAlignment" Value="Center" />
-                                                <Setter Property="TextAlignment" Value="Center" />
-                                            </Style>
-                                        </DataGridTextColumn.ElementStyle>
-                                        <DataGridTextColumn.CellStyle>
-                                            <Style TargetType="{x:Type DataGridCell}"
-                                                   BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
-                                                <Setter Property="HorizontalContentAlignment" Value="Center" />
-                                                <Setter Property="VerticalContentAlignment" Value="Center" />
-                                            </Style>
-                                        </DataGridTextColumn.CellStyle>
-                                    </DataGridTextColumn>
-                                    <DataGridTextColumn Header="Version"
-                                                        Width="120"
-                                                        Binding="{Binding Version, FallbackValue=—, TargetNullValue=—}"
-                                                        IsReadOnly="True">
-                                        <DataGridTextColumn.ElementStyle>
-                                            <Style TargetType="{x:Type TextBlock}">
-                                                <Setter Property="HorizontalAlignment" Value="Center" />
-                                                <Setter Property="VerticalAlignment" Value="Center" />
-                                                <Setter Property="TextAlignment" Value="Center" />
-                                            </Style>
-                                        </DataGridTextColumn.ElementStyle>
-                                        <DataGridTextColumn.CellStyle>
-                                            <Style TargetType="{x:Type DataGridCell}"
-                                                   BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
-                                                <Setter Property="HorizontalContentAlignment" Value="Center" />
-                                                <Setter Property="VerticalContentAlignment" Value="Center" />
-                                            </Style>
-                                        </DataGridTextColumn.CellStyle>
-                                    </DataGridTextColumn>
-                                    <DataGridTextColumn Header="Date Added"
-                                                        Width="180"
-                                                        Binding="{Binding DateAddedDisplay}"
-                                                        SortMemberPath="DateAdded"
-                                                        IsReadOnly="True">
-                                        <DataGridTextColumn.ElementStyle>
-                                            <Style TargetType="{x:Type TextBlock}">
-                                                <Setter Property="HorizontalAlignment" Value="Center" />
-                                                <Setter Property="VerticalAlignment" Value="Center" />
-                                                <Setter Property="TextAlignment" Value="Center" />
-                                                <Setter Property="ToolTipService.ShowDuration" Value="60000" />
-                                                <Setter Property="ToolTip" Value="{Binding DateAddedDisplay}" />
-                                            </Style>
-                                        </DataGridTextColumn.ElementStyle>
-                                        <DataGridTextColumn.CellStyle>
-                                            <Style TargetType="{x:Type DataGridCell}"
-                                                   BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
-                                                <Setter Property="HorizontalContentAlignment" Value="Center" />
-                                                <Setter Property="VerticalContentAlignment" Value="Center" />
-                                            </Style>
-                                        </DataGridTextColumn.CellStyle>
-                                    </DataGridTextColumn>
-                                    <DataGridTemplateColumn Header="Mods" Width="200" MinWidth="180" IsReadOnly="True">
-                                        <DataGridTemplateColumn.CellTemplate>
-                                            <DataTemplate>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </DataGrid.RowStyle>
+                                            <DataGrid.Style>
+                                                <Style TargetType="{x:Type DataGrid}">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasLocalModlists}" Value="False">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </DataGrid.Style>
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Name"
+                                                                    Binding="{Binding DisplayName}"
+                                                                    Width="260"
+                                                                    MinWidth="200"
+                                                                    IsReadOnly="True">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="{x:Type TextBlock}">
+                                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                                            <Setter Property="ToolTipService.ShowDuration" Value="60000" />
+                                                            <Setter Property="ToolTip" Value="{Binding DisplayName}" />
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                    <DataGridTextColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                            <Setter Property="Margin" Value="10,0,0,0" />
+                                                            <Setter Property="FontWeight" Value="Bold" />
+                                                        </Style>
+                                                    </DataGridTextColumn.CellStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTextColumn Header="Uploader"
+                                                                    Binding="{Binding UploaderDisplay}"
+                                                                    Width="220"
+                                                                    MinWidth="180"
+                                                                    IsReadOnly="True">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="{x:Type TextBlock}">
+                                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                                            <Setter Property="TextAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                    <DataGridTextColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.CellStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTextColumn Header="Version"
+                                                                    Width="120"
+                                                                    Binding="{Binding Version, FallbackValue=—, TargetNullValue=—}"
+                                                                    IsReadOnly="True">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="{x:Type TextBlock}">
+                                                            <Setter Property="HorizontalAlignment" Value="Center" />
+                                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                                            <Setter Property="TextAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                    <DataGridTextColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.CellStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTextColumn Header="VS Version"
+                                                                    Width="120"
+                                                                    Binding="{Binding GameVersionDisplay}"
+                                                                    IsReadOnly="True">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="{x:Type TextBlock}">
+                                                            <Setter Property="HorizontalAlignment" Value="Center" />
+                                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                                            <Setter Property="TextAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                    <DataGridTextColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.CellStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTextColumn Header="Last Modified"
+                                                                    Width="180"
+                                                                    Binding="{Binding LastModifiedDisplay}"
+                                                                    SortMemberPath="LastModified"
+                                                                    IsReadOnly="True">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="{x:Type TextBlock}">
+                                                            <Setter Property="HorizontalAlignment" Value="Center" />
+                                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                                            <Setter Property="TextAlignment" Value="Center" />
+                                                            <Setter Property="ToolTipService.ShowDuration" Value="60000" />
+                                                            <Setter Property="ToolTip" Value="{Binding LastModifiedDisplay}" />
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                    <DataGridTextColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.CellStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTemplateColumn Header="Mods" Width="200" MinWidth="180" IsReadOnly="True">
+                                                    <DataGridTemplateColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <Grid>
+                                                                <ComboBox x:Name="LocalModsComboBox"
+                                                                          ItemsSource="{Binding Mods, Mode=OneWay}"
+                                                                          IsEditable="True"
+                                                                          IsReadOnly="True"
+                                                                          SelectedIndex="-1"
+                                                                          MaxDropDownHeight="240" />
+                                                                <TextBlock Text="{Binding ModsSummary, Mode=OneWay}"
+                                                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"
+                                                                           IsHitTestVisible="False">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="{x:Type TextBlock}">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                            <Setter Property="Margin" Value="8,0,24,0" />
+                                                                            <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                                                            <Setter Property="TextAlignment" Value="Center" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsDropDownOpen, ElementName=LocalModsComboBox}" Value="True">
+                                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </DataGridTemplateColumn.CellTemplate>
+                                                    <DataGridTemplateColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTemplateColumn.CellStyle>
+                                                </DataGridTemplateColumn>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </Border>
+                                </Border>
+
+                                <TextBlock Grid.Row="0"
+                                           Text="No local modlists found."
+                                           FontSize="16"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap">
+                                    <TextBlock.Style>
+                                        <Style TargetType="{x:Type TextBlock}">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasLocalModlists}" Value="False">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <Border Grid.Row="1"
+                                        Margin="10,10,0,0"
+                                        Background="{DynamicResource Brush.ModCard.Background.Active}"
+                                        CornerRadius="10,10,10,10"
+                                        Height="180">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="6" ShadowDepth="3" Direction="270" Opacity="0.2" />
+                                    </Border.Effect>
+
+                                    <Grid Height="160"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Left"
+                                          Width="1161">
+                                        <Button x:Name="SaveLocalModlistButton"
+                                                Content="Save Modlist (Local)"
+                                                Padding="12,0,12,0"
+                                                Margin="10,84,0,0"
+                                                MinWidth="165"
+                                                Click="SaveLocalModlistButton_OnClick"
+                                                Height="32"
+                                                Width="185"
+                                                VerticalAlignment="Top"
+                                                HorizontalAlignment="Left" />
+                                        <Button x:Name="InstallLocalModlistButton"
+                                                Content="Install Selected Modlist"
+                                                Padding="12,0,12,0"
+                                                Margin="200,121,0,0"
+                                                MinWidth="165"
+                                                Click="InstallLocalModlistButton_OnClick"
+                                                Height="32"
+                                                Width="192"
+                                                VerticalAlignment="Top"
+                                                HorizontalAlignment="Left"
+                                                IsEnabled="False" />
+                                        <Button x:Name="DeleteLocalModlistsButton"
+                                                Content="Delete"
+                                                Padding="12,0,12,0"
+                                                Margin="10,47,0,0"
+                                                MinWidth="165"
+                                                Click="DeleteLocalModlistsButton_OnClick"
+                                                Height="32"
+                                                Width="185"
+                                                VerticalAlignment="Top"
+                                                HorizontalAlignment="Left"
+                                                IsEnabled="False" />
+                                        <Button x:Name="OpenModlistsFolderButton"
+                                                Content="Open Modlists Folder"
+                                                Padding="12,0,12,0"
+                                                Margin="10,121,0,0"
+                                                MinWidth="165"
+                                                Click="OpenModlistsFolderButton_OnClick"
+                                                Height="32"
+                                                Width="185"
+                                                VerticalAlignment="Top"
+                                                HorizontalAlignment="Left" />
+                                        <Button x:Name="ModifyLocalModlistButton"
+                                                Content="Modify"
+                                                Padding="12,0,12,0"
+                                                Margin="10,10,0,0"
+                                                MinWidth="165"
+                                                Click="ModifyLocalModlistButton_OnClick"
+                                                Height="32"
+                                                Width="185"
+                                                VerticalAlignment="Top"
+                                                HorizontalAlignment="Left"
+                                                IsEnabled="False" />
+                                        <Border HorizontalAlignment="Left"
+                                                Margin="200,10,0,0"
+                                                CornerRadius="5"
+                                                Width="942"
+                                                Background="Transparent"
+                                                BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Light}"
+                                                BorderThickness="0,0,2,2"
+                                                SnapsToDevicePixels="True" Height="106" VerticalAlignment="Top">
+                                            <Border Background="{DynamicResource Brush.ModCard.Background.Active}"
+                                                    BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Dark}"
+                                                    BorderThickness="2,2,0,0"
+                                                    CornerRadius="5"
+                                                    Padding="10"
+                                                    SnapsToDevicePixels="True"
+                                                    ClipToBounds="True">
                                                 <Grid>
-                                                    <ComboBox x:Name="ModsComboBox"
-                                                              ItemsSource="{Binding Mods, Mode=OneWay}"
-                                                              IsEditable="True"
-                                                              IsReadOnly="True"
-                                                              SelectedIndex="-1"
-                                                              MaxDropDownHeight="240" />
-                                                    <TextBlock Text="{Binding ModsSummary, Mode=OneWay}"
-                                                               Foreground="{DynamicResource Brush.Text.Primary}"
-                                                               HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center"
-                                                               IsHitTestVisible="False">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="{x:Type TextBlock}">
-                                                                <Setter Property="Visibility" Value="Visible" />
-                                                                <Setter Property="Margin" Value="8,0,24,0" />
-                                                                <Setter Property="HorizontalAlignment" Value="Stretch" />
-                                                                <Setter Property="TextAlignment" Value="Center" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger
-                                                                        Binding="{Binding IsDropDownOpen, ElementName=ModsComboBox}"
-                                                                        Value="True">
-                                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="*" />
+                                                    </Grid.RowDefinitions>
+                                                    <TextBlock x:Name="SelectedLocalModlistTitle"
+                                                               Grid.Row="0"
+                                                               TextWrapping="Wrap"
+                                                               Text=""
+                                                               FontWeight="Bold"
+                                                               Foreground="{DynamicResource Brush.Text.Primary}" Margin="0,0,0,66" Grid.RowSpan="2" />
+                                                    <TextBlock x:Name="SelectedLocalModlistDescription"
+                                                               Grid.Row="1"
+                                                               Margin="0,8,0,0"
+                                                               TextWrapping="Wrap"
+                                                               Text=""
+                                                               Foreground="{DynamicResource Brush.Text.Primary}" />
                                                 </Grid>
-                                            </DataTemplate>
-                                        </DataGridTemplateColumn.CellTemplate>
-                                        <DataGridTemplateColumn.CellStyle>
-                                            <Style TargetType="{x:Type DataGridCell}"
-                                                   BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
-                                                <Setter Property="HorizontalContentAlignment" Value="Center" />
-                                                <Setter Property="VerticalContentAlignment" Value="Center" />
-                                            </Style>
-                                        </DataGridTemplateColumn.CellStyle>
-                                    </DataGridTemplateColumn>
-                                </DataGrid.Columns>
-                            </DataGrid>
-                        </Border>
-                    </Border>
+                                            </Border>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </TabItem>
+                        <TabItem x:Name="OnlineModlistsTabItem"
+                                 Header="Online">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="1"
-                               Text="Loading modlists..."
-                               FontSize="16"
-                               Foreground="{DynamicResource Brush.Text.Primary}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               TextAlignment="Center"
-                               TextWrapping="Wrap">
-                        <TextBlock.Style>
-                            <Style TargetType="{x:Type TextBlock}">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding HasCloudModlists}" Value="False">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                    <Border Margin="10,0,10,10" Grid.Row="1"
-                            Background="{DynamicResource Brush.ModCard.Background.Active}" CornerRadius="10,10,10,10"
-                            Visibility="Visible" Height="151" VerticalAlignment="Bottom">
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="6" ShadowDepth="3" Direction="270" Opacity="0.2" />
-                        </Border.Effect>
+                                <Rectangle Grid.Row="0"
+                                           Margin="0,0,0,22"
+                                           Fill="{DynamicResource Brush.DataGrid.Background}" />
 
-                        <Grid Height="151" VerticalAlignment="Center" HorizontalAlignment="Left" Width="1152"
-                              IsEnabled="{Binding CanAccessCloudModlists}">
-                            <Button x:Name="InstallCloudModlistButton"
-                                    Content="Install Selected Modlist"
-                                    Padding="12,6"
-                                    MinWidth="195"
-                                    IsEnabled="False"
-                                    Visibility="Visible"
-                                    Click="InstallCloudModlistButton_OnClick" Margin="200,109,0,0" Height="32"
-                                    Width="170" HorizontalAlignment="Left" VerticalAlignment="Top" />
-                            <Button x:Name="SaveCloudModlistButton"
-                                    Content="Save Modlist (Cloud)"
-                                    Padding="12,6"
-                                    Margin="10,109,0,0"
-                                    MinWidth="165"
-                                    Click="SaveCloudModlistButton_OnClick" Height="32" Width="170"
-                                    VerticalAlignment="Top" HorizontalAlignment="Left" />
-                            <Button x:Name="ModifyCloudModlistsButton"
-                                    Content="Modify Modlists (Cloud)"
-                                    Padding="12,6"
-                                    Margin="10,66,0,0"
-                                    MinWidth="165"
-                                    Click="ModifyCloudModlistsButton_OnClick" Height="32" Width="170"
-                                    VerticalAlignment="Top" HorizontalAlignment="Left" />
-                            <Button x:Name="RefreshCloudModlistsButton"
-                                    Content="Refresh"
-                                    Padding="12,6"
-                                    MinWidth="100"
-                                    Click="RefreshCloudModlistsButton_OnClick" Margin="10,22,0,0" Height="32"
-                                    Width="100" HorizontalAlignment="Left" VerticalAlignment="Top" />
-                            <Border HorizontalAlignment="Left" Height="88" Margin="200,10,0,0" Padding="10"
-                                    VerticalAlignment="Top" CornerRadius="5,5,5,5"
-                                    Background="{DynamicResource Brush.ModCard.Background.Active}" Width="942">
-                                <Grid Margin="-10,-10,-10,-10">
-                                    <TextBlock x:Name="SelectedModlistDescription"
-                                               HorizontalAlignment="Left"
-                                               Margin="0,16,0,0"
-                                               TextWrapping="Wrap"
-                                               Text=""
-                                               VerticalAlignment="Top"
-                                               Height="72"
-                                               Width="932"
-                                               Foreground="{DynamicResource Brush.Text.Primary}" />
-                                    <TextBlock x:Name="SelectedModlistTitle" HorizontalAlignment="Left"
-                                               TextWrapping="Wrap" Text="" VerticalAlignment="Top" FontWeight="Bold" />
-                                </Grid>
-                            </Border>
-                        </Grid>
-                    </Border>
+                                <Border Grid.Row="0"
+                                        Margin="0,0,0,22"
+                                        Background="Transparent"
+                                        BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Light}"
+                                        BorderThickness="0,0,2,2"
+                                        CornerRadius="0"
+                                        SnapsToDevicePixels="True">
+                                    <Border Background="Transparent"
+                                            BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Dark}"
+                                            BorderThickness="2,2,0,0"
+                                            CornerRadius="0"
+                                            SnapsToDevicePixels="True">
+                                        <DataGrid x:Name="CloudModlistsDataGrid"
+                                                  ItemsSource="{Binding CloudModlistsView}"
+                                                  AutoGenerateColumns="False"
+                                                  CanUserAddRows="False"
+                                                  CanUserDeleteRows="False"
+                                                  IsReadOnly="True"
+                                                  SelectionMode="Single"
+                                                  SelectionUnit="FullRow"
+                                                  IsEnabled="{Binding CanAccessCloudModlists}"
+                                                  GridLinesVisibility="None"
+                                                  RowHeaderWidth="0"
+                                                  BorderThickness="0,1,2,1"
+                                                  HorizontalGridLinesBrush="Transparent"
+                                                  VerticalGridLinesBrush="Transparent"
+                                                  HeadersVisibility="Column"
+                                                  ui:ControlHelper.CornerRadius="0"
+                                                  FontSize="15"
+                                                  Foreground="{DynamicResource Brush.Text.Primary}"
+                                                  SelectionChanged="CloudModlistsDataGrid_OnSelectionChanged"
+                                                  Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                                                  BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                                                  RowBackground="{DynamicResource Brush.Panel.Primary.Background.Solid}">
+                                            <DataGrid.Resources>
+                                                <Style TargetType="{x:Type ScrollBar}"
+                                                       BasedOn="{StaticResource IMM.DataGridScrollBarStyle}" />
+                                                <Style TargetType="{x:Type Thumb}"
+                                                       BasedOn="{StaticResource IMM.DataGridScrollBarThumbStyle}" />
+                                                <Style TargetType="{x:Type TextBlock}">
+                                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                                </Style>
+                                                <Style TargetType="{x:Type DataGridColumnHeader}"
+                                                       BasedOn="{StaticResource IMM.PrimaryDataGridColumnHeaderStyle}" />
+                                            </DataGrid.Resources>
+                                            <DataGrid.CellStyle>
+                                                <StaticResource ResourceKey="IMM.DataGridCellBaseStyle" />
+                                            </DataGrid.CellStyle>
+
+                                            <DataGrid.RowHeaderStyle>
+                                                <Style />
+                                            </DataGrid.RowHeaderStyle>
+                                            <DataGrid.RowStyle>
+                                                <Style TargetType="{x:Type DataGridRow}">
+                                                    <Setter Property="Background" Value="Transparent" />
+                                                    <Setter Property="BorderBrush"
+                                                            Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                                                    <Setter Property="BorderThickness" Value="0" />
+                                                    <Setter Property="Margin" Value="10,2,10,2" />
+                                                    <Setter Property="Foreground"
+                                                            Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" />
+                                                    <Setter Property="Padding">
+                                                        <Setter.Value>
+                                                            <MultiBinding Converter="{StaticResource IMM.RowPaddingOffsetConverter}">
+                                                                <Binding Source="{StaticResource IMM.RowPaddingBase}" />
+                                                                <Binding Source="{StaticResource IMM.NormalRowHeightOffset}" />
+                                                            </MultiBinding>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Setter Property="Height" Value="{x:Static sys:Double.NaN}" />
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="{x:Type DataGridRow}">
+                                                                <Border x:Name="RowBorder"
+                                                                        Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+                                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                                        CornerRadius="0"
+                                                                        Margin="4,0,4,4"
+                                                                        SnapsToDevicePixels="True">
+                                                                    <Grid>
+                                                                        <Border x:Name="SelectionOverlay"
+                                                                                Background="{DynamicResource Brush.Accent.Primary}"
+                                                                                Opacity="0"
+                                                                                CornerRadius="0"
+                                                                                IsHitTestVisible="False" />
+                                                                        <Border x:Name="HoverOverlay"
+                                                                                Background="{DynamicResource Brush.Button.Primary.Background.Hover}"
+                                                                                Opacity="0"
+                                                                                CornerRadius="0"
+                                                                                IsHitTestVisible="False" />
+                                                                        <Border Padding="{TemplateBinding Padding}"
+                                                                                Background="Transparent"
+                                                                                CornerRadius="0">
+                                                                            <SelectiveScrollingGrid>
+                                                                                <SelectiveScrollingGrid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="*" />
+                                                                                </SelectiveScrollingGrid.ColumnDefinitions>
+                                                                                <SelectiveScrollingGrid.RowDefinitions>
+                                                                                    <RowDefinition Height="*" />
+                                                                                    <RowDefinition Height="Auto" />
+                                                                                </SelectiveScrollingGrid.RowDefinitions>
+                                                                                <DataGridCellsPresenter Grid.Column="0"
+                                                                                        SelectiveScrollingGrid.SelectiveScrollingOrientation="Both" />
+                                                                                <DataGridDetailsPresenter Grid.Column="0"
+                                                                                        Grid.Row="1"
+                                                                                        SelectiveScrollingGrid.SelectiveScrollingOrientation="Horizontal"
+                                                                                        Visibility="{TemplateBinding DetailsVisibility}" />
+                                                                            </SelectiveScrollingGrid>
+                                                                        </Border>
+                                                                    </Grid>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="HoverOverlay" Property="Opacity" Value="0.1" />
+                                                                        <Setter TargetName="RowBorder" Property="BorderBrush"
+                                                                                Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsMouseOver" Value="False">
+                                                                        <Setter TargetName="HoverOverlay" Property="Opacity" Value="0" />
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsSelected" Value="True">
+                                                                        <Setter TargetName="SelectionOverlay" Property="Opacity" Value="0.25" />
+                                                                        <Setter TargetName="HoverOverlay" Property="Opacity" Value="0" />
+                                                                        <Setter TargetName="RowBorder" Property="BorderBrush"
+                                                                                Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
+                                                                        <Setter TargetName="RowBorder" Property="BorderThickness" Value="0" />
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsSelected" Value="False">
+                                                                        <Setter TargetName="SelectionOverlay" Property="Opacity" Value="0" />
+                                                                        <Setter TargetName="RowBorder" Property="BorderThickness" Value="0" />
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsSelected" Value="True">
+                                                            <Setter Property="Foreground"
+                                                                    Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" />
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </DataGrid.RowStyle>
+                                            <DataGrid.Style>
+                                                <Style TargetType="{x:Type DataGrid}">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasCloudModlists}" Value="False">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </DataGrid.Style>
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Name"
+                                                                    Binding="{Binding DisplayName}"
+                                                                    Width="260"
+                                                                    MinWidth="200"
+                                                                    IsReadOnly="True">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="{x:Type TextBlock}">
+                                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                                            <Setter Property="ToolTipService.ShowDuration" Value="60000" />
+                                                            <Setter Property="ToolTip" Value="{Binding DisplayName}" />
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                    <DataGridTextColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                            <Setter Property="Margin" Value="10,0,0,0" />
+                                                            <Setter Property="FontWeight" Value="Bold" />
+                                                        </Style>
+                                                    </DataGridTextColumn.CellStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTextColumn Header="Uploader"
+                                                                    Binding="{Binding Uploader}"
+                                                                    Width="220"
+                                                                    MinWidth="180"
+                                                                    IsReadOnly="True">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="{x:Type TextBlock}">
+                                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                                            <Setter Property="TextAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                    <DataGridTextColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.CellStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTextColumn Header="Version"
+                                                                    Width="120"
+                                                                    Binding="{Binding Version, FallbackValue=—, TargetNullValue=—}"
+                                                                    IsReadOnly="True">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="{x:Type TextBlock}">
+                                                            <Setter Property="HorizontalAlignment" Value="Center" />
+                                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                                            <Setter Property="TextAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                    <DataGridTextColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.CellStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTextColumn Header="VS Version"
+                                                                    Width="120"
+                                                                    Binding="{Binding GameVersionDisplay}"
+                                                                    IsReadOnly="True">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="{x:Type TextBlock}">
+                                                            <Setter Property="HorizontalAlignment" Value="Center" />
+                                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                                            <Setter Property="TextAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                    <DataGridTextColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.CellStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTextColumn Header="Date Added"
+                                                                    Width="180"
+                                                                    Binding="{Binding DateAddedDisplay}"
+                                                                    SortMemberPath="DateAdded"
+                                                                    IsReadOnly="True">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="{x:Type TextBlock}">
+                                                            <Setter Property="HorizontalAlignment" Value="Center" />
+                                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                                            <Setter Property="TextAlignment" Value="Center" />
+                                                            <Setter Property="ToolTipService.ShowDuration" Value="60000" />
+                                                            <Setter Property="ToolTip" Value="{Binding DateAddedDisplay}" />
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                    <DataGridTextColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTextColumn.CellStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTemplateColumn Header="Mods" Width="200" MinWidth="180" IsReadOnly="True">
+                                                    <DataGridTemplateColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <Grid>
+                                                                <ComboBox x:Name="ModsComboBox"
+                                                                          ItemsSource="{Binding Mods, Mode=OneWay}"
+                                                                          IsEditable="True"
+                                                                          IsReadOnly="True"
+                                                                          SelectedIndex="-1"
+                                                                          MaxDropDownHeight="240" />
+                                                                <TextBlock Text="{Binding ModsSummary, Mode=OneWay}"
+                                                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"
+                                                                           IsHitTestVisible="False">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="{x:Type TextBlock}">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                            <Setter Property="Margin" Value="8,0,24,0" />
+                                                                            <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                                                            <Setter Property="TextAlignment" Value="Center" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsDropDownOpen, ElementName=ModsComboBox}" Value="True">
+                                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </DataGridTemplateColumn.CellTemplate>
+                                                    <DataGridTemplateColumn.CellStyle>
+                                                        <Style TargetType="{x:Type DataGridCell}"
+                                                               BasedOn="{StaticResource IMM.DataGridCellBaseStyle}">
+                                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        </Style>
+                                                    </DataGridTemplateColumn.CellStyle>
+                                                </DataGridTemplateColumn>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </Border>
+                                </Border>
+
+                                <TextBlock Grid.Row="0"
+                                           Text="Loading online modlists..."
+                                           FontSize="16"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap">
+                                    <TextBlock.Style>
+                                        <Style TargetType="{x:Type TextBlock}">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasCloudModlists}" Value="False">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <Border Grid.Row="1"
+                                        Margin="10,0,10,0"
+                                        Background="{DynamicResource Brush.ModCard.Background.Active}"
+                                        CornerRadius="10,10,10,10"
+                                        Height="175"
+                                        VerticalAlignment="Center">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="6" ShadowDepth="3" Direction="270" Opacity="0.2" />
+                                    </Border.Effect>
+
+                                    <Grid Height="151"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Left"
+                                          Width="1227"
+                                          IsEnabled="{Binding CanAccessCloudModlists}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="197*"/>
+                                            <ColumnDefinition Width="955*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="InstallCloudModlistButton"
+                                                Content="Install Selected Modlist"
+                                                Padding="12,0,12,0"
+                                                MinWidth="185"
+                                                IsEnabled="False"
+                                                Visibility="Visible"
+                                                Click="InstallCloudModlistButton_OnClick"
+                                                Margin="10,35,0,0"
+                                                Height="32"
+                                                Width="198"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Top" />
+                                        <Button x:Name="SaveCloudModlistButton"
+                                                Content="Save Modlist (Online)"
+                                                Padding="12,0,12,0"
+                                                Margin="10,109,0,0"
+                                                MinWidth="165"
+                                                Click="SaveCloudModlistButton_OnClick"
+                                                Height="32"
+                                                Width="198"
+                                                VerticalAlignment="Top"
+                                                HorizontalAlignment="Left" />
+                                        <Button x:Name="ModifyCloudModlistsButton"
+                                                Content="Modify Modlists"
+                                                Padding="12,0,12,0"
+                                                Margin="10,72,0,0"
+                                                MinWidth="165"
+                                                Click="ModifyCloudModlistsButton_OnClick"
+                                                Height="32"
+                                                Width="198"
+                                                VerticalAlignment="Top"
+                                                HorizontalAlignment="Left" />
+                                        <Button x:Name="RefreshCloudModlistsButton"
+                                                Content="Refresh"
+                                                Padding="12,0,12,0"
+                                                MinWidth="100"
+                                                Click="RefreshCloudModlistsButton_OnClick"
+                                                Margin="898,109,0,0"
+                                                Height="32"
+                                                Width="109"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Top" Grid.Column="1" />
+                                        <Border HorizontalAlignment="Left"
+                                                Height="131"
+                                                Margin="3,0,0,0"
+                                                VerticalAlignment="Center"
+                                                CornerRadius="5"
+                                                Width="877"
+                                                Background="Transparent"
+                                                BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Light}"
+                                                BorderThickness="0,0,2,2"
+                                                SnapsToDevicePixels="True" Grid.Column="1">
+                                            <Border Background="{DynamicResource Brush.ModCard.Background.Active}"
+                                                    BorderBrush="{DynamicResource Brush.SunkenSurface.Bevel.Dark}"
+                                                    BorderThickness="2,2,0,0"
+                                                    CornerRadius="5"
+                                                    Padding="10"
+                                                    SnapsToDevicePixels="True"
+                                                    ClipToBounds="True">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="*" />
+                                                    </Grid.RowDefinitions>
+                                                    <TextBlock x:Name="SelectedModlistTitle"
+                                                               Grid.Row="0"
+                                                               TextWrapping="Wrap"
+                                                               Text=""
+                                                               FontWeight="Bold"
+                                                               Foreground="{DynamicResource Brush.Text.Primary}" />
+                                                    <ScrollViewer Grid.Row="1"
+                                                                  Margin="0,8,0,0"
+                                                                  Padding="0,0,4,0"
+                                                                  HorizontalScrollBarVisibility="Disabled"
+                                                                  VerticalScrollBarVisibility="Auto"
+                                                                  CanContentScroll="False"
+                                                                  PanningMode="VerticalOnly">
+                                                        <ScrollViewer.Resources>
+                                                            <Style TargetType="{x:Type ScrollBar}"
+                                                                   BasedOn="{StaticResource IMM.SlimScrollBarStyle}" />
+                                                        </ScrollViewer.Resources>
+                                                        <TextBlock x:Name="SelectedModlistDescription"
+                                                                   TextWrapping="Wrap"
+                                                                   Text=""
+                                                                   Foreground="{DynamicResource Brush.Text.Primary}" />
+                                                    </ScrollViewer>
+                                                </Grid>
+                                            </Border>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </TabItem>
+                    </TabControl>
                 </Grid>
             </Grid>
             <ListView x:Name="ModDatabaseCardsListView"
