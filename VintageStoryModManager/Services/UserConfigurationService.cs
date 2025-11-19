@@ -172,6 +172,10 @@ public sealed class UserConfigurationService
 
     public bool EnableServerOptions { get; private set; }
 
+    public bool AutomaticDataBackupsEnabled { get; private set; }
+
+    public bool AutomaticDataBackupsWarningAcknowledged { get; private set; }
+
     public bool SuppressModlistSavePrompt { get; private set; }
 
     public bool SuppressRefreshCachePrompt
@@ -249,6 +253,8 @@ public sealed class UserConfigurationService
     public bool FirebaseAuthBackupCreated { get; private set; }
 
     public bool ClientSettingsCleanupCompleted { get; private set; }
+
+    public bool RebuiltModlistMigrationCompleted { get; private set; }
 
     public IReadOnlyList<string> GetGameProfileNames()
     {
@@ -508,6 +514,14 @@ public sealed class UserConfigurationService
         if (ClientSettingsCleanupCompleted) return;
 
         ClientSettingsCleanupCompleted = true;
+        Save();
+    }
+
+    public void SetRebuiltModlistMigrationCompleted()
+    {
+        if (RebuiltModlistMigrationCompleted) return;
+
+        RebuiltModlistMigrationCompleted = true;
         Save();
     }
 
@@ -864,6 +878,22 @@ public sealed class UserConfigurationService
         Save();
     }
 
+    public void SetAutomaticDataBackupsEnabled(bool isEnabled)
+    {
+        if (AutomaticDataBackupsEnabled == isEnabled) return;
+
+        AutomaticDataBackupsEnabled = isEnabled;
+        Save();
+    }
+
+    public void SetAutomaticDataBackupsWarningAcknowledged(bool acknowledged)
+    {
+        if (AutomaticDataBackupsWarningAcknowledged == acknowledged) return;
+
+        AutomaticDataBackupsWarningAcknowledged = acknowledged;
+        Save();
+    }
+
     public void SetModlistAutoLoadBehavior(ModlistAutoLoadBehavior behavior)
     {
         if (ModlistAutoLoadBehavior == behavior) return;
@@ -1173,6 +1203,7 @@ public sealed class UserConfigurationService
         ResetThemePaletteToDefaults();
         _selectedPresetName = null;
         GameProfileCreationWarningAcknowledged = false;
+        AutomaticDataBackupsWarningAcknowledged = false;
 
         try
         {
@@ -1200,6 +1231,9 @@ public sealed class UserConfigurationService
             DisableInternetAccess = obj["disableInternetAccess"]?.GetValue<bool?>() ?? false;
             _isModUsageTrackingDisabled = obj["modUsageTrackingDisabled"]?.GetValue<bool?>() ?? false;
             EnableServerOptions = obj["enableServerOptions"]?.GetValue<bool?>() ?? false;
+            AutomaticDataBackupsEnabled = obj["automaticDataBackupsEnabled"]?.GetValue<bool?>() ?? false;
+            AutomaticDataBackupsWarningAcknowledged =
+                obj["automaticDataBackupsWarningAcknowledged"]?.GetValue<bool?>() ?? false;
             SuppressModlistSavePrompt = obj["suppressModlistSavePrompt"]?.GetValue<bool?>() ?? false;
             _suppressRefreshCachePrompt = obj["suppressRefreshCachePrompt"]?.GetValue<bool?>() ?? false;
             _suppressRefreshCachePromptVersion = NormalizeVersion(
@@ -1266,6 +1300,8 @@ public sealed class UserConfigurationService
             MigrationCheckCompleted = obj["migrationCheckCompleted"]?.GetValue<bool?>() ?? false;
             FirebaseAuthBackupCreated = obj["firebaseAuthBackupCreated"]?.GetValue<bool?>() ?? false;
             ClientSettingsCleanupCompleted = obj["clientSettingsCleanupCompleted"]?.GetValue<bool?>() ?? false;
+            RebuiltModlistMigrationCompleted =
+                obj["rebuiltModlistMigrationCompleted"]?.GetValue<bool?>() ?? false;
 
             var profilesFound = false;
             if (obj["gameProfiles"] is JsonObject profilesObj)
@@ -1356,6 +1392,7 @@ public sealed class UserConfigurationService
             DisableAutoRefreshWarningAcknowledged = false;
             DisableInternetAccess = false;
             EnableServerOptions = false;
+            AutomaticDataBackupsWarningAcknowledged = false;
             SuppressModlistSavePrompt = false;
             _suppressRefreshCachePrompt = false;
             _suppressRefreshCachePromptVersion = null;
@@ -1380,6 +1417,7 @@ public sealed class UserConfigurationService
             FirebaseAuthBackupCreated = false;
             GameProfileCreationWarningAcknowledged = false;
             ClientSettingsCleanupCompleted = false;
+            RebuiltModlistMigrationCompleted = false;
         }
 
         LoadPersistentModConfigPaths();
@@ -1417,6 +1455,8 @@ public sealed class UserConfigurationService
                 ["disableInternetAccess"] = DisableInternetAccess,
                 ["modUsageTrackingDisabled"] = _isModUsageTrackingDisabled,
                 ["enableServerOptions"] = EnableServerOptions,
+                ["automaticDataBackupsEnabled"] = AutomaticDataBackupsEnabled,
+                ["automaticDataBackupsWarningAcknowledged"] = AutomaticDataBackupsWarningAcknowledged,
                 ["suppressModlistSavePrompt"] = SuppressModlistSavePrompt,
                 ["suppressRefreshCachePrompt"] = _suppressRefreshCachePrompt,
                 ["suppressRefreshCachePromptVersion"] = _suppressRefreshCachePromptVersion,
@@ -1449,6 +1489,7 @@ public sealed class UserConfigurationService
                 ["migrationCheckCompleted"] = MigrationCheckCompleted,
                 ["firebaseAuthBackupCreated"] = FirebaseAuthBackupCreated,
                 ["clientSettingsCleanupCompleted"] = ClientSettingsCleanupCompleted,
+                ["rebuiltModlistMigrationCompleted"] = RebuiltModlistMigrationCompleted,
                 ["gameProfiles"] = BuildGameProfilesJson()
             };
 

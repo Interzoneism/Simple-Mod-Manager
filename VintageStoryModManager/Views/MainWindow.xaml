@@ -514,6 +514,18 @@
                               SubmenuOpened="RestoreBackupMenuItem_OnSubmenuOpened">
                         <MenuItem Header="Loading..." IsEnabled="False" />
                     </MenuItem>
+                    <MenuItem x:Name="RestoreDataFolderMenuItem"
+                              Header="Restore VintagestoryData backup"
+                              Height="35"
+                              SubmenuOpened="RestoreDataFolderMenuItem_OnSubmenuOpened">
+                        <MenuItem Header="Loading..." IsEnabled="False" />
+                    </MenuItem>
+                    <MenuItem x:Name="AutomaticDataBackupsMenuItem"
+                              Header="Automatically back up VintagestoryData before launch"
+                              Height="35"
+                              IsCheckable="True"
+                              Style="{StaticResource ToggleMenuItemStyle}"
+                              Click="AutomaticDataBackupsMenuItem_OnClick" />
                     <MenuItem x:Name="DisableAutoRefreshMenuItem"
                               Header="_Disable auto-refresh"
                               Height="35"
@@ -4065,6 +4077,44 @@
                 </Grid>
             </Border>
         </Canvas>
+
+        <Border x:Name="DataBackupOverlay"
+                Grid.RowSpan="3"
+                Margin="0,0,0,8"
+                Background="#C0000000"
+                Visibility="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IsDataBackupInProgress, Converter={StaticResource IMM.VisibleWhenTrueConverter}}"
+                IsHitTestVisible="True"
+                Panel.ZIndex="5000">
+            <Border HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+                    CornerRadius="10"
+                    Padding="32"
+                    Width="420">
+                <StackPanel>
+                    <TextBlock Text="Please wait..."
+                               FontSize="18"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center"
+                               Foreground="{DynamicResource Brush.Text.Primary}" />
+                    <ProgressBar Margin="0,16,0,8"
+                                 Height="18"
+                                 Minimum="0"
+                                 Maximum="100"
+                                 Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=DataBackupProgress}" />
+                    <TextBlock Text="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=DataBackupStatusMessage}"
+                               FontSize="14"
+                               Foreground="{DynamicResource Brush.Text.Primary}"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,8" />
+                    <TextBlock Text="Simple VS Manager disables all controls while the backup finishes."
+                               FontSize="13"
+                               Foreground="{DynamicResource Brush.Text.Primary}"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center" Width="228" />
+                </StackPanel>
+            </Border>
+        </Border>
 
     </Grid>
 </Window>
