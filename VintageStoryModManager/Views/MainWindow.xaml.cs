@@ -2307,6 +2307,7 @@ public partial class MainWindow : Window
     {
         if (isVisible)
         {
+            ApplyPreferredModlistsTabSelection();
             RefreshLocalModlists(false);
             return;
         }
@@ -2323,6 +2324,13 @@ public partial class MainWindow : Window
         if (_viewModel?.IsViewingCloudModlists != true) return;
         if (sender is not TabControl tabControl) return;
         if (OnlineModlistsTabItem is null || LocalModlistsTabItem is null) return;
+
+        if (Equals(tabControl.SelectedItem, LocalModlistsTabItem))
+        {
+            _userConfiguration.SetPreferredModlistsTab(ModlistsTabSelection.Local);
+            return;
+        }
+
         if (!Equals(tabControl.SelectedItem, OnlineModlistsTabItem)) return;
 
         if (HasFirebaseAuthStateFile()) EnsureFirebaseAuthBackedUpIfAvailable();
@@ -2339,10 +2347,29 @@ public partial class MainWindow : Window
                 _isUpdatingModlistsTabSelection = false;
             }
 
+            _userConfiguration.SetPreferredModlistsTab(ModlistsTabSelection.Local);
             return;
         }
 
+        _userConfiguration.SetPreferredModlistsTab(ModlistsTabSelection.Online);
         _ = RefreshCloudModlistsAsync(!_cloudModlistsLoaded);
+    }
+
+    private void ModlistsTabControl_OnLoaded(object sender, RoutedEventArgs e)
+    {
+        ApplyPreferredModlistsTabSelection();
+    }
+
+    private void ApplyPreferredModlistsTabSelection()
+    {
+        if (ModlistsTabControl is null || LocalModlistsTabItem is null || OnlineModlistsTabItem is null) return;
+
+        var preferredTab = _userConfiguration.PreferredModlistsTab;
+        var preferredItem = preferredTab == ModlistsTabSelection.Online
+            ? OnlineModlistsTabItem
+            : LocalModlistsTabItem;
+
+        if (!Equals(ModlistsTabControl.SelectedItem, preferredItem)) ModlistsTabControl.SelectedItem = preferredItem;
     }
 
     private void InternetAccessManager_OnInternetAccessChanged(object? sender, EventArgs e)

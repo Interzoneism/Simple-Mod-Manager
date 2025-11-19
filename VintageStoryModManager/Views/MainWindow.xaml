@@ -2396,6 +2396,7 @@
                     <TabControl x:Name="ModlistsTabControl"
                                 Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
                                 BorderThickness="0"
+                                Loaded="ModlistsTabControl_OnLoaded"
                                 ItemContainerStyle="{StaticResource IMM.ModlistsTabItemStyle}"
                                 SelectionChanged="ModlistsTabControl_OnSelectionChanged">
                         <TabItem x:Name="LocalModlistsTabItem"

@@ -79,6 +79,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly HashSet<string> _suppressedTagEntries = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _userReportEtags = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _userReportOperationLock = new();
+    private readonly string _voteEtagCachePath;
+    private readonly object _voteEtagPersistenceLock = new();
 
     private readonly SemaphoreSlim _userReportRefreshLimiter =
         new(MaxConcurrentUserReportRefreshes, MaxConcurrentUserReportRefreshes);
@@ -155,6 +157,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(configuration);
 
         DataDirectory = Path.GetFullPath(dataDirectory);
+        _voteEtagCachePath = Path.Combine(DataDirectory, "voteEtags.json");
         _configuration = configuration;
 
         _settingsStore = new ClientSettingsStore(DataDirectory);
@@ -172,6 +175,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         InstalledGameVersion = VintageStoryVersionLocator.GetInstalledVersion(gameDirectory);
         _modsWatcher = new ModDirectoryWatcher(_discoveryService);
         _clientSettingsWatcher = new ClientSettingsWatcher(_settingsStore.SettingsPath);
+        LoadVoteEtagsFromDisk();
 
         ModsView = CollectionViewSource.GetDefaultView(_mods);
         ModsView.Filter = FilterMod;
@@ -805,8 +809,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     .ConfigureAwait(false);
 
                 if (updateCandidates.Count > 0) QueueDatabaseInfoRefresh(updateCandidates, true);
-
-                await CheckForVoteChangesAsync(CancellationToken.None).ConfigureAwait(false);
             }
         }
         catch
@@ -1037,6 +1039,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateVoteEtag(_latestReleaseUserReportEtags, "latest", modId, modVersion, etag);
     }
 
+    private string? GetVoteEtag(
+        Dictionary<string, string> source,
+        string prefix,
+        string modId,
+        string? modVersion)
+    {
+        if (string.IsNullOrWhiteSpace(modId)
+            || string.IsNullOrWhiteSpace(modVersion)
+            || string.IsNullOrWhiteSpace(InstalledGameVersion))
+            return null;
+
+        var key = BuildVoteEtagKey(prefix, modId, modVersion, InstalledGameVersion);
+        return source.TryGetValue(key, out var etag) ? etag : null;
+    }
+
     private void UpdateVoteEtag(
         Dictionary<string, string> target,
         string prefix,
@@ -1050,18 +1067,86 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
 
         var key = BuildVoteEtagKey(prefix, modId, modVersion, InstalledGameVersion);
-        if (string.IsNullOrEmpty(etag))
+        lock (_voteEtagPersistenceLock)
         {
-            target.Remove(key);
-            return;
-        }
+            var changed = false;
 
-        target[key] = etag;
+            if (string.IsNullOrEmpty(etag))
+            {
+                changed = target.Remove(key);
+            }
+            else if (!target.TryGetValue(key, out var existing)
+                     || !string.Equals(existing, etag, StringComparison.Ordinal))
+            {
+                target[key] = etag;
+                changed = true;
+            }
+
+            if (changed) PersistVoteEtagsLocked();
+        }
     }
 
     private static string BuildVoteEtagKey(string prefix, string modId, string modVersion, string? gameVersion)
     {
         return string.Concat(prefix, '|', modId, '|', modVersion, '|', gameVersion ?? string.Empty);
+    }
+
+    private void LoadVoteEtagsFromDisk()
+    {
+        lock (_voteEtagPersistenceLock)
+        {
+            try
+            {
+                if (!File.Exists(_voteEtagCachePath)) return;
+
+                using var stream = File.OpenRead(_voteEtagCachePath);
+                var state = JsonSerializer.Deserialize<VoteEtagCacheState>(stream);
+
+                _userReportEtags.Clear();
+                _latestReleaseUserReportEtags.Clear();
+
+                if (state?.Current is { } current)
+                    foreach (var entry in current)
+                        _userReportEtags[entry.Key] = entry.Value;
+
+                if (state?.Latest is { } latest)
+                    foreach (var entry in latest)
+                        _latestReleaseUserReportEtags[entry.Key] = entry.Value;
+            }
+            catch
+            {
+                // Ignore cache load failures; fall back to empty in-memory cache.
+            }
+        }
+    }
+
+    private void PersistVoteEtagsLocked()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(_voteEtagCachePath);
+            if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+
+            var state = new VoteEtagCacheState
+            {
+                Current = new Dictionary<string, string>(_userReportEtags, StringComparer.OrdinalIgnoreCase),
+                Latest = new Dictionary<string, string>(_latestReleaseUserReportEtags, StringComparer.OrdinalIgnoreCase)
+            };
+
+            using var stream = File.Create(_voteEtagCachePath);
+            JsonSerializer.Serialize(stream, state);
+        }
+        catch
+        {
+            // Persistence errors are non-fatal; ignore them.
+        }
+    }
+
+    private sealed class VoteEtagCacheState
+    {
+        public Dictionary<string, string>? Current { get; set; }
+
+        public Dictionary<string, string>? Latest { get; set; }
     }
 
     private static bool IsDifferentVersion(string? installedVersion, string? latestVersion)
@@ -2216,19 +2301,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            var (Summary, etag) = await _voteService
-                .GetVoteSummaryWithEtagAsync(mod.ModId, latestReleaseVersion, InstalledGameVersion!, cancellationToken)
+            var etag = GetVoteEtag(_latestReleaseUserReportEtags, "latest", mod.ModId, latestReleaseVersion);
+
+            var result = await _voteService
+                .GetVoteSummaryIfChangedAsync(
+                    mod.ModId,
+                    latestReleaseVersion,
+                    InstalledGameVersion!,
+                    etag,
+                    cancellationToken)
                 .ConfigureAwait(false);
 
-            await InvokeOnDispatcherAsync(
-                    () => mod.ApplyLatestReleaseUserReportSummary(Summary),
-                    cancellationToken,
-                    DispatcherPriority.Background)
-                .ConfigureAwait(false);
+            var summary = result.Summary ?? mod.LatestReleaseUserReportSummary;
 
-            StoreLatestReleaseUserReportEtag(mod.ModId, latestReleaseVersion, etag);
+            if (!result.IsNotModified || mod.LatestReleaseUserReportSummary is null)
+                if (summary is not null)
+                    await InvokeOnDispatcherAsync(
+                            () => mod.ApplyLatestReleaseUserReportSummary(summary),
+                            cancellationToken,
+                            DispatcherPriority.Background)
+                        .ConfigureAwait(false);
 
-            return Summary;
+            StoreLatestReleaseUserReportEtag(mod.ModId, latestReleaseVersion, result.ETag);
+
+            return summary;
         }
         catch (InternetAccessDisabledException)
         {
@@ -2396,20 +2492,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            var (Summary, etag) = await _voteService
-                .GetVoteSummaryWithEtagAsync(mod.ModId, mod.UserReportModVersion!, InstalledGameVersion!,
+            var etag = GetVoteEtag(_userReportEtags, "current", mod.ModId, mod.UserReportModVersion);
+
+            var result = await _voteService
+                .GetVoteSummaryIfChangedAsync(
+                    mod.ModId,
+                    mod.UserReportModVersion!,
+                    InstalledGameVersion!,
+                    etag,
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            await InvokeOnDispatcherAsync(
-                    () => mod.ApplyUserReportSummary(Summary),
-                    cancellationToken,
-                    DispatcherPriority.Background)
-                .ConfigureAwait(false);
+            var summary = result.Summary ?? mod.UserReportSummary;
 
-            StoreUserReportEtag(mod.ModId, mod.UserReportModVersion, etag);
+            if (!result.IsNotModified || mod.UserReportSummary is null)
+                if (summary is not null)
+                    await InvokeOnDispatcherAsync(
+                            () => mod.ApplyUserReportSummary(summary),
+                            cancellationToken,
+                            DispatcherPriority.Background)
+                        .ConfigureAwait(false);
 
-            return Summary;
+            StoreUserReportEtag(mod.ModId, mod.UserReportModVersion, result.ETag);
+
+            return summary;
         }
         catch (InternetAccessDisabledException)
         {

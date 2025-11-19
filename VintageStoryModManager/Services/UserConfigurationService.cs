@@ -114,6 +114,7 @@ public sealed class UserConfigurationService
     private bool _hasPendingSave;
     private bool _isModUsageTrackingDisabled;
     private bool _isPersistenceEnabled;
+    private ModlistsTabSelection _preferredModlistsTab = ModlistsTabSelection.Local;
     private double? _modInfoPanelLeft;
     private double? _modInfoPanelTop;
     private ListSortDirection _modsSortDirection = ListSortDirection.Ascending;
@@ -196,6 +197,12 @@ public sealed class UserConfigurationService
     public bool GameProfileCreationWarningAcknowledged { get; private set; }
 
     public ModlistAutoLoadBehavior ModlistAutoLoadBehavior { get; private set; } = ModlistAutoLoadBehavior.Prompt;
+
+    public ModlistsTabSelection PreferredModlistsTab
+    {
+        get => _preferredModlistsTab;
+        private set => _preferredModlistsTab = value;
+    }
 
     public int ModDatabaseSearchResultLimit { get; private set; } = DefaultModDatabaseSearchResultLimit;
 
@@ -902,6 +909,14 @@ public sealed class UserConfigurationService
         Save();
     }
 
+    public void SetPreferredModlistsTab(ModlistsTabSelection selection)
+    {
+        if (PreferredModlistsTab == selection) return;
+
+        PreferredModlistsTab = selection;
+        Save();
+    }
+
     public void SetCacheAllVersionsLocally(bool cacheAllVersionsLocally)
     {
         if (CacheAllVersionsLocally == cacheAllVersionsLocally) return;
@@ -1271,6 +1286,7 @@ public sealed class UserConfigurationService
             var hasCustomPalette = LoadCustomThemePalette(obj["customThemePalette"]);
             ResetThemePaletteToDefaults();
             ModlistAutoLoadBehavior = ParseModlistAutoLoadBehavior(GetOptionalString(obj["modlistAutoLoadBehavior"]));
+            PreferredModlistsTab = ParseModlistsTabSelection(GetOptionalString(obj["preferredModlistsTab"]));
             _modsSortMemberPath = NormalizeSortMemberPath(GetOptionalString(obj["modsSortMemberPath"]));
             _modsSortDirection = ParseSortDirection(GetOptionalString(obj["modsSortDirection"]));
             ModDatabaseSearchResultLimit =
@@ -1397,6 +1413,7 @@ public sealed class UserConfigurationService
             _suppressRefreshCachePrompt = false;
             _suppressRefreshCachePromptVersion = null;
             ModlistAutoLoadBehavior = ModlistAutoLoadBehavior.Prompt;
+            PreferredModlistsTab = ModlistsTabSelection.Local;
             _modsSortMemberPath = null;
             _modsSortDirection = ListSortDirection.Ascending;
             _selectedPresetName = null;
@@ -1464,6 +1481,7 @@ public sealed class UserConfigurationService
                 ["useDarkVsMode"] = ColorTheme != ColorTheme.Light,
                 ["colorTheme"] = ColorTheme.ToString(),
                 ["modlistAutoLoadBehavior"] = ModlistAutoLoadBehavior.ToString(),
+                ["preferredModlistsTab"] = PreferredModlistsTab.ToString(),
                 ["modsSortMemberPath"] = _modsSortMemberPath,
                 ["modsSortDirection"] = _modsSortDirection.ToString(),
                 ["modDatabaseSearchResultLimit"] = ModDatabaseSearchResultLimit,
@@ -1587,6 +1605,13 @@ public sealed class UserConfigurationService
         if (Enum.TryParse(value, true, out ModlistAutoLoadBehavior behavior)) return behavior;
 
         return ModlistAutoLoadBehavior.Prompt;
+    }
+
+    private static ModlistsTabSelection ParseModlistsTabSelection(string? value)
+    {
+        if (Enum.TryParse(value, true, out ModlistsTabSelection selection)) return selection;
+
+        return ModlistsTabSelection.Local;
     }
 
     private static ModDatabaseAutoLoadMode ParseModDatabaseAutoLoadMode(string? value)

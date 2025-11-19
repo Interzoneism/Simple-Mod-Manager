@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
@@ -31,6 +32,9 @@ public sealed class ModVersionVoteService
 
     private readonly string _dbUrl;
 
+    private readonly ConcurrentDictionary<VoteCacheKey, VoteCacheEntry> _voteCache =
+        new(VoteCacheKeyComparer.Instance);
+
     public ModVersionVoteService()
         : this(DefaultDbUrl, new FirebaseAnonymousAuthenticator())
     {
@@ -53,6 +57,11 @@ public sealed class ModVersionVoteService
         CancellationToken cancellationToken = default)
     {
         ValidateIdentifiers(modId, modVersion, vintageStoryVersion);
+
+        var cacheKey = new VoteCacheKey(modId, modVersion, vintageStoryVersion);
+
+        if (TryGetCachedSummary(cacheKey, out var cachedSummary)) return cachedSummary.Summary;
+
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         var session = await _authenticator
@@ -61,9 +70,7 @@ public sealed class ModVersionVoteService
 
         var (Summary, _) = await GetVoteSummaryWithEtagAsync(
                 session,
-                modId,
-                modVersion,
-                vintageStoryVersion,
+                cacheKey,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -78,6 +85,12 @@ public sealed class ModVersionVoteService
         CancellationToken cancellationToken = default)
     {
         ValidateIdentifiers(modId, modVersion, vintageStoryVersion);
+
+        var cacheKey = new VoteCacheKey(modId, modVersion, vintageStoryVersion);
+
+        if (TryGetCachedSummary(cacheKey, out var cachedSummary))
+            return new VoteSummaryResult(cachedSummary.Summary, cachedSummary.ETag, true);
+
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         var session = await _authenticator
@@ -86,10 +99,9 @@ public sealed class ModVersionVoteService
 
         return await GetVoteSummaryInternalAsync(
                 session,
-                modId,
-                modVersion,
-                vintageStoryVersion,
+                cacheKey,
                 knownEtag,
+                false,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -101,6 +113,11 @@ public sealed class ModVersionVoteService
         CancellationToken cancellationToken = default)
     {
         ValidateIdentifiers(modId, modVersion, vintageStoryVersion);
+
+        var cacheKey = new VoteCacheKey(modId, modVersion, vintageStoryVersion);
+
+        if (TryGetCachedSummary(cacheKey, out var cachedSummary)) return cachedSummary.ToSummaryResult();
+
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         var session = await _authenticator
@@ -109,9 +126,7 @@ public sealed class ModVersionVoteService
 
         return await GetVoteSummaryWithEtagAsync(
                 session,
-                modId,
-                modVersion,
-                vintageStoryVersion,
+                cacheKey,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -156,10 +171,9 @@ public sealed class ModVersionVoteService
 
         return await GetVoteSummaryWithEtagAsync(
                 session,
-                modId,
-                modVersion,
-                vintageStoryVersion,
-                cancellationToken)
+                new VoteCacheKey(modId, modVersion, vintageStoryVersion),
+                cancellationToken,
+                true)
             .ConfigureAwait(false);
     }
 
@@ -192,26 +206,23 @@ public sealed class ModVersionVoteService
 
         return await GetVoteSummaryWithEtagAsync(
                 session,
-                modId,
-                modVersion,
-                vintageStoryVersion,
-                cancellationToken)
+                new VoteCacheKey(modId, modVersion, vintageStoryVersion),
+                cancellationToken,
+                true)
             .ConfigureAwait(false);
     }
 
     private async Task<(ModVersionVoteSummary Summary, string? ETag)> GetVoteSummaryWithEtagAsync(
         FirebaseAnonymousAuthenticator.FirebaseAuthSession? session,
-        string modId,
-        string modVersion,
-        string vintageStoryVersion,
-        CancellationToken cancellationToken)
+        VoteCacheKey cacheKey,
+        CancellationToken cancellationToken,
+        bool bypassCache = false)
     {
         var result = await GetVoteSummaryInternalAsync(
                 session,
-                modId,
-                modVersion,
-                vintageStoryVersion,
+                cacheKey,
                 null,
+                bypassCache,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -222,14 +233,16 @@ public sealed class ModVersionVoteService
 
     private async Task<VoteSummaryResult> GetVoteSummaryInternalAsync(
         FirebaseAnonymousAuthenticator.FirebaseAuthSession? session,
-        string modId,
-        string modVersion,
-        string vintageStoryVersion,
+        VoteCacheKey cacheKey,
         string? knownEtag,
+        bool bypassCache,
         CancellationToken cancellationToken)
     {
-        var modKey = SanitizeKey(modId);
-        var versionKey = SanitizeKey(modVersion);
+        if (!bypassCache && TryGetCachedSummary(cacheKey, out var cachedEntry))
+            return new VoteSummaryResult(cachedEntry.Summary, cachedEntry.ETag, true);
+
+        var modKey = SanitizeKey(cacheKey.ModId);
+        var versionKey = SanitizeKey(cacheKey.ModVersion);
         var url = BuildVotesUrl(session, VotesRootPath, modKey, versionKey, "users");
 
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -243,18 +256,28 @@ public sealed class ModVersionVoteService
         var responseEtag = response.Headers.ETag?.Tag;
 
         if (response.StatusCode == HttpStatusCode.NotModified)
+        {
+            if (TryGetCachedSummary(cacheKey, out var cachedFromResponse))
+            {
+                StoreCachedSummary(cacheKey, cachedFromResponse.Summary, responseEtag ?? knownEtag);
+                return new VoteSummaryResult(cachedFromResponse.Summary, responseEtag ?? knownEtag, true);
+            }
+
             return new VoteSummaryResult(null, responseEtag ?? knownEtag, true);
+        }
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             var emptySummary = new ModVersionVoteSummary(
-                modId,
-                modVersion,
-                vintageStoryVersion,
+                cacheKey.ModId,
+                cacheKey.ModVersion,
+                cacheKey.VintageStoryVersion,
                 ModVersionVoteCounts.Empty,
                 ModVersionVoteComments.Empty,
                 null,
                 null);
+
+            StoreCachedSummary(cacheKey, emptySummary, responseEtag ?? knownEtag);
 
             return new VoteSummaryResult(emptySummary, responseEtag, false);
         }
@@ -271,13 +294,15 @@ public sealed class ModVersionVoteService
         if (root.ValueKind == JsonValueKind.Null)
         {
             var emptySummary = new ModVersionVoteSummary(
-                modId,
-                modVersion,
-                vintageStoryVersion,
+                cacheKey.ModId,
+                cacheKey.ModVersion,
+                cacheKey.VintageStoryVersion,
                 ModVersionVoteCounts.Empty,
                 ModVersionVoteComments.Empty,
                 null,
                 null);
+
+            StoreCachedSummary(cacheKey, emptySummary, responseEtag ?? knownEtag);
 
             return new VoteSummaryResult(emptySummary, responseEtag, false);
         }
@@ -285,13 +310,15 @@ public sealed class ModVersionVoteService
         if (root.ValueKind != JsonValueKind.Object)
         {
             var emptySummary = new ModVersionVoteSummary(
-                modId,
-                modVersion,
-                vintageStoryVersion,
+                cacheKey.ModId,
+                cacheKey.ModVersion,
+                cacheKey.VintageStoryVersion,
                 ModVersionVoteCounts.Empty,
                 ModVersionVoteComments.Empty,
                 null,
                 null);
+
+            StoreCachedSummary(cacheKey, emptySummary, responseEtag ?? knownEtag);
 
             return new VoteSummaryResult(emptySummary, responseEtag, false);
         }
@@ -355,13 +382,15 @@ public sealed class ModVersionVoteService
             ToReadOnlyList(crashesOrFreezesGameComments));
 
         var summary = new ModVersionVoteSummary(
-            modId,
-            modVersion,
-            vintageStoryVersion,
+            cacheKey.ModId,
+            cacheKey.ModVersion,
+            cacheKey.VintageStoryVersion,
             counts,
             comments,
             userVote,
             userComment);
+
+        StoreCachedSummary(cacheKey, summary, responseEtag ?? knownEtag);
 
         return new VoteSummaryResult(summary, responseEtag, false);
     }
@@ -543,5 +572,46 @@ public sealed class ModVersionVoteService
         [JsonPropertyName("updatedUtc")] public string? UpdatedUtc { get; set; }
 
         [JsonPropertyName("comment")] public string? Comment { get; set; }
+    }
+
+    private readonly record struct VoteCacheKey(string ModId, string ModVersion, string VintageStoryVersion);
+
+    private readonly record struct VoteCacheEntry(ModVersionVoteSummary Summary, string? ETag)
+    {
+        public (ModVersionVoteSummary Summary, string? ETag) ToSummaryResult()
+        {
+            return (Summary, ETag);
+        }
+    }
+
+    private sealed class VoteCacheKeyComparer : IEqualityComparer<VoteCacheKey>
+    {
+        public static readonly VoteCacheKeyComparer Instance = new();
+
+        public bool Equals(VoteCacheKey x, VoteCacheKey y)
+        {
+            return string.Equals(x.ModId, y.ModId, StringComparison.OrdinalIgnoreCase)
+                   && string.Equals(x.ModVersion, y.ModVersion, StringComparison.OrdinalIgnoreCase)
+                   && string.Equals(x.VintageStoryVersion, y.VintageStoryVersion, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public int GetHashCode(VoteCacheKey obj)
+        {
+            var hash = new HashCode();
+            hash.Add(obj.ModId, StringComparer.OrdinalIgnoreCase);
+            hash.Add(obj.ModVersion, StringComparer.OrdinalIgnoreCase);
+            hash.Add(obj.VintageStoryVersion, StringComparer.OrdinalIgnoreCase);
+            return hash.ToHashCode();
+        }
+    }
+
+    private bool TryGetCachedSummary(VoteCacheKey key, out VoteCacheEntry entry)
+    {
+        return _voteCache.TryGetValue(key, out entry);
+    }
+
+    private void StoreCachedSummary(VoteCacheKey key, ModVersionVoteSummary summary, string? eTag)
+    {
+        _voteCache[key] = new VoteCacheEntry(summary, eTag);
     }
 }
