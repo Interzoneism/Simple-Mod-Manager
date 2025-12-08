@@ -1,11 +1,11 @@
-# Mod Installation Flow - Complete Function List
+# Mod Installation Flow - Complete Function List (ZIP Files Only)
 
-This document lists all functions used when the install button on a mod card in the mod database card view is clicked until the mod is installed, including any special cases like if the mod is already installed.
+This document lists all functions used when the install button on a mod card in the mod database card view is clicked until the mod is installed. **This flow assumes all mods are installed as ZIP files** - no folder/directory extraction is used.
 
 ## Entry Point
 
 ### 1. InstallModButton_OnClick
-**File:** `/VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 4610)
+**File:** `VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 4610)
 
 ```csharp
 private async void InstallModButton_OnClick(object sender, RoutedEventArgs e)
@@ -19,9 +19,9 @@ private async void InstallModButton_OnClick(object sender, RoutedEventArgs e)
 3. Validates the sender has a ModListItemViewModel data context
 4. Checks if the mod has downloadable releases
 5. Selects the release to install
-6. Gets the target installation path
+6. Gets the target installation path (always a .zip file)
 7. Creates an automatic backup
-8. Performs the actual installation via ModUpdateService
+8. Performs the actual installation via ModUpdateService (always as zip file)
 9. Refreshes the mods list
 10. Removes the mod from selection and search results
 
@@ -31,12 +31,14 @@ private async void InstallModButton_OnClick(object sender, RoutedEventArgs e)
 - Shows error if no downloadable releases available
 - Shows error if target path cannot be determined
 
+**Important:** When calling `ModUpdateService.UpdateAsync`, the `descriptor.TargetIsDirectory` parameter is always set to `false` for zip-only installation.
+
 ---
 
 ## Supporting Functions
 
 ### 2. SelectReleaseForInstall
-**File:** `/VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 4854)
+**File:** `VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 4854)
 
 ```csharp
 private static ModReleaseInfo? SelectReleaseForInstall(ModListItemViewModel mod)
@@ -54,14 +56,14 @@ private static ModReleaseInfo? SelectReleaseForInstall(ModListItemViewModel mod)
 ---
 
 ### 3. TryGetInstallTargetPath
-**File:** `/VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 7524)
+**File:** `VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 7524)
 
 ```csharp
 private bool TryGetInstallTargetPath(ModListItemViewModel mod, ModReleaseInfo release, 
     out string fullPath, out string? errorMessage)
 ```
 
-**Purpose:** Determines the file system path where the mod should be installed.
+**Purpose:** Determines the file system path where the mod ZIP file should be installed.
 
 **Logic:**
 1. Validates data directory is available
@@ -73,6 +75,8 @@ private bool TryGetInstallTargetPath(ModListItemViewModel mod, ModReleaseInfo re
 
 **Returns:** `true` if successful, `false` if error occurred
 
+**Important:** Always returns a path to a .zip file, never a directory.
+
 **Error Cases:**
 - Data directory not configured
 - Mods folder cannot be accessed
@@ -81,7 +85,7 @@ private bool TryGetInstallTargetPath(ModListItemViewModel mod, ModReleaseInfo re
 ---
 
 ### 4. CreateAutomaticBackupAsync
-**File:** `/VintageStoryModManager/Views/MainWindow.xaml.cs` (Not fully shown in the view, referenced at line 4650)
+**File:** `VintageStoryModManager/Views/MainWindow.xaml.cs` (Referenced at line 4650)
 
 ```csharp
 await CreateAutomaticBackupAsync("ModsUpdated").ConfigureAwait(true);
@@ -94,7 +98,7 @@ await CreateAutomaticBackupAsync("ModsUpdated").ConfigureAwait(true);
 ---
 
 ### 5. ModUpdateService.UpdateAsync
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 15)
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 15)
 
 ```csharp
 public async Task<ModUpdateResult> UpdateAsync(
@@ -104,13 +108,15 @@ public async Task<ModUpdateResult> UpdateAsync(
     CancellationToken cancellationToken = default)
 ```
 
-**Purpose:** Main service method that handles downloading and installing the mod.
+**Purpose:** Main service method that handles downloading and installing the mod as a ZIP file.
 
 **Flow:**
-1. Downloads the mod archive
-2. Validates the archive
-3. Caches the download if configured
-4. Installs the mod to the target location
+1. Downloads the mod archive via `DownloadAsync`
+2. Validates the archive via `ValidateArchive`
+3. Caches the download if configured via `TryCacheDownload`
+4. Installs the mod to the target location via `InstallAsync` (always as zip file)
+
+**Important:** For zip-only installation, `descriptor.TargetIsDirectory` must be `false`.
 
 **Special Cases:**
 - Handles operation cancellation
@@ -121,7 +127,7 @@ public async Task<ModUpdateResult> UpdateAsync(
 ---
 
 ### 6. ModUpdateService.DownloadAsync
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 75)
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 75)
 
 ```csharp
 private static async Task<DownloadResult> DownloadAsync(
@@ -132,23 +138,23 @@ private static async Task<DownloadResult> DownloadAsync(
 **Purpose:** Downloads the mod file from either cache or network.
 
 **Flow:**
-1. Determines cache path for the mod
-2. Checks if mod is already cached
+1. Determines cache path for the mod via `ModCacheLocator.GetModCachePath`
+2. Checks if mod is already cached via `ModCacheLocator.TryLocateCachedModFile`
 3. If cached, returns cached file path
 4. If not cached:
-   - Creates temporary directory
-   - Downloads from network or copies from local file
+   - Creates temporary directory via `CreateTemporaryDirectory`
+   - Downloads from network (HTTP) or copies from local file
    - Returns path to downloaded file
 
 **Cache Behavior:**
 - Promotes legacy cache files to new structure
 - Uses ModCacheLocator to find cached files
-- Returns cache hit status
+- Returns cache hit status in DownloadResult
 
 ---
 
 ### 7. ModUpdateService.ValidateArchive
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 167)
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 167)
 
 ```csharp
 private static void ValidateArchive(string downloadPath)
@@ -157,8 +163,8 @@ private static void ValidateArchive(string downloadPath)
 **Purpose:** Validates that the downloaded file is a valid Vintage Story mod archive.
 
 **Validation:**
-1. Opens the zip archive
-2. Checks for presence of `modinfo.json` file
+1. Opens the zip archive using `ZipFile.OpenRead`
+2. Checks for presence of `modinfo.json` file in any entry
 3. Throws `InvalidDataException` if validation fails
 
 **Error Cases:**
@@ -168,7 +174,7 @@ private static void ValidateArchive(string downloadPath)
 ---
 
 ### 8. ModUpdateService.InstallAsync
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 184)
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 184)
 
 ```csharp
 private static Task<ModUpdateResult> InstallAsync(
@@ -181,111 +187,44 @@ private static Task<ModUpdateResult> InstallAsync(
 
 **Purpose:** Installs the mod to the target location.
 
-**Logic:**
+**Logic (ZIP-only mode):**
 1. Checks if target already exists
 2. Determines if this is a fresh install or update
-3. Routes to either directory or file installation based on `treatAsDirectory`
+3. Routes to file installation (since `treatAsDirectory` is always `false`)
 
-**Two Installation Paths:**
-- **Directory mode:** Extracts zip to directory (calls `InstallToDirectory`)
-- **File mode:** Copies zip file as-is (calls `InstallToFile`)
+**Important:** For zip-only installation, this always calls `InstallToFile`, never `InstallToDirectory`.
 
 ---
 
 ### 9. ModUpdateService.InstallToFile
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 271)
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 271)
 
 ```csharp
 private static void InstallToFile(ModUpdateDescriptor descriptor, string downloadPath)
 ```
 
-**Purpose:** Installs mod as a zip file to the target path.
+**Purpose:** Installs mod as a zip file to the target path. **This is the only installation method used in zip-only mode.**
 
 **Flow:**
-1. Creates target directory if needed
-2. Creates backup of existing file if present
-3. Attempts to cache the backup
-4. Copies downloaded file to target path
-5. Cleans up old file if path changed
+1. Creates target directory if needed via `Directory.CreateDirectory`
+2. Creates backup of existing file if present via `File.Move`
+3. Attempts to cache the backup via `TryMoveBackupToCache`
+4. Copies downloaded file to target path via `File.Copy`
+5. Cleans up old file if path changed via `TryDelete`
 6. On failure, restores from backup
 
 **Special Cases:**
 - Handles version updates (replaces existing file)
 - Handles fresh installs
 - Rollback support via backups
+- Caches old versions if configured
+
+**Important:** This function handles all mod installations when working with zip files only.
 
 ---
 
-### 10. ModUpdateService.InstallToDirectory
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 213)
-
-```csharp
-private static ModUpdateResult InstallToDirectory(
-    ModUpdateDescriptor descriptor, 
-    string targetDirectory,
-    string downloadPath, 
-    string completionMessage, 
-    IProgress<ModUpdateProgress>? progress,
-    CancellationToken cancellationToken)
-```
-
-**Purpose:** Installs mod by extracting zip contents to a directory.
-
-**Flow:**
-1. Creates backup path for existing directory
-2. Creates temporary extraction directory
-3. Moves existing directory to backup if present
-4. Extracts zip file to temporary directory
-5. Determines payload root (handles zip with/without wrapper folder)
-6. Copies extracted files to target directory
-7. On success, deletes backup
-8. On failure, restores from backup
-
-**Special Cases:**
-- Handles cancellation with rollback
-- Handles extraction errors with rollback
-- Caches directory backup as zip file
-
----
-
-### 11. ModUpdateService.DeterminePayloadRoot
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 345)
-
-```csharp
-private static string DeterminePayloadRoot(string extractDirectory)
-```
-
-**Purpose:** Determines the root directory containing mod files after extraction.
-
-**Logic:**
-- If there's exactly 1 subdirectory and no files, returns that subdirectory
-- Otherwise returns the extraction directory itself
-
-**Reason:** Some mods wrap all content in a single folder, others don't.
-
----
-
-### 12. ModUpdateService.CopyDirectory
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 472)
-
-```csharp
-private static void CopyDirectory(
-    string sourceDirectory, 
-    string destinationDirectory,
-    CancellationToken cancellationToken)
-```
-
-**Purpose:** Recursively copies all files and subdirectories from source to destination.
-
-**Implementation:**
-- Uses stack-based iteration (not recursion)
-- Supports cancellation
-- Preserves directory structure
-
----
-
-### 13. RefreshModsAsync
-**File:** `/VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 3333)
+### 10. RefreshModsAsync
+**File:** `VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 3333)
 
 ```csharp
 private async Task RefreshModsAsync(bool allowModDetailsRefresh = false)
@@ -306,8 +245,8 @@ private async Task RefreshModsAsync(bool allowModDetailsRefresh = false)
 
 ---
 
-### 14. UpdateSelectedModButtons
-**File:** `/VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 12186)
+### 11. UpdateSelectedModButtons
+**File:** `VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 12186)
 
 ```csharp
 private void UpdateSelectedModButtons()
@@ -326,8 +265,8 @@ private void UpdateSelectedModButtons()
 
 ---
 
-### 15. RemoveFromSelection
-**File:** `/VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 11995)
+### 12. RemoveFromSelection
+**File:** `VintageStoryModManager/Views/MainWindow.xaml.cs` (Line 11995)
 
 ```csharp
 private void RemoveFromSelection(ModListItemViewModel mod)
@@ -343,8 +282,8 @@ private void RemoveFromSelection(ModListItemViewModel mod)
 
 ---
 
-### 16. MainViewModel.RemoveSearchResult
-**File:** Referenced at line 4694, likely in `/VintageStoryModManager/ViewModels/MainViewModel.cs`
+### 13. MainViewModel.RemoveSearchResult
+**File:** `VintageStoryModManager/ViewModels/MainViewModel.cs`
 
 ```csharp
 _viewModel?.RemoveSearchResult(mod);
@@ -357,7 +296,7 @@ _viewModel?.RemoveSearchResult(mod);
 ## Supporting Data Structures
 
 ### ModUpdateDescriptor
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 570)
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 570)
 
 ```csharp
 public sealed record ModUpdateDescriptor(
@@ -365,7 +304,7 @@ public sealed record ModUpdateDescriptor(
     string DisplayName,
     Uri DownloadUri,
     string TargetPath,
-    bool TargetIsDirectory,
+    bool TargetIsDirectory,  // Always false for zip-only installation
     string? ReleaseFileName,
     string? ReleaseVersion,
     string? InstalledVersion)
@@ -376,10 +315,12 @@ public sealed record ModUpdateDescriptor(
 
 **Purpose:** Contains all information needed to download and install a mod.
 
+**Important for ZIP-only:** Set `TargetIsDirectory = false`
+
 ---
 
 ### ModUpdateResult
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 583)
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 583)
 
 ```csharp
 public sealed record ModUpdateResult(bool Success, string? ErrorMessage);
@@ -390,7 +331,7 @@ public sealed record ModUpdateResult(bool Success, string? ErrorMessage);
 ---
 
 ### ModUpdateProgress
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 585)
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 585)
 
 ```csharp
 public readonly record struct ModUpdateProgress(ModUpdateStage Stage, string Message);
@@ -401,14 +342,14 @@ public readonly record struct ModUpdateProgress(ModUpdateStage Stage, string Mes
 ---
 
 ### ModUpdateStage
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 587)
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 587)
 
 ```csharp
 public enum ModUpdateStage
 {
     Downloading,
     Validating,
-    Preparing,
+    Preparing,    // Not used in zip-only mode
     Replacing,
     Completed
 }
@@ -416,12 +357,14 @@ public enum ModUpdateStage
 
 **Purpose:** Enumeration of installation stages.
 
+**Note:** `Preparing` stage is only used for directory extraction, not in zip-only mode.
+
 ---
 
 ## Utility Functions
 
-### 17. TryCacheDownload
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 515)
+### 14. TryCacheDownload
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 515)
 
 ```csharp
 private static void TryCacheDownload(string sourcePath, string cachePath)
@@ -429,10 +372,16 @@ private static void TryCacheDownload(string sourcePath, string cachePath)
 
 **Purpose:** Copies downloaded mod file to cache for future use.
 
+**Flow:**
+1. Ensures source and cache paths are different
+2. Creates cache directory if needed
+3. Copies file to cache location
+4. Logs warning on failure but doesn't throw
+
 ---
 
-### 18. TryMoveBackupToCache
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 355)
+### 15. TryMoveBackupToCache
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 355)
 
 ```csharp
 private static string? TryMoveBackupToCache(ModUpdateDescriptor descriptor, string backupPath)
@@ -440,34 +389,34 @@ private static string? TryMoveBackupToCache(ModUpdateDescriptor descriptor, stri
 
 **Purpose:** Moves the old version of a mod being updated to the cache.
 
----
+**Flow:**
+1. Validates installed version is known
+2. Determines cache path for old version
+3. Checks if cache already exists
+4. Moves backup file to cache
+5. Returns cache path on success, null on failure
 
-### 19. TryCacheDirectoryBackup
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 416)
-
-```csharp
-private static void TryCacheDirectoryBackup(ModUpdateDescriptor descriptor, string backupPath)
-```
-
-**Purpose:** Caches a directory-based mod by zipping it and storing in cache.
+**Benefit:** Allows quick rollback to previous version from cache.
 
 ---
 
-### 20. CreateTemporaryDirectory
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 499)
+### 16. CreateTemporaryDirectory
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 499)
 
 ```csharp
 private static string CreateTemporaryDirectory()
 ```
 
-**Purpose:** Creates a unique temporary directory for extraction/processing.
+**Purpose:** Creates a unique temporary directory for download operations.
 
 **Location:** `%TEMP%/IMM/{GUID}`
 
+**Returns:** Full path to created directory
+
 ---
 
-### 21. TryDelete
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 532)
+### 17. TryDelete
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 532)
 
 ```csharp
 private static void TryDelete(string path)
@@ -475,27 +424,27 @@ private static void TryDelete(string path)
 
 **Purpose:** Attempts to delete a file or directory, logging warnings on failure.
 
----
-
-### 22. TryRestoreDirectoryBackup
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 546)
-
-```csharp
-private static void TryRestoreDirectoryBackup(string backupPath, string targetPath)
-```
-
-**Purpose:** Restores a directory from backup on installation failure.
+**Logic:**
+- Checks if path is file or directory
+- Deletes accordingly
+- Catches and logs IO exceptions without throwing
 
 ---
 
-### 23. ReportProgress
-**File:** `/VintageStoryModManager/Services/ModUpdateService.cs` (Line 562)
+### 18. ReportProgress
+**File:** `VintageStoryModManager/Services/ModUpdateService.cs` (Line 562)
 
 ```csharp
-private static void ReportProgress(IProgress<ModUpdateProgress>? progress, ModUpdateStage stage, string message)
+private static void ReportProgress(IProgress<ModUpdateProgress>? progress, 
+    ModUpdateStage stage, string message)
 ```
 
 **Purpose:** Reports progress updates to the UI during installation.
+
+**Parameters:**
+- `progress`: Optional progress reporter
+- `stage`: Current installation stage
+- `message`: Human-readable status message
 
 ---
 
@@ -506,7 +455,8 @@ If a mod is already installed:
 1. **In InstallModButton_OnClick:**
    - The button visibility is controlled by XAML binding to `IsInstalled` property
    - Install button is hidden/collapsed when `IsInstalled` is true
-   - See XAML line 3637-3639:
+
+2. **XAML Binding:**
    ```xml
    <Style.Triggers>
        <DataTrigger Binding="{Binding IsInstalled}" Value="True">
@@ -515,14 +465,14 @@ If a mod is already installed:
    </Style.Triggers>
    ```
 
-2. **User Experience:**
+3. **User Experience:**
    - The install button simply doesn't appear for installed mods
    - Instead, update/edit/delete buttons are available
-   - The card shows "Installed" badge overlay (XAML line 3418-3437)
+   - The card shows "Installed" badge overlay
 
 ---
 
-## Installation Flow Diagram
+## Installation Flow Diagram (ZIP Files Only)
 
 ```
 User Clicks Install Button
@@ -535,7 +485,7 @@ Check if in mod database mode → [No] → Return
     ↓ [Yes]
 SelectReleaseForInstall → Select best release version
     ↓
-TryGetInstallTargetPath → Determine where to install
+TryGetInstallTargetPath → Determine where to install (.zip file)
     ↓
 CreateAutomaticBackupAsync → Backup existing mods
     ↓
@@ -545,28 +495,21 @@ ModUpdateService.UpdateAsync
     │   ├─→ Check cache (ModCacheLocator)
     │   │   └─→ [Cache Hit] → Use cached file
     │   └─→ [Cache Miss] → Download from network
-    │       └─→ Create temp directory
+    │       └─→ CreateTemporaryDirectory
     │           └─→ HTTP download or file copy
     ↓
     ├─→ ValidateArchive
-    │   └─→ Check for modinfo.json
+    │   └─→ Check for modinfo.json in zip
     ↓
     ├─→ TryCacheDownload (if caching enabled)
     ↓
     └─→ InstallAsync
-        ├─→ [File Mode] → InstallToFile
-        │   ├─→ Backup existing file
-        │   ├─→ TryMoveBackupToCache
-        │   ├─→ Copy new file to target
-        │   └─→ [On Error] → Restore from backup
-        │
-        └─→ [Directory Mode] → InstallToDirectory
-            ├─→ Create backup of directory
-            ├─→ Extract to temp directory
-            ├─→ DeterminePayloadRoot
-            ├─→ CopyDirectory (recursive)
-            ├─→ TryCacheDirectoryBackup
-            └─→ [On Error] → TryRestoreDirectoryBackup
+        └─→ InstallToFile (ALWAYS for zip-only)
+            ├─→ Create target directory if needed
+            ├─→ Backup existing file
+            ├─→ TryMoveBackupToCache (old version)
+            ├─→ Copy new zip file to target
+            └─→ [On Error] → Restore from backup
     ↓
 RefreshModsAsync → Reload mod list to show newly installed mod
     ↓
@@ -604,7 +547,8 @@ The installation flow integrates with caching at multiple points:
 1. **Before Download:** Check if mod version is cached
 2. **After Download:** Cache the downloaded file
 3. **Before Update:** Cache the old version being replaced
-4. **Cache Locations:** Managed by `ModCacheLocator` service
+
+**Cache Locations:** Managed by `ModCacheLocator` service
 
 **Cache Benefits:**
 - Faster re-installation of previously downloaded mods
@@ -613,29 +557,92 @@ The installation flow integrates with caching at multiple points:
 
 ---
 
-## Notes for Integration
+## Notes for Integration with External Mod Browser
 
 When integrating this flow into another mod browser:
 
-1. **Required Services:**
-   - `ModUpdateService` for download and installation
-   - `ModCacheLocator` for cache management (optional but recommended)
-   - Progress reporting mechanism
+### Required Services
+- `ModUpdateService` for download and installation
+- `ModCacheLocator` for cache management (optional but recommended)
+- Progress reporting mechanism (via `IProgress<ModUpdateProgress>`)
 
-2. **Required Data:**
-   - Mod ID
-   - Download URI
-   - Target path (usually `{DataDirectory}/Mods/{filename}`)
-   - Release version
-   - Release filename
+### Required Data
+- **Mod ID** (string)
+- **Download URI** (Uri)
+- **Target path** (string) - usually `{DataDirectory}/Mods/{filename}.zip`
+- **Release version** (string)
+- **Release filename** (string)
+- **Installed version** (string, optional - for updates)
 
-3. **Key Dependencies:**
-   - Vintage Story data directory path
-   - Network access (unless using cached mods)
-   - Write permissions to target directory
+### Key Settings
+```csharp
+var descriptor = new ModUpdateDescriptor(
+    ModId: "modid",
+    DisplayName: "Mod Name",
+    DownloadUri: new Uri("https://..."),
+    TargetPath: Path.Combine(dataDir, "Mods", "modfile.zip"),
+    TargetIsDirectory: false,  // ALWAYS false for zip-only
+    ReleaseFileName: "modfile.zip",
+    ReleaseVersion: "1.0.0",
+    InstalledVersion: null  // or current version if updating
+);
 
-4. **UI Considerations:**
-   - Show progress during download/installation
-   - Handle long-running operations asynchronously
-   - Provide feedback on success/failure
-   - Refresh mod list after installation
+var result = await modUpdateService.UpdateAsync(
+    descriptor, 
+    cacheDownloads: true,  // recommended
+    progress: progressReporter
+);
+```
+
+### Dependencies
+- Vintage Story data directory path (must exist)
+- Network access (unless using cached mods)
+- Write permissions to target directory
+- .NET ZIP file handling (`System.IO.Compression`)
+
+### UI Considerations
+- Show progress during download/installation (5 stages)
+- Handle long-running operations asynchronously
+- Provide clear feedback on success/failure
+- Refresh mod list after installation
+- Update button states appropriately
+
+### Important Constraints
+- **Always** set `TargetIsDirectory = false`
+- **Always** provide a .zip file path as `TargetPath`
+- **Never** call directory extraction functions
+- The service will validate the zip contains `modinfo.json`
+
+---
+
+## Function Summary
+
+### Core Flow (13 functions)
+1. `InstallModButton_OnClick` - Entry point
+2. `SelectReleaseForInstall` - Version selection
+3. `TryGetInstallTargetPath` - Path determination
+4. `CreateAutomaticBackupAsync` - Pre-install backup
+5. `ModUpdateService.UpdateAsync` - Main orchestrator
+6. `DownloadAsync` - Download/cache retrieval
+7. `ValidateArchive` - Zip validation
+8. `InstallAsync` - Installation router
+9. `InstallToFile` - **Actual installation (zip-only)**
+10. `RefreshModsAsync` - UI refresh
+11. `UpdateSelectedModButtons` - Button state update
+12. `RemoveFromSelection` - Selection management
+13. `RemoveSearchResult` - Search result cleanup
+
+### Utility Functions (5 functions)
+14. `TryCacheDownload` - Cache new download
+15. `TryMoveBackupToCache` - Cache old version
+16. `CreateTemporaryDirectory` - Temp directory creation
+17. `TryDelete` - Safe file/directory deletion
+18. `ReportProgress` - Progress reporting
+
+### Data Structures (4 types)
+- `ModUpdateDescriptor` - Installation parameters
+- `ModUpdateResult` - Installation result
+- `ModUpdateProgress` - Progress information
+- `ModUpdateStage` - Stage enumeration
+
+**Total: 18 functions + 4 data structures**
