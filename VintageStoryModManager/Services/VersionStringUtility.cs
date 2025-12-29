@@ -1,12 +1,31 @@
+using System.Collections.Concurrent;
 using System.Text;
 
 namespace VintageStoryModManager.Services;
 
+/// <summary>
+///     Provides utilities for normalizing, parsing, and comparing version strings.
+/// </summary>
 internal static class VersionStringUtility
 {
+    // Cache for normalized version strings to avoid re-parsing
+    private static readonly ConcurrentDictionary<string, string?> NormalizedVersionCache = new();
+
+    // Cache for parsed version parts to avoid repeated parsing
+    // Successful parses cache the array directly; failed parses store Array.Empty<int>()
+    private static readonly ConcurrentDictionary<string, int[]> ParsedVersionPartsCache = new();
+    /// <summary>
+    ///     Normalizes a version string by extracting up to four numeric parts separated by dots.
+    /// </summary>
+    /// <param name="version">The raw version string.</param>
+    /// <returns>A normalized version string (e.g., "1.21.5.0"), or null if no valid numeric parts are found.</returns>
     public static string? Normalize(string? version)
     {
         if (string.IsNullOrWhiteSpace(version)) return null;
+
+        // Check cache first
+        if (NormalizedVersionCache.TryGetValue(version, out var cached))
+            return cached;
 
         const int MaxNormalizedParts = 4;
 
@@ -36,11 +55,20 @@ internal static class VersionStringUtility
 
         if (currentPart.Length > 0 && parts.Count < MaxNormalizedParts) parts.Add(currentPart.ToString());
 
-        if (parts.Count == 0) return null;
+        var result = parts.Count == 0 ? null : string.Join('.', parts);
 
-        return string.Join('.', parts);
+        // Cache the result
+        NormalizedVersionCache.TryAdd(version, result);
+
+        return result;
     }
 
+    /// <summary>
+    ///     Determines if a candidate version is newer than the current version.
+    /// </summary>
+    /// <param name="candidateVersion">The version to check.</param>
+    /// <param name="currentVersion">The current version to compare against.</param>
+    /// <returns>True if the candidate version is newer; otherwise, false.</returns>
     public static bool IsCandidateVersionNewer(string? candidateVersion, string? currentVersion)
     {
         if (string.IsNullOrWhiteSpace(candidateVersion)) return false;
@@ -77,6 +105,13 @@ internal static class VersionStringUtility
         return !string.Equals(normalizedCandidate, normalizedCurrent, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    ///     Checks if a candidate version matches the target version or is a valid prefix of it.
+    ///     For example, "1.21" matches "1.21.5", and "1.21.5" matches "1.21.5" exactly.
+    /// </summary>
+    /// <param name="candidateVersion">The version prefix or exact match to check.</param>
+    /// <param name="targetVersion">The target version to match against.</param>
+    /// <returns>True if the candidate matches the target or is a valid prefix; otherwise, false.</returns>
     public static bool MatchesVersionOrPrefix(string? candidateVersion, string? targetVersion)
     {
         if (string.IsNullOrWhiteSpace(candidateVersion) || string.IsNullOrWhiteSpace(targetVersion)) return false;
@@ -101,6 +136,13 @@ internal static class VersionStringUtility
         return true;
     }
 
+    /// <summary>
+    ///     Checks if a provided version satisfies a minimum version requirement.
+    ///     Treats "*" as a wildcard that matches any version.
+    /// </summary>
+    /// <param name="requestedVersion">The minimum required version (or "*" for any version).</param>
+    /// <param name="providedVersion">The version to check.</param>
+    /// <returns>True if the provided version meets or exceeds the requested version; otherwise, false.</returns>
     public static bool SatisfiesMinimumVersion(string? requestedVersion, string? providedVersion)
     {
         if (string.IsNullOrWhiteSpace(requestedVersion)
@@ -131,6 +173,12 @@ internal static class VersionStringUtility
         return true;
     }
 
+    /// <summary>
+    ///     Checks if two versions have matching first three numeric parts (major.minor.patch).
+    /// </summary>
+    /// <param name="version1">The first version to compare.</param>
+    /// <param name="version2">The second version to compare.</param>
+    /// <returns>True if both versions have at least three parts and the first three match exactly; otherwise, false.</returns>
     public static bool MatchesFirstThreeDigits(string? version1, string? version2)
     {
         if (string.IsNullOrWhiteSpace(version1) || string.IsNullOrWhiteSpace(version2)) return false;
@@ -199,19 +247,52 @@ internal static class VersionStringUtility
         return tagParts[0] == targetParts[0] && tagParts[1] == targetParts[1];
     }
 
+    /// <summary>
+    ///     Parses a normalized version string into an array of integer parts.
+    /// </summary>
+    /// <param name="normalizedVersion">A normalized version string (e.g., "1.21.5").</param>
+    /// <param name="parts">An array of integer version parts if parsing succeeds.</param>
+    /// <returns>True if the version string was successfully parsed; otherwise, false.</returns>
     private static bool TryParseVersionParts(string normalizedVersion, out int[] parts)
     {
-        var tokens =
-            normalizedVersion.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        parts = new int[tokens.Length];
+        // Check cache first - empty array indicates parse failure
+        if (ParsedVersionPartsCache.TryGetValue(normalizedVersion, out var cached))
+        {
+            // Return a defensive copy for successful parses, or Array.Empty for failures
+            parts = cached.Length == 0 ? Array.Empty<int>() : (int[])cached.Clone();
+            return cached.Length > 0;
+        }
 
-        for (var i = 0; i < tokens.Length; i++)
-            if (!int.TryParse(tokens[i], out parts[i]))
+        // Use Span-based parsing to avoid allocations
+        var span = normalizedVersion.AsSpan();
+        var partsList = new List<int>(4); // Most versions have 4 parts or less
+
+        while (!span.IsEmpty)
+        {
+            var dotIndex = span.IndexOf('.');
+            var part = dotIndex >= 0 ? span.Slice(0, dotIndex) : span;
+
+            if (!int.TryParse(part, out var value))
             {
+                // Cache the failure using empty array as sentinel
+                // Array.Empty is safe to share as it's read-only in practice
                 parts = Array.Empty<int>();
+                ParsedVersionPartsCache.TryAdd(normalizedVersion, parts);
                 return false;
             }
 
+            partsList.Add(value);
+
+            if (dotIndex < 0)
+                break;
+
+            span = span.Slice(dotIndex + 1);
+        }
+
+        parts = partsList.ToArray();
+
+        // Cache a copy to prevent external modifications
+        ParsedVersionPartsCache.TryAdd(normalizedVersion, (int[])parts.Clone());
         return true;
     }
 }

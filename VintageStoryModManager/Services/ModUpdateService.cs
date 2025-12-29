@@ -23,7 +23,7 @@ public sealed class ModUpdateService
         try
         {
             ReportProgress(progress, ModUpdateStage.Downloading, "Downloading update package...");
-            var download = await DownloadAsync(descriptor, cancellationToken).ConfigureAwait(false);
+            var download = await DownloadAsync(descriptor, progress, cancellationToken).ConfigureAwait(false);
 
             try
             {
@@ -73,7 +73,7 @@ public sealed class ModUpdateService
     }
 
     private static async Task<DownloadResult> DownloadAsync(ModUpdateDescriptor descriptor,
-        CancellationToken cancellationToken)
+        IProgress<ModUpdateProgress>? progress, CancellationToken cancellationToken)
     {
         using var logScope = StatusLogService.BeginDebugScope(descriptor.DisplayName, descriptor.ModId, "download");
         var fileName = descriptor.ReleaseFileName;
@@ -129,6 +129,7 @@ public sealed class ModUpdateService
             await using var sourceStream = File.OpenRead(sourcePath);
             await using var destination = File.Create(downloadPath);
             await sourceStream.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+            ReportProgress(progress, ModUpdateStage.Downloading, "Downloading update package...", 100);
             logScope?.SetDetail("src", "file");
         }
         else
@@ -142,7 +143,40 @@ public sealed class ModUpdateService
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             await using var destination = File.Create(downloadPath);
-            await stream.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+
+            var totalLength = response.Content.Headers.ContentLength;
+            var buffer = new byte[81920];
+            var stopwatch = Stopwatch.StartNew();
+            long totalBytesRead = 0;
+            var lastReport = TimeSpan.Zero;
+
+            while (true)
+            {
+                var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)
+                    .ConfigureAwait(false);
+                if (bytesRead == 0) break;
+
+                await destination.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
+                totalBytesRead += bytesRead;
+
+                if (stopwatch.Elapsed - lastReport >= TimeSpan.FromMilliseconds(200))
+                {
+                    var percent = totalLength.HasValue && totalLength.Value > 0
+                        ? totalBytesRead * 100d / totalLength.Value
+                        : (double?)null;
+
+                    var bytesPerSecond = stopwatch.Elapsed.TotalSeconds > 0
+                        ? totalBytesRead / stopwatch.Elapsed.TotalSeconds
+                        : (double?)null;
+
+                    ReportProgress(progress, ModUpdateStage.Downloading, "Downloading update package...",
+                        percent, bytesPerSecond);
+                    lastReport = stopwatch.Elapsed;
+                }
+            }
+
+            ReportProgress(progress, ModUpdateStage.Downloading, "Downloading update package...", 100,
+                stopwatch.Elapsed.TotalSeconds > 0 ? totalBytesRead / stopwatch.Elapsed.TotalSeconds : null);
             logScope?.SetDetail("src", "net");
         }
 
@@ -559,9 +593,10 @@ public sealed class ModUpdateService
         }
     }
 
-    private static void ReportProgress(IProgress<ModUpdateProgress>? progress, ModUpdateStage stage, string message)
+    private static void ReportProgress(IProgress<ModUpdateProgress>? progress, ModUpdateStage stage, string message,
+        double? percent = null, double? bytesPerSecond = null)
     {
-        progress?.Report(new ModUpdateProgress(stage, message));
+        progress?.Report(new ModUpdateProgress(stage, message, percent, bytesPerSecond));
     }
 
     private sealed record DownloadResult(string Path, bool IsTemporary, string? CachePath, bool IsCacheHit);
@@ -582,7 +617,8 @@ public sealed record ModUpdateDescriptor(
 
 public sealed record ModUpdateResult(bool Success, string? ErrorMessage);
 
-public readonly record struct ModUpdateProgress(ModUpdateStage Stage, string Message);
+public readonly record struct ModUpdateProgress(ModUpdateStage Stage, string Message, double? Percent,
+    double? BytesPerSecond);
 
 public enum ModUpdateStage
 {

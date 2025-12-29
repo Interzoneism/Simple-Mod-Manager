@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 
 namespace VintageStoryModManager;
@@ -11,9 +12,12 @@ public static class DevConfig
     public static string SingleInstanceMutexName { get; } = "VintageStoryModManager.SingleInstance";
 
     // View model tuning.
+    // Reduced from 8 to 4 to improve UI responsiveness during heavy load
     public static int MaxConcurrentDatabaseRefreshes { get; } = 4;
-    public static int MaxConcurrentUserReportRefreshes { get; } = 6;
+    // Reduced from 8 to 4 to improve UI responsiveness during heavy load
+    public static int MaxConcurrentUserReportRefreshes { get; } = 4;
     public static int MaxNewModsRecentMonths { get; } = 24;
+    // Reduced from 64 to 32 to improve UI responsiveness during heavy load
     public static int InstalledModsIncrementalBatchSize { get; } = 32;
     public static int MaxModDatabaseResultLimit { get; } = int.MaxValue;
 
@@ -36,7 +40,7 @@ public static class DevConfig
     public static string PresetDirectoryName { get; } = "Presets";
     public static string ModListDirectoryName { get; } = "Modlists";
     public static string RebuiltModListDirectoryName { get; } = "Rebuilt";
-    public static string CloudModListCacheDirectoryName { get; } = "Modlists (Cloud Cache)";
+    public static string CloudModListCacheDirectoryName { get; } = "Temp Cache/Modlists (Cloud Cache)";
     public static string BackupDirectoryName { get; } = "Backups";
     public static string DataFolderBackupDirectoryName { get; } = "Data Folder Backups";
     public static string DataFolderBackupManifestFileName { get; } = "data-backup.json";
@@ -44,27 +48,19 @@ public static class DevConfig
     public static int AutomaticConfigMaxWordDistance { get; } = 2;
 
     // Mod metadata cache.
-    public static string MetadataFolderName { get; } = "Mod Metadata";
+    public static string MetadataFolderName { get; } = "Temp Cache/Mod Metadata";
     public static string MetadataIndexFileName { get; } = "metadata-index.json";
+    public static string IconCacheFolderName { get; } = "Temp Cache/Mod Icons";
 
     // Firebase mod list storage.
     public static string FirebaseModlistDefaultDbUrl { get; } =
+        "https://simplevsmanager-default-rtdb.europe-west1.firebasedatabase.app";
+
+    public static string FirebaseLegacyModlistDbUrl { get; } =
         "https://simple-vs-manager-default-rtdb.europe-west1.firebasedatabase.app";
 
-    // Cloud/Firebase backups location (AppData/Local/SVSM Backup/)
-    public static string FirebaseBackupDirectory
-    {
-        get
-        {
-            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (string.IsNullOrWhiteSpace(local))
-                local = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-
-            if (string.IsNullOrWhiteSpace(local)) return Path.Combine(AppContext.BaseDirectory, "SVSM Backup");
-
-            return Path.Combine(local, "SVSM Backup");
-        }
-    }
+    // Cloud/Firebase cache location (Simple VS Manager/Temp Cache/Firebase Cache)
+    public static string FirebaseBackupDirectory => Path.Combine(GetManagerDirectory(), FirebaseCacheDirectoryName);
 
     // Status log display.
     public static string StatusTimestampFormat { get; } = "yyyy-MM-dd HH:mm:ss.fff";
@@ -80,8 +76,17 @@ public static class DevConfig
     public static string FirebaseRefreshEndpoint { get; } = "https://securetoken.googleapis.com/v1/token";
     public static string FirebaseDeleteEndpoint { get; } = "https://identitytoolkit.googleapis.com/v1/accounts:delete";
     public static string FirebaseAuthStateFileName { get; } = "firebase-auth.json";
-    public static string FirebaseDefaultApiKey { get; } = "AIzaSyCmDJ9yC1ccUEUf41fC-SI8fuXFJzWWlHY";
+    public static string FirebaseDefaultApiKey { get; } = "AIzaSyBjIEr_JbB-Fx9hMa9nAOwaUyPP82HEeG4";
+
+    public static string FirebaseLegacyApiKey { get; } = "AIzaSyCmDJ9yC1ccUEUf41fC-SI8fuXFJzWWlHY";
+
+    public static string FirebaseNewProjectId { get; } = "simplevsmanager";
+
+    public static string FirebaseLegacyProjectId { get; } = "simple-vs-manager";
+
     public static string FirebaseAuthBackupDirectoryName { get; } = "SVSM Backup";
+
+    public static string FirebaseCacheDirectoryName { get; } = "Temp Cache/Firebase Cache";
 
     // User configuration defaults.
     public static string ConfigurationFileName { get; } = "SimpleVSManagerConfiguration.json";
@@ -103,7 +108,8 @@ public static class DevConfig
     public static string ModDatabaseAnyGameVersionToken { get; } = "any";
 
     // Mod discovery.
-    public static int ModDiscoveryBatchSize { get; } = 16;
+    // Increased from 16 to 32 for faster parallel mod loading with many mods
+    public static int ModDiscoveryBatchSize { get; } = 32;
     public static string ModDiscoveryGeneralLoadErrorMessage { get; } = "Unable to load mod. Check log files.";
 
     public static string ModDiscoveryDependencyErrorMessage { get; } =
@@ -114,7 +120,7 @@ public static class DevConfig
 
     // Compatibility vote storage.
     public static string ModVersionVoteDefaultDbUrl { get; } =
-        "https://simple-vs-manager-default-rtdb.europe-west1.firebasedatabase.app";
+        "https://simplevsmanager-default-rtdb.europe-west1.firebasedatabase.app";
 
     public static string ModVersionVoteRootPath { get; } = "compatVotes";
 
@@ -143,4 +149,26 @@ public static class DevConfig
     public static int ModDatabaseDefaultNewModsMonths { get; } = 3;
     public static int ModDatabaseMaxNewModsMonths { get; } = 24;
     public static double ModDatabaseMinimumIntervalDays { get; } = 1d / 24d;
+
+    private static string GetManagerDirectory()
+    {
+        // Check for custom configuration folder first
+        var customFolder = VintageStoryModManager.Services.CustomConfigFolderManager.GetCustomConfigFolder();
+        if (!string.IsNullOrWhiteSpace(customFolder))
+            return customFolder;
+
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (!string.IsNullOrWhiteSpace(local)) return Path.Combine(local, "Simple VS Manager");
+
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        if (!string.IsNullOrWhiteSpace(appData)) return Path.Combine(appData, "Simple VS Manager");
+
+        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        if (!string.IsNullOrWhiteSpace(documents)) return Path.Combine(documents, "Simple VS Manager");
+
+        var personal = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
+        if (!string.IsNullOrWhiteSpace(personal)) return Path.Combine(personal, "Simple VS Manager");
+
+        return Path.Combine(AppContext.BaseDirectory, "Simple VS Manager");
+    }
 }

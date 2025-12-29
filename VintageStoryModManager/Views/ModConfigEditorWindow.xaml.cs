@@ -88,6 +88,12 @@ public partial class ModConfigEditorWindow : Window
     {
         if (DataContext is not ModConfigEditorViewModel viewModel) return;
 
+        if (!viewModel.HasConfigurations)
+        {
+            AddButton_OnClick(sender, e);
+            return;
+        }
+
         var initialDirectory = GetInitialDirectory(viewModel.FilePath);
 
         var dialog = new OpenFileDialog
@@ -128,6 +134,51 @@ public partial class ModConfigEditorWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+    }
+
+    private void AddButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ModConfigEditorViewModel viewModel) return;
+
+        var initialDirectory = GetInitialDirectory(viewModel.FilePath);
+
+        var dialog = new OpenFileDialog
+        {
+            Title = "Add configuration file",
+            Filter = "Config files (*.json;*.yaml;*.yml)|*.json;*.yaml;*.yml|All files (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+
+        if (!string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
+            dialog.InitialDirectory = initialDirectory;
+
+        var result = dialog.ShowDialog(this);
+        if (result != true) return;
+
+        try
+        {
+            viewModel.AddConfiguration(dialog.FileName);
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(EnsureFilePathDoesNotOverlapButtons));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or YamlException
+                                       or ArgumentException or PathTooLongException or NotSupportedException)
+        {
+            WpfMessageBox.Show(this,
+                $"Failed to add the configuration file:\n{ex.Message}",
+                "Edit Config",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private void ClearButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ModConfigEditorViewModel viewModel) return;
+
+        var removed = viewModel.RemoveSelectedConfiguration();
+        if (removed)
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(EnsureFilePathDoesNotOverlapButtons));
     }
 
     private void TreeView_OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)

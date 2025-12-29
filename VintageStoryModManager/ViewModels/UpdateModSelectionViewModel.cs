@@ -9,7 +9,8 @@ public sealed partial class UpdateModSelectionViewModel : ObservableObject
     private readonly bool _isServerOptionsEnabled;
     private readonly ModReleaseInfo? _overrideRelease;
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowExcludeVersionButton))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowExcludeVersionButton))]
     private bool _isSelected;
 
     public UpdateModSelectionViewModel(

@@ -2,7 +2,12 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
-using System.Text.RegularExpressions;
+using HtmlAgilityPack;
+using HtmlDocument = HtmlAgilityPack.HtmlDocument;
+using HtmlEntity = HtmlAgilityPack.HtmlEntity;
+using HtmlNode = HtmlAgilityPack.HtmlNode;
+using HtmlNodeCollection = HtmlAgilityPack.HtmlNodeCollection;
+using HtmlNodeType = HtmlAgilityPack.HtmlNodeType;
 using VintageStoryModManager.Models;
 
 namespace VintageStoryModManager.Services;
@@ -28,34 +33,6 @@ public sealed class ModDatabaseService
 
     private static readonly HttpClient HttpClient = new();
     private static readonly ModDatabaseCacheService CacheService = new();
-
-    private static readonly Regex HtmlBreakRegex = new(
-        @"<\s*br\s*/?\s*>",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    private static readonly Regex HtmlParagraphOpenRegex = new(
-        @"<\s*p[^>]*>",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    private static readonly Regex HtmlParagraphCloseRegex = new(
-        @"</\s*p\s*>",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    private static readonly Regex HtmlListItemOpenRegex = new(
-        @"<\s*li[^>]*>",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    private static readonly Regex HtmlListItemCloseRegex = new(
-        @"</\s*li\s*>",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    private static readonly Regex HtmlBlockCloseRegex = new(
-        @"</\s*(div|section|article|h[1-6])\s*>",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    private static readonly Regex HtmlTagRegex = new(
-        @"<[^>]+>",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static int CalculateRequestLimit(int maxResults)
     {
@@ -96,19 +73,37 @@ public sealed class ModDatabaseService
         {
             var installedModVersion = modEntry.Version;
 
-            var cached = await CacheService
-                .TryLoadAsync(
+            // Always load from cache first
+            var (cached, cachedLastModified, cachedAt) = await CacheService
+                .TryLoadWithLastModifiedAsync(
                     modEntry.ModId,
                     normalizedGameVersion,
                     installedModVersion,
-                    !internetDisabled,
                     requireExactVersionMatch,
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            if (cached != null) modEntry.DatabaseInfo = cached;
+            if (cached != null)
+            {
+                modEntry.DatabaseInfo = cached;
+                // Update metadata cache with tags from database cache
+                if (cached.Tags is { Count: > 0 })
+                    ModManifestCacheService.UpdateTags(modEntry.ModId, installedModVersion, cached.Tags);
+            }
 
+            // Skip network request if internet is disabled
             if (internetDisabled) return;
+
+            // Check if we should fetch from network:
+            // 1. No cache exists
+            // 2. No cached lastmodified value (old cache format)
+            // 3. Cache has hard-expired (> 2 hours)
+            var isHardExpired = cachedAt.HasValue && DateTimeOffset.Now - cachedAt.Value > ModCacheHardExpiry;
+            var needsFetch = cached == null ||
+                             string.IsNullOrWhiteSpace(cachedLastModified) ||
+                             isHardExpired;
+
+            if (!needsFetch) return;
 
             await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -120,12 +115,114 @@ public sealed class ModDatabaseService
                         requireExactVersionMatch,
                         cancellationToken)
                     .ConfigureAwait(false);
-                if (info != null) modEntry.DatabaseInfo = info;
+                if (info != null)
+                {
+                    modEntry.DatabaseInfo = info;
+                    // Update metadata cache with tags from database info
+                    if (info.Tags is { Count: > 0 })
+                        ModManifestCacheService.UpdateTags(modEntry.ModId, installedModVersion, info.Tags);
+                }
             }
             finally
             {
                 semaphore.Release();
             }
+        }
+    }
+
+    /// <summary>
+    ///     Soft expiry time for per-mod cache entries. Cache entries older than this will trigger
+    ///     a refresh from the network.
+    /// </summary>
+    private static readonly TimeSpan ModCacheSoftExpiry = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    ///     Hard expiry time for per-mod cache entries. Cache entries older than this will always
+    ///     be refreshed from the network, regardless of the lastmodified value.
+    ///     This ensures data eventually gets refreshed even if the API's lastmodified field is not changing.
+    /// </summary>
+    private static readonly TimeSpan ModCacheHardExpiry = TimeSpan.FromHours(2);
+
+    /// <summary>
+    ///     Checks if a cache entry is soft-expired based on its timestamp.
+    ///     Returns true if the cache doesn't exist or is older than soft expiry.
+    /// </summary>
+    private static bool IsCacheSoftExpired(DateTimeOffset? cachedAt)
+    {
+        return !cachedAt.HasValue || DateTimeOffset.Now - cachedAt.Value > ModCacheSoftExpiry;
+    }
+
+    /// <summary>
+    ///     Checks if a cache entry is hard-expired based on its timestamp.
+    ///     Returns true if the cache doesn't exist or is older than hard expiry.
+    /// </summary>
+    private static bool IsCacheHardExpired(DateTimeOffset? cachedAt)
+    {
+        return !cachedAt.HasValue || DateTimeOffset.Now - cachedAt.Value > ModCacheHardExpiry;
+    }
+
+    /// <summary>
+    ///     Checks if a refresh is needed based on the cached lastmodified value and cache age.
+    ///     Returns true if cache is missing, soft-expired, or hard-expired.
+    ///     Returns false if cache exists with a lastmodified value and hasn't soft-expired.
+    /// </summary>
+    private async Task<bool> CheckIfRefreshNeededAsync(
+        string modId,
+        string? normalizedGameVersion,
+        CancellationToken cancellationToken)
+    {
+        if (InternetAccessManager.IsInternetAccessDisabled) return false;
+
+        try
+        {
+            // Get cached lastmodified value and timestamp
+            var (cachedLastModified, cachedAt) = await CacheService
+                .GetCachedLastModifiedAsync(modId, normalizedGameVersion, cancellationToken)
+                .ConfigureAwait(false);
+
+            // If cache is older than hard expiry or doesn't exist, force a refresh
+            if (IsCacheHardExpired(cachedAt))
+            {
+                return true;
+            }
+
+            // If no cached lastmodified value exists, we need to fetch data
+            if (string.IsNullOrWhiteSpace(cachedLastModified))
+            {
+                return true;
+            }
+
+            // If cache is older than soft expiry, trigger a refresh
+            // The API's lastmodified field will be checked after fetching fresh data
+            if (IsCacheSoftExpired(cachedAt))
+            {
+                return true;
+            }
+
+            // Cache exists with lastmodified and hasn't soft-expired or hard-expired - no refresh needed
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (JsonException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] JSON parse error checking refresh for mod '{modId}': {ex.Message}");
+            // On error, assume cache is valid to avoid excessive requests
+            return false;
+        }
+        catch (HttpRequestException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] HTTP request error checking refresh for mod '{modId}': {ex.Message}");
+            // On error, assume cache is valid to avoid excessive requests
+            return false;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] Unexpected error checking refresh for mod '{modId}': {ex.Message}");
+            // On error, assume cache is valid to avoid excessive requests
+            return false;
         }
     }
 
@@ -137,7 +234,38 @@ public sealed class ModDatabaseService
 
         var normalizedGameVersion = VersionStringUtility.Normalize(installedGameVersion);
         return TryLoadDatabaseInfoAsyncCore(modId, modVersion, normalizedGameVersion, requireExactVersionMatch,
-            cancellationToken);
+            null, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Loads database info for a mod, optionally using pre-loaded cached info to avoid double disk reads.
+    ///     When preloaded cache info is provided, callers should first check cache freshness using
+    ///     <see cref="TryLoadCachedDatabaseInfoWithFreshnessAsync"/> and only call this method when
+    ///     a network refresh is desired (i.e., when the cache is stale).
+    /// </summary>
+    /// <param name="modId">The mod ID to look up.</param>
+    /// <param name="modVersion">The installed mod version.</param>
+    /// <param name="installedGameVersion">The installed game version.</param>
+    /// <param name="requireExactVersionMatch">Whether to require exact version matching.</param>
+    /// <param name="preloadedCachedInfo">Previously loaded cached info to avoid re-reading from disk. When provided,
+    /// this method will attempt a network refresh. Pass null to have freshness checked automatically.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="timingService">Optional timing service for detailed performance measurement.</param>
+    /// <returns>The database info, or null if not found.</returns>
+    public Task<ModDatabaseInfo?> TryLoadDatabaseInfoAsync(
+        string modId,
+        string? modVersion,
+        string? installedGameVersion,
+        bool requireExactVersionMatch,
+        ModDatabaseInfo? preloadedCachedInfo,
+        CancellationToken cancellationToken = default,
+        ModLoadingTimingService? timingService = null)
+    {
+        if (string.IsNullOrWhiteSpace(modId)) return Task.FromResult<ModDatabaseInfo?>(null);
+
+        var normalizedGameVersion = VersionStringUtility.Normalize(installedGameVersion);
+        return TryLoadDatabaseInfoAsyncCore(modId, modVersion, normalizedGameVersion, requireExactVersionMatch,
+            preloadedCachedInfo, cancellationToken, timingService);
     }
 
     public Task<ModDatabaseInfo?> TryLoadCachedDatabaseInfoAsync(
@@ -157,6 +285,47 @@ public sealed class ModDatabaseService
             false,
             requireExactVersionMatch,
             cancellationToken);
+    }
+
+    /// <summary>
+    ///     Attempts to load cached database info and checks if refresh is needed by version comparison.
+    /// </summary>
+    /// <param name="modId">The mod ID to look up.</param>
+    /// <param name="modVersion">The installed mod version.</param>
+    /// <param name="installedGameVersion">The installed game version.</param>
+    /// <param name="requireExactVersionMatch">Whether to require exact version matching.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A tuple containing the cached info (or null) and whether a refresh is needed.</returns>
+    public async Task<(ModDatabaseInfo? Info, bool NeedsRefresh)> TryLoadCachedDatabaseInfoWithRefreshCheckAsync(
+        string modId,
+        string? modVersion,
+        string? installedGameVersion,
+        bool requireExactVersionMatch = false,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(modId)) return (null, true);
+
+        var normalizedGameVersion = VersionStringUtility.Normalize(installedGameVersion);
+
+        // Always load from cache first
+        var cached = await CacheService.TryLoadWithoutExpiryAsync(
+            modId,
+            normalizedGameVersion,
+            modVersion,
+            requireExactVersionMatch,
+            cancellationToken).ConfigureAwait(false);
+
+        // If no cache or internet is disabled, return what we have
+        if (InternetAccessManager.IsInternetAccessDisabled)
+        {
+            return (cached, false);
+        }
+
+        // Check if refresh is needed using HTTP conditional request
+        var needsRefresh = cached == null || await CheckIfRefreshNeededAsync(
+            modId, normalizedGameVersion, cancellationToken).ConfigureAwait(false);
+
+        return (cached, needsRefresh);
     }
 
     public async Task<string?> TryFetchLatestReleaseVersionAsync(string modId, CancellationToken cancellationToken)
@@ -193,8 +362,21 @@ public sealed class ModDatabaseService
         {
             throw;
         }
-        catch (Exception)
+        catch (JsonException ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] JSON parse error for mod '{modId}': {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] JSON exception details: {ex}");
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] HTTP request error for mod '{modId}': {ex.Message}");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] Unexpected error fetching version for mod '{modId}': {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] Exception details: {ex}");
             return null;
         }
     }
@@ -204,24 +386,47 @@ public sealed class ModDatabaseService
         string? modVersion,
         string? normalizedGameVersion,
         bool requireExactVersionMatch,
-        CancellationToken cancellationToken)
+        ModDatabaseInfo? preloadedCachedInfo,
+        CancellationToken cancellationToken,
+        ModLoadingTimingService? timingService = null)
     {
         var internetDisabled = InternetAccessManager.IsInternetAccessDisabled;
 
-        var cached = await CacheService
-            .TryLoadAsync(
-                modId,
-                normalizedGameVersion,
-                modVersion,
-                !internetDisabled,
-                requireExactVersionMatch,
-                cancellationToken)
-            .ConfigureAwait(false);
+        ModDatabaseInfo? cached;
+        bool needsRefresh;
 
-        if (internetDisabled) return cached;
+        if (preloadedCachedInfo != null)
+        {
+            // When preloaded cache info is provided, the caller is expected to have already
+            // checked if refresh is needed and only call this method when a network refresh is desired.
+            // This avoids duplicate cache reads and version checks.
+            cached = preloadedCachedInfo;
+            needsRefresh = true;
+        }
+        else
+        {
+            // Load from disk and check if refresh is needed via HTTP conditional request
+            cached = await CacheService
+                .TryLoadWithoutExpiryAsync(
+                    modId,
+                    normalizedGameVersion,
+                    modVersion,
+                    requireExactVersionMatch,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (internetDisabled) return cached;
+
+            // Check if data has changed on the server using HTTP conditional request
+            needsRefresh = cached == null || await CheckIfRefreshNeededAsync(
+                modId, normalizedGameVersion, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Skip network request if internet is disabled or no refresh needed
+        if (internetDisabled || !needsRefresh) return cached;
 
         var info = await TryLoadDatabaseInfoInternalAsync(modId, modVersion, normalizedGameVersion,
-                requireExactVersionMatch, cancellationToken)
+                requireExactVersionMatch, cancellationToken, timingService)
             .ConfigureAwait(false);
 
         return info ?? cached;
@@ -263,8 +468,6 @@ public sealed class ModDatabaseService
     {
         if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
-        InternetAccessManager.ThrowIfInternetAccessDisabled();
-
         var requestLimit = CalculateRequestLimit(maxResults);
         var requestUri = string.Format(
             CultureInfo.InvariantCulture,
@@ -288,8 +491,6 @@ public sealed class ModDatabaseService
         CancellationToken cancellationToken = default)
     {
         if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
-
-        InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         var requestLimit = CalculateRequestLimit(maxResults);
         var requestUri = string.Format(
@@ -334,8 +535,6 @@ public sealed class ModDatabaseService
         CancellationToken cancellationToken = default)
     {
         if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
-
-        InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         var requestLimit = CalculateRequestLimit(maxResults);
         var requestUri = string.Format(
@@ -382,8 +581,6 @@ public sealed class ModDatabaseService
     {
         if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
-        InternetAccessManager.ThrowIfInternetAccessDisabled();
-
         var normalizedMonths = months <= 0 ? DefaultNewModsMonths : Math.Clamp(months, 1, MaxNewModsMonths);
 
         var requestLimit = Math.Clamp(maxResults * 6, Math.Max(maxResults, 60), 150);
@@ -426,8 +623,6 @@ public sealed class ModDatabaseService
     {
         if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
-        InternetAccessManager.ThrowIfInternetAccessDisabled();
-
         var requestLimit = CalculateRequestLimit(maxResults);
         var requestUri = string.Format(
             CultureInfo.InvariantCulture,
@@ -452,8 +647,6 @@ public sealed class ModDatabaseService
         CancellationToken cancellationToken = default)
     {
         if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
-
-        InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         var requestLimit = CalculateRequestLimit(maxResults);
         var requestUri = string.Format(
@@ -500,8 +693,6 @@ public sealed class ModDatabaseService
     {
         if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
 
-        InternetAccessManager.ThrowIfInternetAccessDisabled();
-
         var requestLimit = CalculateRequestLimit(maxResults);
         var requestUri = string.Format(
             CultureInfo.InvariantCulture,
@@ -526,8 +717,6 @@ public sealed class ModDatabaseService
         CancellationToken cancellationToken = default)
     {
         if (maxResults <= 0) return Array.Empty<ModDatabaseSearchResult>();
-
-        InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         // Fetch a larger pool to randomize from
         var requestLimit = CalculateRequestLimit(maxResults * 10);
@@ -591,7 +780,11 @@ public sealed class ModDatabaseService
         Func<IEnumerable<ModDatabaseSearchResult>, IEnumerable<ModDatabaseSearchResult>> orderResults,
         CancellationToken cancellationToken)
     {
-        InternetAccessManager.ThrowIfInternetAccessDisabled();
+        // If internet is disabled, return empty results
+        if (InternetAccessManager.IsInternetAccessDisabled)
+        {
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
 
         try
         {
@@ -623,16 +816,34 @@ public sealed class ModDatabaseService
 
             if (candidates.Count == 0) return Array.Empty<ModDatabaseSearchResult>();
 
-            return orderResults(candidates)
+            var orderedResults = orderResults(candidates)
                 .Take(maxResults)
                 .ToArray();
+
+            return orderedResults;
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception)
+        catch (JsonException ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] JSON parse error in search: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] Request URI: {requestUri}");
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] JSON exception details: {ex}");
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+        catch (HttpRequestException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] HTTP request error in search: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] Request URI: {requestUri}");
+            return Array.Empty<ModDatabaseSearchResult>();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] Unexpected error in search: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] Request URI: {requestUri}");
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] Exception details: {ex}");
             return Array.Empty<ModDatabaseSearchResult>();
         }
     }
@@ -665,23 +876,47 @@ public sealed class ModDatabaseService
     {
         if (string.IsNullOrWhiteSpace(candidate.ModId)) return CloneResultWithDetails(candidate, null, null);
 
-        InternetAccessManager.ThrowIfInternetAccessDisabled();
+        // Try to satisfy the request from cache first to avoid re-downloading identical payloads
+        var cachedInfo = await CacheService
+            .TryLoadWithoutExpiryAsync(candidate.ModId, null, null, false, cancellationToken)
+            .ConfigureAwait(false);
+        var cachedDownloads = ExtractLatestReleaseDownloads(cachedInfo);
+
+        // If internet is disabled, return cached data (if any) without throwing
+        if (InternetAccessManager.IsInternetAccessDisabled)
+            return CloneResultWithDetails(candidate, cachedInfo, cachedDownloads);
+
+        var needsRefresh = cachedInfo == null || await CheckIfRefreshNeededAsync(candidate.ModId, null, cancellationToken)
+            .ConfigureAwait(false);
+        if (!needsRefresh)
+            return CloneResultWithDetails(candidate, cachedInfo, cachedDownloads);
 
         await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var info = await TryLoadDatabaseInfoInternalAsync(candidate.ModId, null, null, false, cancellationToken)
                 .ConfigureAwait(false);
-            var latestDownloads = ExtractLatestReleaseDownloads(info);
-            return CloneResultWithDetails(candidate, info, latestDownloads);
+            var latestDownloads = ExtractLatestReleaseDownloads(info ?? cachedInfo);
+            return CloneResultWithDetails(candidate, info ?? cachedInfo, latestDownloads);
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception)
+        catch (JsonException ex)
         {
-            return CloneResultWithDetails(candidate, null, null);
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] JSON parse error enriching search result: {ex.Message}");
+            return CloneResultWithDetails(candidate, cachedInfo, cachedDownloads);
+        }
+        catch (HttpRequestException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] HTTP request error enriching search result: {ex.Message}");
+            return CloneResultWithDetails(candidate, cachedInfo, cachedDownloads);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] Unexpected error enriching search result: {ex.Message}");
+            return CloneResultWithDetails(candidate, cachedInfo, cachedDownloads);
         }
         finally
         {
@@ -710,6 +945,7 @@ public sealed class ModDatabaseService
             UrlAlias = source.UrlAlias,
             Side = source.Side,
             LogoUrl = source.LogoUrl,
+            LogoUrlSource = source.LogoUrlSource,
             LastReleasedUtc = source.LastReleasedUtc,
             CreatedUtc = info?.CreatedUtc ?? source.CreatedUtc,
             Score = source.Score,
@@ -734,7 +970,7 @@ public sealed class ModDatabaseService
     }
 
     private static async Task<ModDatabaseInfo?> TryLoadDatabaseInfoInternalAsync(string modId, string? modVersion,
-        string? normalizedGameVersion, bool requireExactVersionMatch, CancellationToken cancellationToken)
+        string? normalizedGameVersion, bool requireExactVersionMatch, CancellationToken cancellationToken, ModLoadingTimingService? timingService = null)
     {
         if (InternetAccessManager.IsInternetAccessDisabled) return null;
 
@@ -745,74 +981,139 @@ public sealed class ModDatabaseService
             var requestUri =
                 string.Format(CultureInfo.InvariantCulture, ApiEndpointFormat, Uri.EscapeDataString(modId));
             using HttpRequestMessage request = new(HttpMethod.Get, requestUri);
-            using var response = await HttpClient
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode) return null;
 
-            await using var contentStream =
-                await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using var document = await JsonDocument.ParseAsync(contentStream, cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!document.RootElement.TryGetProperty("mod", out var modElement) ||
-                modElement.ValueKind != JsonValueKind.Object) return null;
-
-            var tags = GetStringList(modElement, "tags");
-            var assetId = TryGetAssetId(modElement);
-            var modPageUrl = assetId == null ? null : ModPageBaseUrl + assetId;
-            var downloads = GetNullableInt(modElement, "downloads");
-            var comments = GetNullableInt(modElement, "comments");
-            var follows = GetNullableInt(modElement, "follows");
-            var trendingPoints = GetNullableInt(modElement, "trendingpoints");
-            var side = GetString(modElement, "side");
-            var logoUrl = GetString(modElement, "logofile");
-            if (string.IsNullOrWhiteSpace(logoUrl)) logoUrl = GetString(modElement, "logo");
-            var lastReleasedUtc = TryParseDateTime(GetString(modElement, "lastreleased"));
-            var createdUtc = TryParseDateTime(GetString(modElement, "created"));
-            var releases = BuildReleaseInfos(modElement, normalizedGameVersion, requireExactVersionMatch);
-            var latestRelease = releases.Count > 0 ? releases[0] : null;
-            var latestCompatibleRelease = releases.FirstOrDefault(release => release.IsCompatibleWithInstalledGame);
-            var latestVersion = latestRelease?.Version;
-            var latestCompatibleVersion = latestCompatibleRelease?.Version;
-            var requiredVersions = FindRequiredGameVersions(modElement, modVersion);
-            var recentDownloads = CalculateDownloadsLastThirtyDays(releases);
-            var tenDayDownloads = CalculateDownloadsLastTenDays(releases);
-
-            var info = new ModDatabaseInfo
+            // Measure HTTP request/response time
+            HttpResponseMessage response;
+            using (timingService?.MeasureDbNetworkHttp())
             {
-                Tags = tags,
-                CachedTagsVersion = normalizedModVersion,
-                AssetId = assetId,
-                ModPageUrl = modPageUrl,
-                LatestCompatibleVersion = latestCompatibleVersion,
-                LatestVersion = latestVersion,
-                RequiredGameVersions = requiredVersions,
-                Downloads = downloads,
-                Comments = comments,
-                Follows = follows,
-                TrendingPoints = trendingPoints,
-                LogoUrl = logoUrl,
-                DownloadsLastThirtyDays = recentDownloads,
-                DownloadsLastTenDays = tenDayDownloads,
-                LastReleasedUtc = lastReleasedUtc,
-                CreatedUtc = createdUtc,
-                LatestRelease = latestRelease,
-                LatestCompatibleRelease = latestCompatibleRelease,
-                Releases = releases,
-                Side = side
-            };
+                response = await HttpClient
+                    .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode) return null;
+            }
 
-            await CacheService.StoreAsync(modId, normalizedGameVersion, info, modVersion, cancellationToken)
-                .ConfigureAwait(false);
+            using (response)
+            {
+                // Capture HTTP headers for conditional requests
+                // Last-Modified can be in either response headers or content headers depending on the server
+                string? lastModified = null;
+                string? etag = null;
+                if (response.Content.Headers.TryGetValues("Last-Modified", out var contentLastModifiedValues))
+                {
+                    lastModified = contentLastModifiedValues.FirstOrDefault();
+                }
+                else if (response.Headers.TryGetValues("Last-Modified", out var responseLastModifiedValues))
+                {
+                    lastModified = responseLastModifiedValues.FirstOrDefault();
+                }
+                // ETag can also be in either location
+                if (response.Headers.TryGetValues("ETag", out var responseEtagValues))
+                {
+                    etag = responseEtagValues.FirstOrDefault();
+                }
+                else if (response.Content.Headers.TryGetValues("ETag", out var contentEtagValues))
+                {
+                    etag = contentEtagValues.FirstOrDefault();
+                }
 
-            return info;
+                // Measure JSON parsing time
+                JsonDocument document;
+                using (timingService?.MeasureDbNetworkParse())
+                {
+                    await using var contentStream =
+                        await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                    document = await JsonDocument.ParseAsync(contentStream, cancellationToken: cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                using (document)
+                {
+                    if (!document.RootElement.TryGetProperty("mod", out var modElement) ||
+                        modElement.ValueKind != JsonValueKind.Object) return null;
+
+                    // Measure data extraction time
+                    ModDatabaseInfo info;
+                    string? lastModifiedApiValue;
+                    using (timingService?.MeasureDbNetworkExtract())
+                    {
+                        var tags = GetStringList(modElement, "tags");
+                        var assetId = TryGetAssetId(modElement);
+                        var modPageUrl = assetId == null ? null : ModPageBaseUrl + assetId;
+                        var downloads = GetNullableInt(modElement, "downloads");
+                        var comments = GetNullableInt(modElement, "comments");
+                        var follows = GetNullableInt(modElement, "follows");
+                        var trendingPoints = GetNullableInt(modElement, "trendingpoints");
+                        var side = GetString(modElement, "side");
+                        var logoUrl = GetString(modElement, "logofiledb");
+                        var logoUrlSource = string.IsNullOrWhiteSpace(logoUrl) ? null : "logofiledb";
+                        var lastReleasedUtc = TryParseDateTime(GetString(modElement, "lastreleased"));
+                        var createdUtc = TryParseDateTime(GetString(modElement, "created"));
+                        lastModifiedApiValue = GetString(modElement, "lastmodified");
+                        var releases = BuildReleaseInfos(modElement, normalizedGameVersion, requireExactVersionMatch);
+                        var latestRelease = releases.Count > 0 ? releases[0] : null;
+                        var latestCompatibleRelease = releases.FirstOrDefault(release => release.IsCompatibleWithInstalledGame);
+                        var latestVersion = latestRelease?.Version;
+                        var latestCompatibleVersion = latestCompatibleRelease?.Version;
+                        var requiredVersions = FindRequiredGameVersions(modElement, modVersion);
+                        var recentDownloads = CalculateDownloadsLastThirtyDays(releases);
+                        var tenDayDownloads = CalculateDownloadsLastTenDays(releases);
+
+                        info = new ModDatabaseInfo
+                        {
+                            Tags = tags,
+                            CachedTagsVersion = normalizedModVersion,
+                            AssetId = assetId,
+                            ModPageUrl = modPageUrl,
+                            LatestCompatibleVersion = latestCompatibleVersion,
+                            LatestVersion = latestVersion,
+                            RequiredGameVersions = requiredVersions,
+                            Downloads = downloads,
+                            Comments = comments,
+                            Follows = follows,
+                            TrendingPoints = trendingPoints,
+                            LogoUrl = logoUrl,
+                            LogoUrlSource = logoUrlSource,
+                            DownloadsLastThirtyDays = recentDownloads,
+                            DownloadsLastTenDays = tenDayDownloads,
+                            LastReleasedUtc = lastReleasedUtc,
+                            CreatedUtc = createdUtc,
+                            LatestRelease = latestRelease,
+                            LatestCompatibleRelease = latestCompatibleRelease,
+                            Releases = releases,
+                            Side = side
+                        };
+                    }
+
+                    // Measure cache storage time
+                    using (timingService?.MeasureDbNetworkStore())
+                    {
+                        // Store with API lastmodified value for cache invalidation
+                        await CacheService.StoreAsync(modId, normalizedGameVersion, info, modVersion, lastModified, etag, lastModifiedApiValue, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    return info;
+                }
+            }
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception)
+        catch (JsonException ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] JSON parse error loading database info for mod '{modId}': {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] JSON exception details: {ex}");
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] HTTP request error loading database info for mod '{modId}': {ex.Message}");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] Unexpected error loading database info for mod '{modId}': {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[ModDatabaseService] Exception details: {ex}");
             return null;
         }
     }
@@ -1006,6 +1307,15 @@ public sealed class ModDatabaseService
         return string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
+    // Bullet symbols for different nesting levels in changelogs
+    private static readonly string[] BulletSymbols = new[]
+    {
+        "\u2022 ", // • Level 1: Filled dot (bullet)
+        "\u25E6 ", // ◦ Level 2: White bullet (hollow circle)
+        "\u25AA ", // ▪ Level 3: Black small square
+        "\u25AB "  // ▫ Level 4+: White small square
+    };
+
     private static string? ConvertChangelogToPlainText(string? changelog)
     {
         if (string.IsNullOrWhiteSpace(changelog)) return null;
@@ -1013,17 +1323,120 @@ public sealed class ModDatabaseService
         var text = changelog.Trim();
         if (text.Length == 0) return null;
 
+        var document = new HtmlDocument();
+        document.OptionFixNestedTags = true;
+        document.LoadHtml(text);
+
+        var builder = new System.Text.StringBuilder(text.Length);
+
+        void AppendNodes(HtmlNodeCollection nodes, System.Text.StringBuilder output, int listDepth)
+        {
+            foreach (var node in nodes)
+            {
+                AppendNode(node, output, listDepth);
+            }
+        }
+
+        void AppendNode(HtmlNode node, System.Text.StringBuilder output, int listDepth)
+        {
+            switch (node.NodeType)
+            {
+                case HtmlNodeType.Text:
+                    AppendText(output, HtmlEntity.DeEntitize(node.InnerText));
+                    break;
+
+                case HtmlNodeType.Element:
+                    var name = node.Name.ToLowerInvariant();
+
+                    switch (name)
+                    {
+                        case "br":
+                            EnsureEndsWithNewlines(output, 1);
+                            break;
+
+                        case "p":
+                            AppendNodes(node.ChildNodes, output, listDepth);
+                            EnsureEndsWithNewlines(output, 2);
+                            break;
+
+                        case "div":
+                        case "section":
+                        case "article":
+                        case "h1":
+                        case "h2":
+                        case "h3":
+                        case "h4":
+                        case "h5":
+                        case "h6":
+                            AppendNodes(node.ChildNodes, output, listDepth);
+                            EnsureEndsWithNewlines(output, 2);
+                            break;
+
+                        case "ul":
+                        case "ol":
+                            EnsureEndsWithNewlines(output, 1);
+                            AppendNodes(node.ChildNodes, output, listDepth + 1);
+                            EnsureEndsWithNewlines(output, 1);
+                            break;
+
+                        case "li":
+                            EnsureEndsWithNewlines(output, 1);
+                            var indent = new string(' ', Math.Max(0, listDepth - 1) * 2);
+                            output.Append(indent);
+                            // Use different bullet symbols based on nesting level (1-indexed)
+                            // Clamp to valid range: [0, BulletSymbols.Length - 1]
+                            var bulletIndex = Math.Clamp(listDepth - 1, 0, BulletSymbols.Length - 1);
+                            var bulletSymbol = BulletSymbols[bulletIndex];
+                            output.Append(bulletSymbol);
+                            AppendNodes(node.ChildNodes, output, listDepth + 1);
+                            break;
+
+                        default:
+                            AppendNodes(node.ChildNodes, output, listDepth);
+                            break;
+                    }
+
+                    break;
+            }
+        }
+
+        void AppendText(System.Text.StringBuilder output, string value)
+        {
+            if (string.IsNullOrEmpty(value)) return;
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                if (output.Length > 0 && output[^1] != ' ' && output[^1] != '\n')
+                    output.Append(' ');
+
+                return;
+            }
+
+            output.Append(value);
+        }
+
+        void EnsureEndsWithNewlines(System.Text.StringBuilder output, int required)
+        {
+            var current = 0;
+
+            for (var index = output.Length - 1; index >= 0; index--)
+            {
+                if (output[index] != '\n') break;
+
+                current++;
+            }
+
+            var toAdd = required - current;
+            if (toAdd <= 0) return;
+
+            for (var i = 0; i < toAdd; i++) output.Append('\n');
+        }
+
+        AppendNodes(document.DocumentNode.ChildNodes, builder, 0);
+
+        text = builder.ToString();
         text = text.Replace("\r\n", "\n", StringComparison.Ordinal);
         text = text.Replace('\r', '\n');
-        text = HtmlBreakRegex.Replace(text, "\n");
-        text = HtmlParagraphCloseRegex.Replace(text, "\n\n");
-        text = HtmlParagraphOpenRegex.Replace(text, string.Empty);
-        text = HtmlListItemCloseRegex.Replace(text, "\n");
-        text = HtmlListItemOpenRegex.Replace(text, "\u2022 ");
-        text = HtmlBlockCloseRegex.Replace(text, "\n\n");
-        text = HtmlTagRegex.Replace(text, string.Empty);
-
-        text = WebUtility.HtmlDecode(text);
 
         var lines = text.Split('\n');
         var normalizedLines = new List<string>(lines.Length);
@@ -1039,13 +1452,29 @@ public sealed class ModDatabaseService
                 continue;
             }
 
+            // Don't trim leading spaces from lines with bullets to preserve indentation
             var trimmedStart = trimmedEnd.TrimStart();
-            if (trimmedStart.StartsWith("\u2022 ", StringComparison.Ordinal))
-                trimmedStart = "\u2022 " + trimmedStart[2..].Trim();
-            else
-                trimmedStart = trimmedStart.Trim();
+            var foundBullet = false;
 
-            normalizedLines.Add(trimmedStart);
+            foreach (var bulletSymbol in BulletSymbols)
+            {
+                if (trimmedStart.StartsWith(bulletSymbol, StringComparison.Ordinal))
+                {
+                    // Keep leading spaces, but clean up the content after the bullet
+                    // Calculate leading whitespace length by comparing original and trimmed strings
+                    var prefixLength = trimmedEnd.Length - trimmedStart.Length;
+                    var prefix = trimmedEnd[..prefixLength];
+                    var content = trimmedStart[bulletSymbol.Length..].Trim();
+                    normalizedLines.Add(prefix + bulletSymbol + content);
+                    foundBullet = true;
+                    break;
+                }
+            }
+
+            if (!foundBullet)
+            {
+                normalizedLines.Add(trimmedEnd.Trim());
+            }
         }
 
         while (normalizedLines.Count > 0 && normalizedLines[^1].Length == 0)
@@ -1076,8 +1505,8 @@ public sealed class ModDatabaseService
         var assetId = TryGetAssetId(element);
         var urlAlias = GetString(element, "urlalias");
         var side = GetString(element, "side");
-        var logo = GetString(element, "logo");
-        if (string.IsNullOrWhiteSpace(logo)) logo = GetString(element, "logofile");
+        var logo = GetString(element, "logofiledb");
+        var logoSource = string.IsNullOrWhiteSpace(logo) ? null : "logofiledb";
 
         var tags = GetStringList(element, "tags");
         var downloads = GetInt(element, "downloads");
@@ -1129,6 +1558,7 @@ public sealed class ModDatabaseService
             UrlAlias = urlAlias,
             Side = side,
             LogoUrl = logo,
+            LogoUrlSource = logoSource,
             LastReleasedUtc = lastReleased,
             CreatedUtc = createdUtc,
             Score = score

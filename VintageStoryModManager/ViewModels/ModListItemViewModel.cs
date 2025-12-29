@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -33,8 +35,11 @@ public sealed class ModListItemViewModel : ObservableObject
     private readonly string? _metadataError;
 
     private readonly Func<bool>? _requireExactVersionMatch;
-    private readonly string _searchIndex;
+    private readonly ModLoadingTimingService? _timingService;
+    private string? _searchIndex;
     private readonly Func<string?, string?, bool>? _shouldSkipVersion;
+    private readonly ModEntry _modEntry;
+    private readonly string _constructorLocation;
     private string? _activationError;
     private int? _databaseComments;
     private int? _databaseDownloads;
@@ -51,6 +56,7 @@ public sealed class ModListItemViewModel : ObservableObject
     private string? _loadError;
     private DateTime? _modDatabaseLastUpdatedUtc;
     private ImageSource? _modDatabaseLogo;
+    private string? _modDatabaseLogoSource;
     private string? _modDatabaseLogoUrl;
     private string? _modDatabaseSide;
     private ICommand? _openModDatabasePageCommand;
@@ -65,6 +71,16 @@ public sealed class ModListItemViewModel : ObservableObject
     private bool _userReportHasError;
     private string? _userReportTooltip;
     private string? _versionWarningMessage;
+    private bool _hasInitializedUserReportState;
+    private ImageSource? _icon;
+    private bool _iconInitialized;
+
+    // Cached tag display string to avoid repeated string.Join allocations
+    private string? _cachedDatabaseTagsDisplay;
+
+    // Property change batching support
+    private int _propertyChangeSuspendCount;
+    private readonly HashSet<string> _pendingPropertyChanges = new();
 
     public ModListItemViewModel(
         ModEntry entry,
@@ -74,13 +90,20 @@ public sealed class ModListItemViewModel : ObservableObject
         string? installedGameVersion = null,
         bool isInstalled = false,
         Func<string?, string?, bool>? shouldSkipVersion = null,
-        Func<bool>? requireExactVersionMatch = null)
+        Func<bool>? requireExactVersionMatch = null,
+        bool initializeUserReportState = true,
+        ModLoadingTimingService? timingService = null)
     {
         ArgumentNullException.ThrowIfNull(entry);
         _activationHandler = activationHandler ?? throw new ArgumentNullException(nameof(activationHandler));
         _installedGameVersion = installedGameVersion;
         _shouldSkipVersion = shouldSkipVersion;
         _requireExactVersionMatch = requireExactVersionMatch;
+        _timingService = timingService;
+
+        // Store for lazy search index building
+        _modEntry = entry;
+        _constructorLocation = location;
 
         ModId = entry.ModId;
         DisplayName = string.IsNullOrWhiteSpace(entry.Name) ? entry.ModId : entry.Name;
@@ -115,10 +138,12 @@ public sealed class ModListItemViewModel : ObservableObject
         _databaseComments = databaseInfo?.Comments;
         _databaseRecentDownloads = databaseInfo?.DownloadsLastThirtyDays;
         _databaseTenDayDownloads = databaseInfo?.DownloadsLastTenDays;
+        _modDatabaseLogoSource = databaseInfo?.LogoUrlSource;
         _modDatabaseLogoUrl = databaseInfo?.LogoUrl;
-        _modDatabaseLogo = CreateModDatabaseLogoImage();
+        // Defer logo image creation - will be created on first access via ModDatabasePreviewImage property
+        _modDatabaseLogo = null;
         LogDebug(
-            $"Initial database logo creation result: {_modDatabaseLogo is not null}. Source URL: '{FormatValue(_modDatabaseLogoUrl)}'.");
+            $"Deferred database logo creation. Source URL: '{FormatValue(_modDatabaseLogoUrl)}'.");
         ModDatabaseRelevancySortKey = entry.ModDatabaseSearchScore ?? 0;
         _modDatabaseLastUpdatedUtc = databaseInfo?.LastReleasedUtc ?? DetermineLastUpdatedFromReleases(_releases);
         if (_databaseRecentDownloads is null)
@@ -167,8 +192,10 @@ public sealed class ModListItemViewModel : ObservableObject
         RequiredOnServer = entry.RequiredOnServer;
         _modDatabaseSide = entry.DatabaseInfo?.Side;
 
-        Icon = CreateImage(entry.IconBytes, "Icon bytes");
-        LogDebug($"Icon image created: {Icon is not null}. Will fall back to database logo when null.");
+        // Icon will be lazily created on first access via Icon property getter
+        _icon = null;
+        _iconInitialized = false;
+        LogDebug($"Deferred icon image creation. Will be created on first access.");
 
         _isActive = isActive;
         HasErrors = entry.HasErrors;
@@ -179,8 +206,18 @@ public sealed class ModListItemViewModel : ObservableObject
         UpdateNewerReleaseChangelogs();
         UpdateStatusFromErrors();
         UpdateTooltip();
-        InitializeUserReportState(_installedGameVersion, UserReportModVersion);
-        _searchIndex = BuildSearchIndex(entry, location);
+        if (initializeUserReportState)
+        {
+            InitializeUserReportState(_installedGameVersion, UserReportModVersion);
+        }
+        else
+        {
+            _userReportDisplay = string.Empty;
+            _userReportTooltip = null;
+            _hasInitializedUserReportState = false;
+        }
+        // Defer search index building - will be built on first search
+        _searchIndex = null;
     }
 
     public string ModId { get; }
@@ -229,7 +266,19 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public IReadOnlyList<string> DatabaseTags { get; private set; }
 
-    public string DatabaseTagsDisplay => DatabaseTags.Count == 0 ? "—" : string.Join(", ", DatabaseTags);
+    public string DatabaseTagsDisplay
+    {
+        get
+        {
+            var cached = _cachedDatabaseTagsDisplay;
+            if (cached is not null)
+                return cached;
+
+            cached = DatabaseTags.Count == 0 ? "—" : string.Join(", ", DatabaseTags);
+            _cachedDatabaseTagsDisplay = cached;
+            return cached;
+        }
+    }
 
     public string? ModDatabaseAssetId { get; private set; }
 
@@ -266,7 +315,25 @@ public sealed class ModListItemViewModel : ObservableObject
         ? _databaseComments.Value.ToString("N0", CultureInfo.CurrentCulture)
         : "—";
 
-    public ImageSource? ModDatabasePreviewImage => Icon ?? _modDatabaseLogo;
+    public ImageSource? ModDatabasePreviewImage
+    {
+        get
+        {
+            // Prefer icon if available, otherwise use database logo
+            var iconImage = Icon;
+            if (iconImage != null)
+                return iconImage;
+
+            // Lazy load database logo on first access
+            if (_modDatabaseLogo == null && !string.IsNullOrWhiteSpace(_modDatabaseLogoUrl))
+            {
+                _modDatabaseLogo = CreateModDatabaseLogoImage();
+                LogDebug($"Lazy database logo loaded. URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
+            }
+
+            return _modDatabaseLogo;
+        }
+    }
 
     public bool HasModDatabasePreviewImage => ModDatabasePreviewImage != null;
 
@@ -486,7 +553,23 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public string RequiredOnServerDisplay => RequiredOnServer.HasValue ? RequiredOnServer.Value ? "Yes" : "No" : "—";
 
-    public ImageSource? Icon { get; }
+    public ImageSource? Icon
+    {
+        get
+        {
+            if (!_iconInitialized)
+            {
+                _iconInitialized = true;
+
+                using (_timingService?.MeasureIconLoad())
+                {
+                    _icon = CreateImage(_modEntry.IconBytes, "Icon bytes");
+                    LogDebug($"Lazy icon image created: {_icon is not null}. Will fall back to database logo when null.");
+                }
+            }
+            return _icon;
+        }
+    }
 
     public bool HasErrors { get; }
 
@@ -646,6 +729,8 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private void InitializeUserReportState(string? installedGameVersion, string? modVersion)
     {
+        _hasInitializedUserReportState = true;
+
         if (string.IsNullOrWhiteSpace(installedGameVersion) || string.IsNullOrWhiteSpace(modVersion))
         {
             SetUserReportUnavailable("User reports require a known Vintage Story and mod version.");
@@ -657,6 +742,7 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public void SetUserReportLoading()
     {
+        _hasInitializedUserReportState = true;
         ClearUserReportSummary();
         UserReportHasError = false;
         IsUserReportLoading = true;
@@ -666,6 +752,7 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public void SetUserReportOffline()
     {
+        _hasInitializedUserReportState = true;
         IsUserReportLoading = false;
         UserReportHasError = false;
         UserReportDisplay = "Offline";
@@ -674,6 +761,7 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public void SetUserReportUnavailable(string message)
     {
+        _hasInitializedUserReportState = true;
         ClearUserReportSummary();
         UserReportHasError = false;
         IsUserReportLoading = false;
@@ -683,6 +771,7 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public void SetUserReportError(string message)
     {
+        _hasInitializedUserReportState = true;
         IsUserReportLoading = false;
         UserReportHasError = true;
         UserReportTooltip = string.IsNullOrWhiteSpace(message)
@@ -694,14 +783,18 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public void ApplyUserReportSummary(ModVersionVoteSummary summary)
     {
-        UserReportSummary = summary ?? throw new ArgumentNullException(nameof(summary));
-        IsUserReportLoading = false;
-        UserReportHasError = false;
-        UserReportDisplay = BuildUserReportDisplay(summary);
-        UserReportTooltip = BuildUserReportTooltip(summary);
-        OnPropertyChanged(nameof(UserReportSummary));
-        OnPropertyChanged(nameof(UserReportCounts));
-        OnPropertyChanged(nameof(UserVoteOption));
+        using (_timingService?.MeasureUserReportsLoad())
+        {
+            UserReportSummary = summary ?? throw new ArgumentNullException(nameof(summary));
+            _hasInitializedUserReportState = true;
+            IsUserReportLoading = false;
+            UserReportHasError = false;
+            UserReportDisplay = BuildUserReportDisplay(summary);
+            UserReportTooltip = BuildUserReportTooltip(summary);
+            OnPropertyChanged(nameof(UserReportSummary));
+            OnPropertyChanged(nameof(UserReportCounts));
+            OnPropertyChanged(nameof(UserVoteOption));
+        }
     }
 
     private void ClearUserReportSummary()
@@ -718,6 +811,20 @@ public sealed class ModListItemViewModel : ObservableObject
         OnPropertyChanged(nameof(UserReportSummary));
         OnPropertyChanged(nameof(UserReportCounts));
         OnPropertyChanged(nameof(UserVoteOption));
+    }
+
+    public void EnsureUserReportStateInitialized()
+    {
+        if (_hasInitializedUserReportState) return;
+
+        if (Application.Current?.Dispatcher.CheckAccess() == true)
+        {
+            InitializeUserReportState(_installedGameVersion, UserReportModVersion);
+        }
+        else
+        {
+            Application.Current?.Dispatcher.Invoke(() => EnsureUserReportStateInitialized());
+        }
     }
 
     private static string BuildUserReportDisplay(ModVersionVoteSummary? summary)
@@ -910,175 +1017,193 @@ public sealed class ModListItemViewModel : ObservableObject
         UpdateTooltip();
     }
 
+    /// <summary>
+    /// Updates database information for this mod with batched property change notifications.
+    /// This method must be called from the UI thread (Dispatcher thread).
+    /// </summary>
     public void UpdateDatabaseInfo(ModDatabaseInfo info, bool loadLogoImmediately = true)
     {
         if (info is null) return;
 
-        var previousSide = NormalizeSide(_modDatabaseSide);
-        var updatedSide = NormalizeSide(info.Side);
-        _modDatabaseSide = info.Side;
-        if (!string.Equals(previousSide, updatedSide, StringComparison.Ordinal))
+        // Batch all property changes to reduce UI update overhead.
+        // Thread safety: This method is always invoked on the Dispatcher thread via
+        // InvokeOnDispatcherAsync in MainViewModel.ApplyDatabaseInfoAsync, so no
+        // synchronization is needed for the property change batching mechanism.
+        using (SuspendPropertyChangeNotifications())
         {
-            OnPropertyChanged(nameof(SideDisplay));
-            OnPropertyChanged(nameof(SideSortValue));
-        }
-
-        var tags = info.Tags ?? Array.Empty<string>();
-        if (HasDifferentContent(DatabaseTags, tags))
-        {
-            DatabaseTags = tags;
-            OnPropertyChanged(nameof(DatabaseTags));
-            OnPropertyChanged(nameof(DatabaseTagsDisplay));
-        }
-
-        var requiredVersions = info.RequiredGameVersions ?? Array.Empty<string>();
-        if (HasDifferentContent(_databaseRequiredGameVersions, requiredVersions))
-            _databaseRequiredGameVersions = requiredVersions;
-
-        var latestRelease = info.LatestRelease;
-        var latestCompatibleRelease = info.LatestCompatibleRelease;
-        var releases = info.Releases ?? Array.Empty<ModReleaseInfo>();
-
-        if (string.IsNullOrWhiteSpace(Version))
-        {
-            var preferredUserReportVersion = SelectPreferredUserReportVersion(
-                latestRelease,
-                latestCompatibleRelease,
-                info);
-            SetUserReportVersion(preferredUserReportVersion, true);
-        }
-
-        var latestReleaseVersion = latestRelease?.Version;
-        if (!string.Equals(LatestReleaseUserReportVersion, latestReleaseVersion, StringComparison.OrdinalIgnoreCase))
-            ClearLatestReleaseUserReport();
-
-        LatestRelease = latestRelease;
-        LatestCompatibleRelease = latestCompatibleRelease;
-        _releases = releases;
-
-        UpdateModDatabaseMetrics(info, releases);
-
-        var downloads = info.Downloads;
-        if (_databaseDownloads != downloads)
-        {
-            _databaseDownloads = downloads;
-            OnPropertyChanged(nameof(DownloadsDisplay));
-            OnPropertyChanged(nameof(ModDatabaseDownloadsSortKey));
-        }
-
-        var comments = info.Comments;
-        if (_databaseComments != comments)
-        {
-            _databaseComments = comments;
-            OnPropertyChanged(nameof(CommentsDisplay));
-        }
-
-        LogDebug(
-            $"UpdateDatabaseInfo invoked. AssetId='{FormatValue(info.AssetId)}', PageUrl='{FormatValue(info.ModPageUrl)}', LogoUrl='{FormatValue(info.LogoUrl)}'.");
-
-        var logoUrl = info.LogoUrl;
-        var logoUrlChanged = !string.Equals(_modDatabaseLogoUrl, logoUrl, StringComparison.Ordinal);
-        if (logoUrlChanged)
-        {
-            _modDatabaseLogoUrl = logoUrl;
-            var shouldCreateLogo = loadLogoImmediately && Icon is null;
-            if (shouldCreateLogo)
+            var previousSide = NormalizeSide(_modDatabaseSide);
+            var updatedSide = NormalizeSide(info.Side);
+            _modDatabaseSide = info.Side;
+            if (!string.Equals(previousSide, updatedSide, StringComparison.Ordinal))
             {
-                _modDatabaseLogo = CreateModDatabaseLogoImage();
-                LogDebug(
-                    $"Updated database logo. New URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
-            }
-            else
-            {
-                if (_modDatabaseLogo is not null)
-                    LogDebug("Clearing previously loaded database logo to defer image refresh.");
-
-                _modDatabaseLogo = null;
-                LogDebug(
-                    $"Deferred database logo update. New URL='{FormatValue(_modDatabaseLogoUrl)}'. Logo creation skipped={!shouldCreateLogo}.");
+                OnPropertyChanged(nameof(SideDisplay));
+                OnPropertyChanged(nameof(SideSortValue));
             }
 
-            OnPropertyChanged(nameof(ModDatabasePreviewImage));
-            OnPropertyChanged(nameof(HasModDatabasePreviewImage));
-        }
-        else if (loadLogoImmediately && Icon is null && _modDatabaseLogo is null &&
-                 !string.IsNullOrWhiteSpace(_modDatabaseLogoUrl))
-        {
-            _modDatabaseLogo = CreateModDatabaseLogoImage();
-            OnPropertyChanged(nameof(ModDatabasePreviewImage));
-            OnPropertyChanged(nameof(HasModDatabasePreviewImage));
+            var tags = info.Tags ?? Array.Empty<string>();
+            if (HasDifferentContent(DatabaseTags, tags))
+            {
+                using (_timingService?.MeasureTagsLoad())
+                {
+                    DatabaseTags = tags;
+                    _cachedDatabaseTagsDisplay = null; // Invalidate display cache
+                    OnPropertyChanged(nameof(DatabaseTags));
+                    OnPropertyChanged(nameof(DatabaseTagsDisplay));
+                }
+            }
+
+            var requiredVersions = info.RequiredGameVersions ?? Array.Empty<string>();
+            if (HasDifferentContent(_databaseRequiredGameVersions, requiredVersions))
+                _databaseRequiredGameVersions = requiredVersions;
+
+            var latestRelease = info.LatestRelease;
+            var latestCompatibleRelease = info.LatestCompatibleRelease;
+            var releases = info.Releases ?? Array.Empty<ModReleaseInfo>();
+
+            if (string.IsNullOrWhiteSpace(Version))
+            {
+                var preferredUserReportVersion = SelectPreferredUserReportVersion(
+                    latestRelease,
+                    latestCompatibleRelease,
+                    info);
+                SetUserReportVersion(preferredUserReportVersion, true);
+            }
+
+            var latestReleaseVersion = latestRelease?.Version;
+            if (!string.Equals(LatestReleaseUserReportVersion, latestReleaseVersion, StringComparison.OrdinalIgnoreCase))
+                ClearLatestReleaseUserReport();
+
+            LatestRelease = latestRelease;
+            LatestCompatibleRelease = latestCompatibleRelease;
+            _releases = releases;
+
+            UpdateModDatabaseMetrics(info, releases);
+
+            var downloads = info.Downloads;
+            if (_databaseDownloads != downloads)
+            {
+                _databaseDownloads = downloads;
+                OnPropertyChanged(nameof(DownloadsDisplay));
+                OnPropertyChanged(nameof(ModDatabaseDownloadsSortKey));
+            }
+
+            var comments = info.Comments;
+            if (_databaseComments != comments)
+            {
+                _databaseComments = comments;
+                OnPropertyChanged(nameof(CommentsDisplay));
+            }
+
             LogDebug(
-                $"Loaded deferred database logo. URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
-        }
+                $"UpdateDatabaseInfo invoked. AssetId='{FormatValue(info.AssetId)}', PageUrl='{FormatValue(info.ModPageUrl)}', LogoUrl='{FormatValue(info.LogoUrl)}'.");
 
-        if (!string.Equals(ModDatabaseAssetId, info.AssetId, StringComparison.Ordinal))
-        {
-            ModDatabaseAssetId = info.AssetId;
-            OnPropertyChanged(nameof(ModDatabaseAssetId));
-            LogDebug($"Database asset id updated to '{FormatValue(ModDatabaseAssetId)}'.");
-        }
+            var logoUrl = info.LogoUrl;
+            var logoSource = info.LogoUrlSource;
+            var logoUrlChanged = !string.Equals(_modDatabaseLogoUrl, logoUrl, StringComparison.Ordinal);
+            _modDatabaseLogoSource = logoSource ?? _modDatabaseLogoSource;
+            if (logoUrlChanged)
+            {
+                _modDatabaseLogoUrl = logoUrl;
+                var shouldCreateLogo = loadLogoImmediately && Icon is null;
+                if (shouldCreateLogo)
+                {
+                    _modDatabaseLogo = CreateModDatabaseLogoImage();
+                    LogDebug(
+                        $"Updated database logo. New URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
+                }
+                else
+                {
+                    if (_modDatabaseLogo is not null)
+                        LogDebug("Clearing previously loaded database logo to defer image refresh.");
 
-        var pageUrl = info.ModPageUrl;
-        if (!string.Equals(ModDatabasePageUrl, pageUrl, StringComparison.Ordinal))
-        {
-            ModDatabasePageUrl = pageUrl;
-            OnPropertyChanged(nameof(ModDatabasePageUrl));
-            OnPropertyChanged(nameof(ModDatabasePageUrlDisplay));
-            LogDebug($"Database page URL updated to '{FormatValue(ModDatabasePageUrl)}'.");
-        }
+                    _modDatabaseLogo = null;
+                    LogDebug(
+                        $"Deferred database logo update. New URL='{FormatValue(_modDatabaseLogoUrl)}'. Logo creation skipped={!shouldCreateLogo}.");
+                }
 
-        var pageUri = TryCreateHttpUri(pageUrl);
-        if (ModDatabasePageUri != pageUri)
-        {
-            ModDatabasePageUri = pageUri;
-            OnPropertyChanged(nameof(ModDatabasePageUri));
-            OnPropertyChanged(nameof(HasModDatabasePageLink));
-            LogDebug($"Database page URI resolved to '{FormatUri(ModDatabasePageUri)}'.");
-        }
+                OnPropertyChanged(nameof(ModDatabasePreviewImage));
+                OnPropertyChanged(nameof(HasModDatabasePreviewImage));
+            }
+            else if (loadLogoImmediately && Icon is null && _modDatabaseLogo is null &&
+                     !string.IsNullOrWhiteSpace(_modDatabaseLogoUrl))
+            {
+                _modDatabaseLogoSource = logoSource ?? _modDatabaseLogoSource;
+                _modDatabaseLogo = CreateModDatabaseLogoImage();
+                OnPropertyChanged(nameof(ModDatabasePreviewImage));
+                OnPropertyChanged(nameof(HasModDatabasePreviewImage));
+                LogDebug(
+                    $"Loaded deferred database logo. URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
+            }
 
-        ICommand? pageCommand = null;
-        if (pageUri != null)
-        {
-            var commandUri = pageUri;
-            pageCommand = new RelayCommand(() => LaunchUri(commandUri));
-            LogDebug($"Database page command initialized for '{commandUri}'.");
-        }
+            if (!string.Equals(ModDatabaseAssetId, info.AssetId, StringComparison.Ordinal))
+            {
+                ModDatabaseAssetId = info.AssetId;
+                OnPropertyChanged(nameof(ModDatabaseAssetId));
+                LogDebug($"Database asset id updated to '{FormatValue(ModDatabaseAssetId)}'.");
+            }
 
-        SetProperty(ref _openModDatabasePageCommand, pageCommand, nameof(OpenModDatabasePageCommand));
+            var pageUrl = info.ModPageUrl;
+            if (!string.Equals(ModDatabasePageUrl, pageUrl, StringComparison.Ordinal))
+            {
+                ModDatabasePageUrl = pageUrl;
+                OnPropertyChanged(nameof(ModDatabasePageUrl));
+                OnPropertyChanged(nameof(ModDatabasePageUrlDisplay));
+                LogDebug($"Database page URL updated to '{FormatValue(ModDatabasePageUrl)}'.");
+            }
 
-        var latestDatabaseVersion = latestRelease?.Version
-                                    ?? info.LatestVersion
-                                    ?? latestCompatibleRelease?.Version
-                                    ?? info.LatestCompatibleVersion;
+            var pageUri = TryCreateHttpUri(pageUrl);
+            if (ModDatabasePageUri != pageUri)
+            {
+                ModDatabasePageUri = pageUri;
+                OnPropertyChanged(nameof(ModDatabasePageUri));
+                OnPropertyChanged(nameof(HasModDatabasePageLink));
+                LogDebug($"Database page URI resolved to '{FormatUri(ModDatabasePageUri)}'.");
+            }
 
-        if (!string.Equals(LatestDatabaseVersion, latestDatabaseVersion, StringComparison.Ordinal))
-        {
-            LatestDatabaseVersion = latestDatabaseVersion;
-            OnPropertyChanged(nameof(LatestDatabaseVersion));
-            OnPropertyChanged(nameof(LatestDatabaseVersionDisplay));
+            ICommand? pageCommand = null;
+            if (pageUri != null)
+            {
+                var commandUri = pageUri;
+                pageCommand = new RelayCommand(() => LaunchUri(commandUri));
+                LogDebug($"Database page command initialized for '{commandUri}'.");
+            }
+
+            SetProperty(ref _openModDatabasePageCommand, pageCommand, nameof(OpenModDatabasePageCommand));
+
+            var latestDatabaseVersion = latestRelease?.Version
+                                        ?? info.LatestVersion
+                                        ?? latestCompatibleRelease?.Version
+                                        ?? info.LatestCompatibleVersion;
+
+            if (!string.Equals(LatestDatabaseVersion, latestDatabaseVersion, StringComparison.Ordinal))
+            {
+                LatestDatabaseVersion = latestDatabaseVersion;
+                OnPropertyChanged(nameof(LatestDatabaseVersion));
+                OnPropertyChanged(nameof(LatestDatabaseVersionDisplay));
+                OnPropertyChanged(nameof(LatestVersionSortKey));
+                LogDebug($"Latest database version updated to '{FormatValue(LatestDatabaseVersion)}'.");
+            }
+
+            InitializeUpdateAvailability();
+            InitializeVersionOptions();
+            InitializeVersionWarning(_installedGameVersion);
+            UpdateNewerReleaseChangelogs();
+
+            OnPropertyChanged(nameof(LatestRelease));
+            OnPropertyChanged(nameof(LatestCompatibleRelease));
+            OnPropertyChanged(nameof(LatestReleaseIsCompatible));
+            OnPropertyChanged(nameof(ShouldHighlightLatestVersion));
+            OnPropertyChanged(nameof(CanUpdate));
             OnPropertyChanged(nameof(LatestVersionSortKey));
-            LogDebug($"Latest database version updated to '{FormatValue(LatestDatabaseVersion)}'.");
+            OnPropertyChanged(nameof(RequiresCompatibilitySelection));
+            OnPropertyChanged(nameof(HasCompatibleUpdate));
+            OnPropertyChanged(nameof(HasDownloadableRelease));
+            OnPropertyChanged(nameof(InstallButtonToolTip));
+            OnPropertyChanged(nameof(UpdateButtonToolTip));
+
+            UpdateStatusFromErrors();
+            UpdateTooltip();
         }
-
-        InitializeUpdateAvailability();
-        InitializeVersionOptions();
-        InitializeVersionWarning(_installedGameVersion);
-        UpdateNewerReleaseChangelogs();
-
-        OnPropertyChanged(nameof(LatestRelease));
-        OnPropertyChanged(nameof(LatestCompatibleRelease));
-        OnPropertyChanged(nameof(LatestReleaseIsCompatible));
-        OnPropertyChanged(nameof(ShouldHighlightLatestVersion));
-        OnPropertyChanged(nameof(CanUpdate));
-        OnPropertyChanged(nameof(LatestVersionSortKey));
-        OnPropertyChanged(nameof(RequiresCompatibilitySelection));
-        OnPropertyChanged(nameof(HasCompatibleUpdate));
-        OnPropertyChanged(nameof(HasDownloadableRelease));
-        OnPropertyChanged(nameof(InstallButtonToolTip));
-        OnPropertyChanged(nameof(UpdateButtonToolTip));
-
-        UpdateStatusFromErrors();
-        UpdateTooltip();
     }
 
     public void ClearDatabaseTags()
@@ -1086,6 +1211,7 @@ public sealed class ModListItemViewModel : ObservableObject
         if (DatabaseTags.Count == 0) return;
 
         DatabaseTags = Array.Empty<string>();
+        _cachedDatabaseTagsDisplay = null; // Invalidate display cache
         OnPropertyChanged(nameof(DatabaseTags));
         OnPropertyChanged(nameof(DatabaseTagsDisplay));
     }
@@ -1133,10 +1259,6 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public async Task LoadModDatabaseLogoAsync(CancellationToken cancellationToken)
     {
-        if (_modDatabaseLogo is not null) return;
-
-        if (InternetAccessManager.IsInternetAccessDisabled) return;
-
         var logoUrl = _modDatabaseLogoUrl;
         if (string.IsNullOrWhiteSpace(logoUrl)) return;
 
@@ -1147,8 +1269,49 @@ public sealed class ModListItemViewModel : ObservableObject
             return;
         }
 
+        // Track whether we need to update the UI (only if _modDatabaseLogo was null)
+        var needsUiUpdate = _modDatabaseLogo is null;
+
         try
         {
+            // Try to load from cache first
+            var cachedBytes = await ModImageCacheService
+                .TryGetCachedImageAsync(logoUrl, cancellationToken, GetModLogoCacheDescriptor())
+                .ConfigureAwait(false);
+
+            if (cachedBytes is { Length: > 0 })
+            {
+                // Image is already cached - only update UI if needed
+                if (needsUiUpdate)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var cachedImage = CreateBitmapFromBytes(cachedBytes, uri);
+                    if (cachedImage is not null)
+                    {
+                        await InvokeOnDispatcherAsync(
+                                () =>
+                                {
+                                    if (_modDatabaseLogo is not null) return;
+
+                                    _modDatabaseLogo = cachedImage;
+                                    OnPropertyChanged(nameof(ModDatabasePreviewImage));
+                                    OnPropertyChanged(nameof(HasModDatabasePreviewImage));
+                                    LogDebug(
+                                        $"Loaded database logo from cache. URL='{FormatValue(_modDatabaseLogoUrl)}'.");
+                                },
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                }
+
+                // Image is cached, we're done
+                return;
+            }
+
+            // If not cached, download from network and cache it (even if logo is already loaded)
+            if (InternetAccessManager.IsInternetAccessDisabled) return;
+
             InternetAccessManager.ThrowIfInternetAccessDisabled();
 
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
@@ -1170,22 +1333,36 @@ public sealed class ModListItemViewModel : ObservableObject
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            var image = CreateBitmapFromBytes(payload, uri);
-            if (image is null) return;
-
-            await InvokeOnDispatcherAsync(
-                    () =>
-                    {
-                        if (_modDatabaseLogo is not null) return;
-
-                        _modDatabaseLogo = image;
-                        OnPropertyChanged(nameof(ModDatabasePreviewImage));
-                        OnPropertyChanged(nameof(HasModDatabasePreviewImage));
-                        LogDebug(
-                            $"Async database logo load complete. URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
-                    },
-                    cancellationToken)
+            // Cache the downloaded image for future use
+            await ModImageCacheService
+                .StoreImageAsync(logoUrl, payload, cancellationToken, GetModLogoCacheDescriptor())
                 .ConfigureAwait(false);
+
+            // Only update UI if the logo wasn't already set
+            if (needsUiUpdate)
+            {
+                var image = CreateBitmapFromBytes(payload, uri);
+                if (image is null) return;
+
+                await InvokeOnDispatcherAsync(
+                        () =>
+                        {
+                            if (_modDatabaseLogo is not null) return;
+
+                            _modDatabaseLogo = image;
+                            OnPropertyChanged(nameof(ModDatabasePreviewImage));
+                            OnPropertyChanged(nameof(HasModDatabasePreviewImage));
+                            LogDebug(
+                                $"Async database logo load complete. URL='{FormatValue(_modDatabaseLogoUrl)}', Image created={_modDatabaseLogo is not null}.");
+                        },
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                LogDebug(
+                    $"Cached database logo for future use. URL='{FormatValue(_modDatabaseLogoUrl)}'.");
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1219,32 +1396,35 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public void UpdateDependencyIssues(bool hasDependencyErrors, IReadOnlyList<ModDependencyInfo> missingDependencies)
     {
-        var changed = false;
-
-        if (DependencyHasErrors != hasDependencyErrors)
+        using (_timingService?.MeasureDependencyCheck())
         {
-            DependencyHasErrors = hasDependencyErrors;
-            OnPropertyChanged(nameof(DependencyHasErrors));
-            changed = true;
-        }
+            var changed = false;
 
-        IReadOnlyList<ModDependencyInfo> normalizedMissing = missingDependencies is { Count: > 0 }
-            ? missingDependencies.ToArray()
-            : Array.Empty<ModDependencyInfo>();
-
-        if (!ReferenceEquals(MissingDependencies, normalizedMissing))
-            if (MissingDependencies.Count != normalizedMissing.Count
-                || !MissingDependencies.SequenceEqual(normalizedMissing))
+            if (DependencyHasErrors != hasDependencyErrors)
             {
-                MissingDependencies = normalizedMissing;
-                OnPropertyChanged(nameof(MissingDependencies));
+                DependencyHasErrors = hasDependencyErrors;
+                OnPropertyChanged(nameof(DependencyHasErrors));
                 changed = true;
             }
 
-        if (changed)
-        {
-            OnPropertyChanged(nameof(HasDependencyIssues));
-            OnPropertyChanged(nameof(CanFixDependencyIssues));
+            IReadOnlyList<ModDependencyInfo> normalizedMissing = missingDependencies is { Count: > 0 }
+                ? missingDependencies.ToArray()
+                : Array.Empty<ModDependencyInfo>();
+
+            if (!ReferenceEquals(MissingDependencies, normalizedMissing))
+                if (MissingDependencies.Count != normalizedMissing.Count
+                    || !MissingDependencies.SequenceEqual(normalizedMissing))
+                {
+                    MissingDependencies = normalizedMissing;
+                    OnPropertyChanged(nameof(MissingDependencies));
+                    changed = true;
+                }
+
+            if (changed)
+            {
+                OnPropertyChanged(nameof(HasDependencyIssues));
+                OnPropertyChanged(nameof(CanFixDependencyIssues));
+            }
         }
     }
 
@@ -1354,38 +1534,53 @@ public sealed class ModListItemViewModel : ObservableObject
     {
         if (tokens.Count == 0) return true;
 
+        // Lazy initialization of search index on first search
+        if (_searchIndex == null)
+        {
+            _searchIndex = BuildSearchIndex(_modEntry, _constructorLocation);
+            LogDebug($"Lazy search index built for mod '{DisplayName}'.");
+        }
+
+        // Use ReadOnlySpan for more efficient substring searches
+        var searchIndexSpan = _searchIndex.AsSpan();
+
         foreach (var token in tokens)
-            if (_searchIndex.IndexOf(token, StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            if (searchIndexSpan.IndexOf(token.AsSpan(), StringComparison.OrdinalIgnoreCase) < 0)
                 return false;
+        }
 
         return true;
     }
 
     private void InitializeUpdateAvailability()
     {
-        if (LatestRelease is null)
+        using (_timingService?.MeasureUpdateCheck())
         {
-            CanUpdate = false;
-            _updateMessage = null;
-            return;
-        }
+            if (LatestRelease is null)
+            {
+                CanUpdate = false;
+                _updateMessage = null;
+                return;
+            }
 
-        if (!VersionStringUtility.IsCandidateVersionNewer(LatestRelease.Version, Version))
-        {
-            CanUpdate = false;
-            _updateMessage = null;
-            return;
-        }
+            if (!VersionStringUtility.IsCandidateVersionNewer(LatestRelease.Version, Version))
+            {
+                CanUpdate = false;
+                _updateMessage = null;
+                return;
+            }
 
-        if (_shouldSkipVersion?.Invoke(ModId, LatestRelease.Version) == true)
-        {
-            CanUpdate = false;
-            _updateMessage = null;
-            return;
-        }
+            if (_shouldSkipVersion?.Invoke(ModId, LatestRelease.Version) == true)
+            {
+                CanUpdate = false;
+                _updateMessage = null;
+                return;
+            }
 
-        CanUpdate = true;
-        _updateMessage = BuildUpdateMessage(LatestRelease);
+            CanUpdate = true;
+            _updateMessage = BuildUpdateMessage(LatestRelease);
+        }
     }
 
     private string BuildUpdateMessage(ModReleaseInfo release)
@@ -1441,12 +1636,15 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private void UpdateNewerReleaseChangelogs()
     {
-        var updated = BuildNewerReleaseChangelogList();
-        if (ReferenceEquals(NewerReleaseChangelogs, updated)) return;
+        using (_timingService?.MeasureChangelogLoad())
+        {
+            var updated = BuildNewerReleaseChangelogList();
+            if (ReferenceEquals(NewerReleaseChangelogs, updated)) return;
 
-        NewerReleaseChangelogs = updated;
-        OnPropertyChanged(nameof(NewerReleaseChangelogs));
-        OnPropertyChanged(nameof(HasNewerReleaseChangelogs));
+            NewerReleaseChangelogs = updated;
+            OnPropertyChanged(nameof(NewerReleaseChangelogs));
+            OnPropertyChanged(nameof(HasNewerReleaseChangelogs));
+        }
     }
 
     private IReadOnlyList<ReleaseChangelog> BuildNewerReleaseChangelogList()
@@ -1695,14 +1893,21 @@ public sealed class ModListItemViewModel : ObservableObject
         major = 0;
         minor = 0;
 
-        var parts = version.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length == 0) return false;
+        var span = version.AsSpan();
+        var dotIndex = span.IndexOf('.');
 
-        if (!int.TryParse(parts[0], out major)) return false;
+        // Parse major version
+        var majorSpan = dotIndex >= 0 ? span.Slice(0, dotIndex) : span;
+        if (!int.TryParse(majorSpan.Trim(), out major)) return false;
 
-        if (parts.Length > 1)
+        // Parse minor version if available
+        if (dotIndex >= 0 && dotIndex + 1 < span.Length)
         {
-            if (!int.TryParse(parts[1], out minor)) return false;
+            var remainingSpan = span.Slice(dotIndex + 1);
+            var nextDotIndex = remainingSpan.IndexOf('.');
+            var minorSpan = nextDotIndex >= 0 ? remainingSpan.Slice(0, nextDotIndex) : remainingSpan;
+
+            if (!int.TryParse(minorSpan.Trim(), out minor)) return false;
         }
         else
         {
@@ -1819,13 +2024,13 @@ public sealed class ModListItemViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
 
-        var trimmed = value.Trim();
-        if (trimmed.Length == 0) return null;
+        var trimmed = value.AsSpan().Trim();
+        if (trimmed.IsEmpty) return null;
 
         if (trimmed.Length == 1) return char.ToUpperInvariant(trimmed[0]).ToString(CultureInfo.InvariantCulture);
 
         var firstCharacter = char.ToUpperInvariant(trimmed[0]).ToString(CultureInfo.InvariantCulture);
-        return string.Concat(firstCharacter, trimmed.Substring(1));
+        return string.Concat(firstCharacter, trimmed.Slice(1).ToString());
     }
 
     private static string NormalizeSearchText(string value)
@@ -1915,7 +2120,40 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private ImageSource? CreateModDatabaseLogoImage()
     {
-        return CreateImageFromUri(_modDatabaseLogoUrl, "Mod database logo", false);
+        var logoUrl = _modDatabaseLogoUrl;
+        if (string.IsNullOrWhiteSpace(logoUrl)) return null;
+
+        // Try to load from cache first (synchronous file read)
+        try
+        {
+            var cachedBytes = ModImageCacheService.TryGetCachedImage(logoUrl, GetModLogoCacheDescriptor());
+
+            if (cachedBytes is { Length: > 0 })
+            {
+                var uri = TryCreateHttpUri(logoUrl);
+                if (uri is not null)
+                {
+                    var image = CreateBitmapFromBytes(cachedBytes, uri);
+                    if (image is not null)
+                    {
+                        LogDebug($"Loaded database logo from cache for '{FormatValue(logoUrl)}'.");
+                        return image;
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Ignore cache read failures, fall back to network
+        }
+
+        // Fall back to network loading
+        return CreateImageFromUri(logoUrl, "Mod database logo", false);
+    }
+
+    private ModImageCacheDescriptor GetModLogoCacheDescriptor()
+    {
+        return new ModImageCacheDescriptor(ModId, DisplayName, _modDatabaseLogoSource);
     }
 
     private ImageSource? CreateBitmapFromBytes(byte[] payload, Uri sourceUri)
@@ -1926,7 +2164,7 @@ public sealed class ModListItemViewModel : ObservableObject
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            // Remove IgnoreImageCache to prevent flashing - use WPF's internal cache
             bitmap.StreamSource = stream;
             bitmap.EndInit();
             TryFreezeImageSource(bitmap, $"Async mod database logo ({sourceUri})", LogDebug);
@@ -1967,7 +2205,7 @@ public sealed class ModListItemViewModel : ObservableObject
                 bitmap.BeginInit();
                 bitmap.UriSource = uri;
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                // Remove IgnoreImageCache to prevent flashing - use WPF's internal cache
                 bitmap.EndInit();
                 TryFreezeImageSource(bitmap, $"{context} ({uri})", enableLogging ? LogDebug : null);
                 return bitmap;
@@ -2002,6 +2240,7 @@ public sealed class ModListItemViewModel : ObservableObject
                 bitmap.BeginInit();
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
                 bitmap.StreamSource = stream;
+                bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
                 bitmap.EndInit();
                 TryFreezeImageSource(bitmap, $"{context} (byte stream)", LogDebug);
                 return bitmap;
@@ -2017,22 +2256,9 @@ public sealed class ModListItemViewModel : ObservableObject
 
     private ImageSource? CreateImageSafely(Func<ImageSource?> factory, string context, bool enableLogging = true)
     {
-        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
-            try
-            {
-                if (enableLogging) LogDebug($"{context}: Invoking image creation on dispatcher thread.");
-                var result = dispatcher.Invoke(factory);
-                if (enableLogging)
-                    LogDebug(
-                        $"{context}: Dispatcher invocation completed with result {(result is null ? "null" : "available")}.");
-                return result;
-            }
-            catch (Exception ex)
-            {
-                if (enableLogging) LogDebug($"{context}: Exception during dispatcher invocation: {ex.Message}.");
-                return null;
-            }
-
+        // Executing image creation on the current thread.
+        // Note: The factory MUST freeze the image (e.g. bitmap.Freeze()) if created on a background thread
+        // to ensure it can be accessed by the UI thread.
         try
         {
             var result = factory();
@@ -2106,6 +2332,77 @@ public sealed class ModListItemViewModel : ObservableObject
     private static string FormatUri(Uri? uri)
     {
         return uri?.AbsoluteUri ?? "<null>";
+    }
+
+    /// <summary>
+    /// Suspends property change notifications during batch updates to reduce UI overhead.
+    /// </summary>
+    private IDisposable SuspendPropertyChangeNotifications()
+    {
+        return new PropertyChangeSuspensionScope(this);
+    }
+
+    /// <summary>
+    /// Override OnPropertyChanged to support batching.
+    /// </summary>
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    {
+        if (_propertyChangeSuspendCount > 0)
+        {
+            // Only batch specific property changes; null PropertyName (to refresh all bindings) is intentionally ignored
+            if (e.PropertyName != null)
+            {
+                _pendingPropertyChanges.Add(e.PropertyName);
+            }
+            return;
+        }
+
+        base.OnPropertyChanged(e);
+    }
+
+    private void BeginPropertyChangeSuspension()
+    {
+        _propertyChangeSuspendCount++;
+    }
+
+    private void EndPropertyChangeSuspension()
+    {
+        if (_propertyChangeSuspendCount == 0)
+        {
+            // Already at zero, nothing to do (defensive programming)
+            return;
+        }
+
+        _propertyChangeSuspendCount--;
+
+        if (_propertyChangeSuspendCount == 0 && _pendingPropertyChanges.Count > 0)
+        {
+            // Fire all pending property changes
+            foreach (var propertyName in _pendingPropertyChanges)
+            {
+                base.OnPropertyChanged(new PropertyChangedEventArgs(propertyName));
+            }
+            _pendingPropertyChanges.Clear();
+        }
+    }
+
+    private sealed class PropertyChangeSuspensionScope : IDisposable
+    {
+        private readonly ModListItemViewModel _viewModel;
+        private bool _disposed;
+
+        public PropertyChangeSuspensionScope(ModListItemViewModel viewModel)
+        {
+            _viewModel = viewModel;
+            _viewModel.BeginPropertyChangeSuspension();
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _viewModel.EndPropertyChangeSuspension();
+        }
     }
 
     public sealed record ReleaseChangelog(string Version, string Changelog);

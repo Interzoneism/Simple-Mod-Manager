@@ -427,7 +427,7 @@ public sealed class ModCompatibilityCommentsService
 
     private static DateTime? TryGetTimestampUtc(HtmlNode node)
     {
-        var unixTimestamp = node.GetAttributeValue("data-timestamp", null);
+        var unixTimestamp = node.GetAttributeValue("data-timestamp", string.Empty);
         if (!string.IsNullOrWhiteSpace(unixTimestamp) && long.TryParse(unixTimestamp, NumberStyles.Integer,
                 CultureInfo.InvariantCulture, out var seconds))
             try
@@ -440,7 +440,7 @@ public sealed class ModCompatibilityCommentsService
             }
 
         var titleSpan = node.SelectSingleNode(".//div[contains(@class,'title')]//span[@title]");
-        var titleValue = titleSpan?.GetAttributeValue("title", null);
+        var titleValue = titleSpan?.GetAttributeValue("title", string.Empty);
         if (!string.IsNullOrWhiteSpace(titleValue) &&
             DateTime.TryParse(titleValue, CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
@@ -480,12 +480,12 @@ public sealed class ModCompatibilityCommentsService
 
     private static string? BuildPermalink(HtmlNode node, string pagePath)
     {
-        var id = node.GetAttributeValue("id", null);
+        var id = node.GetAttributeValue("id", string.Empty);
         if (!string.IsNullOrWhiteSpace(id))
             return string.Format(CultureInfo.InvariantCulture, "https://mods.vintagestory.at/{0}#{1}", pagePath, id);
 
         var anchor = node.SelectSingleNode(".//a[starts-with(@href,'#cmt-')]");
-        var href = anchor?.GetAttributeValue("href", null);
+        var href = anchor?.GetAttributeValue("href", string.Empty);
         if (string.IsNullOrWhiteSpace(href)) return null;
 
         if (href.StartsWith("#", StringComparison.Ordinal))

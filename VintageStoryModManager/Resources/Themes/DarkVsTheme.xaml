@@ -1,10 +1,12 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:options="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options"
-                    xmlns:ui="http://schemas.modernwpf.com/2019">
-    <!-- ========================================================= -->
-    <!-- Palette: base colours used throughout the dark VS theme. -->
-    <!-- ========================================================= -->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:options="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options"
+    xmlns:ui="http://schemas.modernwpf.com/2019">
+    <!--  =========================================================  -->
+    <!--  Palette: base colours used throughout the dark VS theme.  -->
+    <!--  =========================================================  -->
+    <Color x:Key="Palette.BaseSurface.Brighter">#FF735b43</Color>
     <Color x:Key="Palette.BaseSurface.Shadowed">#FF403529</Color>
     <Color x:Key="Palette.BaseSurface.Raised">#FF4D3D2D</Color>
     <Color x:Key="Palette.BaseSurface.HoverGlow">#FF5A4530</Color>
@@ -16,208 +18,332 @@
     <Color x:Key="Palette.Bevel.Highlight">#80FFFFFF</Color>
     <Color x:Key="Palette.Bevel.Shadow">#40000000</Color>
     <Color x:Key="Palette.Overlay.HoverTint">#10FFFFFF</Color>
+    <Color x:Key="Palette.White">#FFfffcf5</Color>
+    <Color x:Key="Palette.Grey">#FF867e74</Color>
+    <Color x:Key="Palette.DarkGrey">#FF6e675f</Color>
+    <Color x:Key="Palette.Error">#FFED4337</Color>
 
-    <!-- ====================================================== -->
-    <!-- Window shell and shared panel surfaces (Main windows). -->
-    <!-- ====================================================== -->
+    <!--  ======================================================  -->
+    <!--  Window shell and shared panel surfaces (Main windows).  -->
+    <!--  ======================================================  -->
     <SolidColorBrush x:Key="Brush.Window.Shell.Background.Solid" Color="{DynamicResource Palette.BaseSurface.Raised}" />
     <SolidColorBrush x:Key="Brush.Window.Shell.Border" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
     <SolidColorBrush x:Key="Brush.Panel.Primary.Background.Solid" Color="{DynamicResource Palette.BaseSurface.Raised}" />
-    <SolidColorBrush x:Key="Brush.Panel.Secondary.Background.Solid"
-                     Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    <SolidColorBrush x:Key="Brush.Panel.Secondary.Background.Solid" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
 
-    <!-- =============================== -->
-    <!-- Text and typography colouring. -->
-    <!-- =============================== -->
+    <!--  ===============================  -->
+    <!--  Text and typography colouring.  -->
+    <!--  ===============================  -->
     <SolidColorBrush x:Key="Brush.Text.Primary" Color="{DynamicResource Palette.Text.Primary}" />
     <SolidColorBrush x:Key="Brush.Text.Body" Color="{DynamicResource Palette.Text.Primary}" />
     <SolidColorBrush x:Key="Brush.Text.Emphasis" Color="{DynamicResource Palette.Accent.Primary}" />
-    <SolidColorBrush x:Key="Brush.Text.Subtle" Color="{DynamicResource Palette.Text.Primary}" Opacity="0.7" />
-    <SolidColorBrush x:Key="Brush.Text.Placeholder" Color="{DynamicResource Palette.Text.Primary}" Opacity="0.45" />
+    <SolidColorBrush
+        x:Key="Brush.Text.Subtle"
+        Opacity="0.7"
+        Color="{DynamicResource Palette.Text.Primary}" />
+    <SolidColorBrush
+        x:Key="Brush.Text.Placeholder"
+        Opacity="0.45"
+        Color="{DynamicResource Palette.Text.Primary}" />
     <SolidColorBrush x:Key="Brush.Text.Link" Color="{DynamicResource Palette.Text.Link}" />
     <SolidColorBrush x:Key="Brush.Text.SelectionForeground" Color="{DynamicResource Palette.Text.Primary}" />
     <SolidColorBrush x:Key="Brush.Text.Caret" Color="{DynamicResource Palette.Text.Primary}" />
     <SolidColorBrush x:Key="Brush.ToolTip.Text" Color="{DynamicResource Palette.Text.Primary}" />
 
-    <!-- ============================================ -->
-    <!-- Primary buttons and toggle button surfaces. -->
-    <!-- ============================================ -->
-    <SolidColorBrush x:Key="Brush.Button.Primary.Background.Normal"
-                     Color="{DynamicResource Palette.Interactive.Surface}" />
-    <SolidColorBrush x:Key="Brush.Button.Primary.Background.Hover"
-                     Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
-    <SolidColorBrush x:Key="Brush.Button.Primary.Background.Pressed"
-                     Color="{DynamicResource Palette.BaseSurface.Raised}" />
-    <SolidColorBrush x:Key="Brush.Button.Primary.Background.Disabled"
-                     Color="{DynamicResource Palette.Interactive.DisabledSurface}" Opacity="0.6" />
-    <SolidColorBrush x:Key="Brush.Button.Primary.Border.Normal" Color="{DynamicResource Palette.Text.Primary}"
-                     Opacity="0.6" />
+    <!--  ============================================  -->
+    <!--  Primary buttons and toggle button surfaces.  -->
+    <!--  ============================================  -->
+    <SolidColorBrush x:Key="Brush.Button.Primary.Background.Normal" Color="{DynamicResource Palette.Interactive.Surface}" />
+    <SolidColorBrush x:Key="Brush.Button.Primary.Background.Hover" Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
+    <SolidColorBrush x:Key="Brush.Button.Primary.Background.Pressed" Color="{DynamicResource Palette.BaseSurface.Raised}" />
+    <SolidColorBrush
+        x:Key="Brush.Button.Primary.Background.Disabled"
+        Opacity="0.6"
+        Color="{DynamicResource Palette.Interactive.DisabledSurface}" />
+    <SolidColorBrush
+        x:Key="Brush.Button.Primary.Border.Normal"
+        Opacity="0.6"
+        Color="{DynamicResource Palette.Text.Primary}" />
     <SolidColorBrush x:Key="Brush.Button.Bevel.Light" Color="{DynamicResource Palette.Bevel.Highlight}" />
     <SolidColorBrush x:Key="Brush.Button.Bevel.Dark" Color="{DynamicResource Palette.Bevel.Shadow}" />
     <SolidColorBrush x:Key="Brush.Accent.Primary" Color="{DynamicResource Palette.Accent.Primary}" />
+    <SolidColorBrush
+        x:Key="Brush.Accent.Half"
+        Opacity="0.5"
+        Color="{DynamicResource Palette.Accent.Primary}" />
     <SolidColorBrush x:Key="Brush.ToggleButton.Background.Checked" Color="{DynamicResource Palette.Accent.Primary}" />
     <SolidColorBrush x:Key="Brush.ToggleButton.Border.Checked" Color="{DynamicResource Palette.Accent.Primary}" />
 
-    <!-- ============================================ -->
-    <!-- Toggle switches (App.xaml toggle controls). -->
-    <!-- ============================================ -->
-    <SolidColorBrush x:Key="Brush.ToggleSwitch.Track.Background.Off"
-                     Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
-    <SolidColorBrush x:Key="Brush.ToggleSwitch.Track.Background.On"
-                     Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
-    <SolidColorBrush x:Key="Brush.ToggleSwitch.Track.Background.Disabled"
-                     Color="{DynamicResource Palette.Interactive.DisabledSurface}" Opacity="0.7" />
-    <SolidColorBrush x:Key="Brush.ToggleSwitch.Thumb.Background.Normal"
-                     Color="{DynamicResource Palette.Bevel.Highlight}" />
+    <!--  ============================================  -->
+    <!--  Toggle switches (App.xaml toggle controls).  -->
+    <!--  ============================================  -->
+    <SolidColorBrush x:Key="Brush.ToggleSwitch.Track.Background.Off" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    <SolidColorBrush x:Key="Brush.ToggleSwitch.Track.Background.On" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    <SolidColorBrush
+        x:Key="Brush.ToggleSwitch.Track.Background.Disabled"
+        Opacity="0.7"
+        Color="{DynamicResource Palette.Interactive.DisabledSurface}" />
+    <SolidColorBrush x:Key="Brush.ToggleSwitch.Thumb.Background.Normal" Color="{DynamicResource Palette.Bevel.Highlight}" />
     <SolidColorBrush x:Key="Brush.ToggleSwitch.Thumb.Background.On" Color="{DynamicResource Palette.Accent.Primary}" />
-    <SolidColorBrush x:Key="Brush.ToggleSwitch.Thumb.Background.Disabled"
-                     Color="{DynamicResource Palette.Interactive.DisabledSurface}" Opacity="0.7" />
+    <SolidColorBrush
+        x:Key="Brush.ToggleSwitch.Thumb.Background.Disabled"
+        Opacity="0.7"
+        Color="{DynamicResource Palette.Interactive.DisabledSurface}" />
     <SolidColorBrush x:Key="Brush.ToggleSwitch.Focus.Border" Color="{DynamicResource Palette.Accent.Primary}" />
-    <SolidColorBrush x:Key="Brush.ToggleSwitch.Hover.Border" Color="{DynamicResource Palette.Text.Primary}"
-                     Opacity="0.7" />
+    <SolidColorBrush
+        x:Key="Brush.ToggleSwitch.Hover.Border"
+        Opacity="0.7"
+        Color="{DynamicResource Palette.Text.Primary}" />
 
-    <!-- =================================== -->
-    <!-- Text inputs and the search controls. -->
-    <!-- =================================== -->
+    <!--  ===================================  -->
+    <!--  Text inputs and the search controls.  -->
+    <!--  ===================================  -->
 
     <SolidColorBrush x:Key="Brush.TextInput.Background.Normal" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
     <SolidColorBrush x:Key="Brush.TextInput.Background.Focused" Color="{DynamicResource Palette.Interactive.Surface}" />
     <SolidColorBrush x:Key="Brush.TextInput.Border.Focused" Color="{DynamicResource Palette.Accent.Primary}" />
-    <SolidColorBrush x:Key="Brush.TextInput.SelectionBackground" Color="{DynamicResource Palette.Accent.Primary}"
-                     Opacity="0.35" />
+    <SolidColorBrush
+        x:Key="Brush.TextInput.SelectionBackground"
+        Opacity="0.35"
+        Color="{DynamicResource Palette.Accent.Primary}" />
     <SolidColorBrush x:Key="Brush.SearchBox.Background" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
     <SolidColorBrush x:Key="Brush.SunkenSurface.Bevel.Light" Color="{DynamicResource Palette.Bevel.Highlight}" />
     <SolidColorBrush x:Key="Brush.SunkenSurface.Bevel.Dark" Color="{DynamicResource Palette.Bevel.Shadow}" />
     <LinearGradientBrush x:Key="Brush.SunkenSurface.Background" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="{DynamicResource Palette.BaseSurface.HoverGlow}" Offset="0" />
-        <GradientStop Color="{DynamicResource Palette.Interactive.Surface}" Offset="0.5" />
-        <GradientStop Color="{DynamicResource Palette.BaseSurface.Shadowed}" Offset="1" />
+        <GradientStop Offset="0" Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
+        <GradientStop Offset="0.5" Color="{DynamicResource Palette.Interactive.Surface}" />
+        <GradientStop Offset="1" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
     </LinearGradientBrush>
 
 
-    <!-- ========================= -->
-    <!-- Combo box colour system. -->
-    <!-- ========================= -->
+    <!--  =========================  -->
+    <!--  Combo box colour system.  -->
+    <!--  =========================  -->
     <SolidColorBrush x:Key="Brush.ComboBox.Background.Normal" Color="{DynamicResource Palette.Interactive.Surface}" />
     <SolidColorBrush x:Key="Brush.ComboBox.Background.Hover" Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
-    <SolidColorBrush x:Key="Brush.ComboBox.Background.Disabled"
-                     Color="{DynamicResource Palette.Interactive.DisabledSurface}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Background.Disabled" Color="{DynamicResource Palette.Interactive.DisabledSurface}" />
     <SolidColorBrush x:Key="Brush.ComboBox.Background.Open" Color="{DynamicResource Palette.Interactive.Surface}" />
     <SolidColorBrush x:Key="Brush.ComboBox.Border.Normal" Color="{DynamicResource Palette.BaseSurface.Raised}" />
-    <SolidColorBrush x:Key="Brush.ComboBox.Border.Hover" Color="{DynamicResource Palette.Text.Primary}" Opacity="0" />
-    <SolidColorBrush x:Key="Brush.ComboBox.Border.Disabled"
-                     Color="{DynamicResource Palette.Interactive.DisabledSurface}" />
+    <SolidColorBrush
+        x:Key="Brush.ComboBox.Border.Hover"
+        Opacity="0"
+        Color="{DynamicResource Palette.Text.Primary}" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Border.Disabled" Color="{DynamicResource Palette.Interactive.DisabledSurface}" />
     <SolidColorBrush x:Key="Brush.ComboBox.Border.Open" Color="{DynamicResource Palette.Accent.Primary}" />
-    <SolidColorBrush x:Key="Brush.ComboBox.Item.Background.Normal"
-                     Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
-    <SolidColorBrush x:Key="Brush.ComboBox.Item.Background.Hover"
-                     Color="{DynamicResource Palette.BaseSurface.HoverGlow}" Opacity="0.7" />
-    <SolidColorBrush x:Key="Brush.ComboBox.Item.Background.Selected" Color="{DynamicResource Palette.Accent.Primary}"
-                     Opacity="0.35" />
+    <SolidColorBrush x:Key="Brush.ComboBox.Item.Background.Normal" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    <SolidColorBrush
+        x:Key="Brush.ComboBox.Item.Background.Hover"
+        Opacity="0.7"
+        Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
+    <SolidColorBrush
+        x:Key="Brush.ComboBox.Item.Background.Selected"
+        Opacity="0.35"
+        Color="{DynamicResource Palette.Accent.Primary}" />
     <SolidColorBrush x:Key="Brush.ComboBox.Glyph" Color="{DynamicResource Palette.Text.Primary}" />
     <SolidColorBrush x:Key="Brush.ComboBox.Popup.Background" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
     <SolidColorBrush x:Key="Brush.ComboBox.Popup.Border" Color="{DynamicResource Palette.BaseSurface.Raised}" />
 
-    <!-- ===================== -->
-    <!-- Data grid formatting. -->
-    <!-- ===================== -->
+    <!--  =====================  -->
+    <!--  Data grid formatting.  -->
+    <!--  =====================  -->
     <SolidColorBrush x:Key="Brush.DataGrid.Background" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
     <SolidColorBrush x:Key="Brush.ModTabs.Background" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
-    <SolidColorBrush x:Key="Brush.DataGrid.Row.Background.Alternate"
-                     Color="{DynamicResource Palette.BaseSurface.Raised}" />
+
+    <!--  ======================================  -->
+    <!--  Middle tab control header formatting.  -->
+    <!--  ======================================  -->
+    <SolidColorBrush x:Key="Brush.MiddleTab.Background.Normal" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    <SolidColorBrush x:Key="Brush.MiddleTab.Background.Selected" Color="{DynamicResource Palette.BaseSurface.Raised}" />
+    <SolidColorBrush x:Key="Brush.MiddleTab.Border.Normal" Color="{DynamicResource Palette.Bevel.Shadow}" />
+    <SolidColorBrush x:Key="Brush.MiddleTab.Border.Selected" Color="{DynamicResource Palette.Accent.Primary}" />
+    <SolidColorBrush x:Key="Brush.MiddleTab.ModTab.Selected" Color="{DynamicResource Palette.BaseSurface.Brighter}" />
+
+    <SolidColorBrush x:Key="Brush.DataGrid.Row.Background.Alternate" Color="{DynamicResource Palette.BaseSurface.Raised}" />
     <SolidColorBrush x:Key="Brush.DataGrid.Row.Background.Hover" Color="{DynamicResource Palette.Overlay.HoverTint}" />
-    <SolidColorBrush x:Key="Brush.DataGrid.Row.Background.Selected" Color="{DynamicResource Palette.Accent.Primary}"
-                     Opacity="0.35" />
+    <SolidColorBrush
+        x:Key="Brush.DataGrid.Row.Background.Selected"
+        Opacity="0.35"
+        Color="{DynamicResource Palette.Accent.Primary}" />
     <SolidColorBrush x:Key="Brush.DataGrid.RowBorder" Color="{DynamicResource Palette.BaseSurface.Raised}" />
     <SolidColorBrush x:Key="Brush.DataGrid.Header.Background" Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
     <SolidColorBrush x:Key="Brush.DataGrid.Header.Background.Hover" Color="{DynamicResource Palette.Overlay.HoverTint}" />
-    <SolidColorBrush x:Key="Brush.DataGrid.RowShadow" Color="{DynamicResource Palette.BaseSurface.Shadowed}"
-                     Opacity="0.6" />
+    <SolidColorBrush
+        x:Key="Brush.DataGrid.RowShadow"
+        Opacity="0.6"
+        Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
 
-    <!-- ===================================== -->
-    <!-- Menu, context menu, and tool tip UI. -->
-    <!-- ===================================== -->
-    <SolidColorBrush x:Key="Brush.Menu.Background" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
-    <SolidColorBrush x:Key="Brush.Menu.Border" Color="{DynamicResource Palette.BaseSurface.Raised}" />
-    <SolidColorBrush x:Key="Brush.Menu.Item.Background.Hover" Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
-    <SolidColorBrush x:Key="Brush.Menu.Submenu.Background" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    <!--  =====================================  -->
+    <!--  Menu, context menu, and tool tip UI.  -->
+    <!--  =====================================  -->
+
+    <!--  Main Menu Bar Colors  -->
+    <!--  The main menu bar at the top of the application (File, Edit, etc.)  -->
+    <SolidColorBrush x:Key="Brush.Menu.Background" Color="{DynamicResource Palette.BaseSurface.Brighter}" />
+    <SolidColorBrush x:Key="Brush.Menu.Border" Color="{DynamicResource Palette.Bevel.Highlight}" />
+    <SolidColorBrush x:Key="Brush.Menu.Text" Color="{DynamicResource Palette.Text.Primary}" />
+
+    <!--  Menu Item Colors (Items in dropdowns)  -->
+    <!--  Background: Default background for menu items  -->
+    <SolidColorBrush x:Key="Brush.Menu.Item.Background.Normal" Color="Transparent" />
+    <!--  Background.Hover: Background when mouse hovers over a menu item  -->
+    <SolidColorBrush x:Key="Brush.Menu.Item.Background.Hover" Color="{DynamicResource Palette.BaseSurface.Raised}" />
+    <!--  Background.Pressed: Background when a menu item is clicked  -->
+    <SolidColorBrush x:Key="Brush.Menu.Item.Background.Pressed" Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
+    <!--  Border: Border color for menu items on hover  -->
+    <SolidColorBrush x:Key="Brush.Menu.Item.Border.Hover" Color="{DynamicResource Palette.Bevel.Highlight}" />
+    <!--  Text: Default text color for menu items  -->
+    <SolidColorBrush x:Key="Brush.Menu.Item.Text" Color="{DynamicResource Palette.Text.Primary}" />
+    <!--  Text.Disabled: Text color for disabled menu items  -->
+    <StaticResource x:Key="Brush.Menu.Item.Text.Disabled" ResourceKey="Brush.Text.Placeholder" />
+
+    <!--  Submenu Dropdown Colors  -->
+    <!--  Background: Background for submenu dropdowns  -->
+    <SolidColorBrush x:Key="Brush.Menu.Submenu.Background" Color="{DynamicResource Palette.BaseSurface.Brighter}" />
+    <!--  Border: Border around submenu dropdowns  -->
+    <SolidColorBrush x:Key="Brush.Menu.Submenu.Border" Color="{DynamicResource Palette.Bevel.Highlight}" />
+
+    <!--  Menu Accent Colors  -->
+    <!--  Glyph: Color for arrow glyphs in submenus  -->
+    <SolidColorBrush x:Key="Brush.Menu.Glyph" Color="{DynamicResource Palette.Accent.Primary}" />
+    <!--  Separator: Color for separator lines between menu items  -->
+    <SolidColorBrush x:Key="Brush.Menu.Separator" Color="{DynamicResource Palette.Text.Primary}" />
+
+    <!--  ToolTip Colors  -->
     <SolidColorBrush x:Key="Brush.ToolTip.Background" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
     <SolidColorBrush x:Key="Brush.ToolTip.Border" Color="{DynamicResource Palette.BaseSurface.Raised}" />
 
-    <!-- ================================== -->
-    <!-- Mod list cards, grids, and shadows -->
-    <!-- ================================== -->
-    <SolidColorBrush x:Key="Brush.ModCard.Background.Active.Solid"
-                     Color="{DynamicResource Palette.Interactive.Surface}" />
+    <!--  ==================================  -->
+    <!--  Mod list cards, grids, and shadows  -->
+    <!--  ==================================  -->
+    <SolidColorBrush x:Key="Brush.ModCard.Background.Active.Solid" Color="{DynamicResource Palette.Interactive.Surface}" />
     <StaticResource x:Key="Brush.ModCard.Background.Active" ResourceKey="Brush.ModCard.Background.Active.Solid" />
 
-    <SolidColorBrush x:Key="Brush.ModCard.Background.Disabled.Solid"
-                     Color="{DynamicResource Palette.Interactive.DisabledSurface}" />
+    <SolidColorBrush x:Key="Brush.ModCard.Background.Disabled.Solid" Color="{DynamicResource Palette.Interactive.DisabledSurface}" />
     <StaticResource x:Key="Brush.ModCard.Background.Disabled" ResourceKey="Brush.ModCard.Background.Disabled.Solid" />
 
     <SolidColorBrush x:Key="Brush.ModGrid.Background.Solid" Color="{DynamicResource Palette.BaseSurface.Raised}" />
     <StaticResource x:Key="Brush.ModGrid.Background" ResourceKey="Brush.ModGrid.Background.Solid" />
 
-    <SolidColorBrush x:Key="Brush.ModCard.Shadow" Color="{DynamicResource Palette.BaseSurface.Shadowed}" Opacity="0.7" />
-    <SolidColorBrush x:Key="Brush.ModDetails.Shadow" Color="{DynamicResource Palette.BaseSurface.Shadowed}"
-                     Opacity="0.7" />
+    <SolidColorBrush
+        x:Key="Brush.ModCard.Shadow"
+        Opacity="0.7"
+        Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    <SolidColorBrush x:Key="Brush.ModCard.Hover.Bright" Color="{DynamicResource Palette.White}" />
+    <SolidColorBrush
+        x:Key="Brush.ModDetails.Shadow"
+        Opacity="0.7"
+        Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    <LinearGradientBrush x:Key="Brush.ModCard.NoThumb" StartPoint="0,1" EndPoint="0,0">
+        <GradientStop Offset="0.33" Color="{DynamicResource Palette.Interactive.DisabledSurface}" />
+        <GradientStop Offset="0.5" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+        <GradientStop Offset="1" Color="{DynamicResource Palette.BaseSurface.Raised}" />
+    </LinearGradientBrush>
 
-    <!-- =============================== -->
-    <!-- Installed mods list formatting. -->
-    <!-- =============================== -->
+    <LinearGradientBrush x:Key="Brush.ModCard.Border.Gradient" StartPoint="0,0" EndPoint="0.3,0.3">
+        <GradientStop Offset="0" Color="{DynamicResource Palette.Bevel.Highlight}" />
+        <GradientStop Offset="1" Color="Transparent" />
+    </LinearGradientBrush>
+
+    <SolidColorBrush
+        x:Key="Brush.ModCard.InfoBox"
+        Opacity="0.82"
+        Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+
+    <LinearGradientBrush x:Key="Brush.ModBrowser.Background.Gradient" StartPoint="0,0.5" EndPoint="1,0.5">
+        <GradientStop Offset="0" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+        <GradientStop Offset="0.15" Color="{DynamicResource Palette.Grey}" />
+        <GradientStop Offset="0.4" Color="{DynamicResource Palette.DarkGrey}" />
+        <GradientStop Offset="1" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="Brush.InstalledMods.Background.Gradient" StartPoint="0,0" EndPoint="1,0.5">
+        <GradientStop Offset="0" Color="{DynamicResource Palette.DarkGrey}" />
+        <GradientStop Offset="1" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    </LinearGradientBrush>
+
+    <SolidColorBrush x:Key="Brush.ModBrowser.Background" Color="{DynamicResource Palette.White}" />
+
+    <!--  ===============================  -->
+    <!--  Installed mods list formatting.  -->
+    <!--  ===============================  -->
     <SolidColorBrush x:Key="Brush.InstalledMod.Row.Background" Color="{DynamicResource Palette.BaseSurface.Raised}" />
     <SolidColorBrush x:Key="Brush.InstalledMod.Row.Border" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    <SolidColorBrush x:Key="Brush.InstalledMod.Error" Color="{DynamicResource Palette.Error}" />
 
-    <!-- ============================== -->
-    <!-- Tags, statuses, and overlays. -->
-    <!-- ============================== -->
+    <!--  ==============================  -->
+    <!--  Tags, statuses, and overlays.  -->
+    <!--  ==============================  -->
     <SolidColorBrush x:Key="Brush.Tag.Badge.Background" Color="{DynamicResource Palette.Interactive.Surface}" />
-    <SolidColorBrush x:Key="Brush.Tag.Badge.Border" Color="{DynamicResource Palette.Text.Primary}" Opacity="0.7" />
+    <SolidColorBrush
+        x:Key="Brush.Tag.Badge.Border"
+        Opacity="0.7"
+        Color="{DynamicResource Palette.Text.Primary}" />
     <SolidColorBrush x:Key="Brush.Status.Success" Color="{DynamicResource Palette.Accent.Primary}" />
     <SolidColorBrush x:Key="Brush.Status.Error" Color="{DynamicResource Palette.Interactive.Surface}" />
-    <SolidColorBrush x:Key="Brush.Overlay.Warning.Background" Color="{DynamicResource Palette.Interactive.Surface}"
-                     Opacity="0.45" />
-    <SolidColorBrush x:Key="Brush.Overlay.Success.Background" Color="{DynamicResource Palette.Accent.Primary}"
-                     Opacity="0.6" />
+    <SolidColorBrush
+        x:Key="Brush.Overlay.Warning.Background"
+        Opacity="0.45"
+        Color="{DynamicResource Palette.Interactive.Surface}" />
+    <SolidColorBrush
+        x:Key="Brush.Overlay.Success.Background"
+        Opacity="0.6"
+        Color="{DynamicResource Palette.Accent.Primary}" />
 
-    <!-- ================================ -->
-    <!-- Dialog specific text box styles -->
-    <!-- ================================ -->
+    <!--  ================================  -->
+    <!--  Dialog specific text box styles  -->
+    <!--  ================================  -->
     <SolidColorBrush x:Key="Brush.Dialog.TextBox.Background" Color="{DynamicResource Palette.BaseSurface.Raised}" />
     <SolidColorBrush x:Key="Brush.Dialog.TextBox.Border" Color="{DynamicResource Palette.Accent.Primary}" />
-    <SolidColorBrush x:Key="Brush.Dialog.TextBox.SelectionBackground" Color="{DynamicResource Palette.Accent.Primary}"
-                     Opacity="0.35" />
+    <SolidColorBrush
+        x:Key="Brush.Dialog.TextBox.SelectionBackground"
+        Opacity="0.35"
+        Color="{DynamicResource Palette.Accent.Primary}" />
     <SolidColorBrush x:Key="Brush.Dialog.TextBox.SelectionForeground" Color="{DynamicResource Palette.Text.Primary}" />
     <SolidColorBrush x:Key="Brush.Dialog.TextBox.Caret" Color="{DynamicResource Palette.Text.Primary}" />
-    <SolidColorBrush x:Key="Brush.Dialog.ContentShadow" Color="{DynamicResource Palette.BaseSurface.Shadowed}"
-                     Opacity="0.6" />
+    <SolidColorBrush
+        x:Key="Brush.Dialog.ContentShadow"
+        Opacity="0.6"
+        Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
 
-    <!-- ============================== -->
-    <!-- Miscellaneous global brushes. -->
-    <!-- ============================== -->
+    <!--  ==============================  -->
+    <!--  Miscellaneous global brushes.  -->
+    <!--  ==============================  -->
+    <SolidColorBrush x:Key="Brush.White" Color="White" />
+    <SolidColorBrush x:Key="Brush.Black" Color="Black" />
     <SolidColorBrush x:Key="Brush.Border.Default" Color="{DynamicResource Palette.BaseSurface.Raised}" />
-    <SolidColorBrush x:Key="Brush.Border.Hover" Color="{DynamicResource Palette.Text.Primary}" Opacity="0" />
+    <SolidColorBrush
+        x:Key="Brush.Border.Hover"
+        Opacity="0"
+        Color="{DynamicResource Palette.Text.Primary}" />
     <SolidColorBrush x:Key="Brush.ScrollBar.Thumb" Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
     <SolidColorBrush x:Key="Brush.ScrollBar.Track" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
     <SolidColorBrush x:Key="Brush.ScrollBar.Button" Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
     <SolidColorBrush x:Key="Brush.ScrollBar.Glyph" Color="{DynamicResource Palette.Text.Primary}" />
-    <SolidColorBrush x:Key="Brush.Selection.Background" Color="{DynamicResource Palette.Accent.Primary}" Opacity="0.35" />
+    <SolidColorBrush
+        x:Key="Brush.Selection.Background"
+        Opacity="0.35"
+        Color="{DynamicResource Palette.Accent.Primary}" />
 
-    <!-- ================================== -->
-    <!-- Mod configuration tree formatting -->
-    <!-- ================================== -->
-    <SolidColorBrush x:Key="Brush.ModConfig.TreeNode.Background.Hover"
-                     Color="{DynamicResource Palette.BaseSurface.HoverGlow}" Opacity="0.4" />
-    <SolidColorBrush x:Key="Brush.ModConfig.TreeNode.Background.Selected"
-                     Color="{DynamicResource Palette.Accent.Primary}" Opacity="0.35" />
-    <SolidColorBrush x:Key="Brush.ModConfig.Value.Background.Hover"
-                     Color="{DynamicResource Palette.BaseSurface.HoverGlow}" Opacity="0.5" />
-    <SolidColorBrush x:Key="Brush.ModConfig.Value.Background.Selected"
-                     Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+    <!--  ==================================  -->
+    <!--  Mod configuration tree formatting  -->
+    <!--  ==================================  -->
+    <SolidColorBrush
+        x:Key="Brush.ModConfig.TreeNode.Background.Hover"
+        Opacity="0.4"
+        Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
+    <SolidColorBrush
+        x:Key="Brush.ModConfig.TreeNode.Background.Selected"
+        Opacity="0.35"
+        Color="{DynamicResource Palette.Accent.Primary}" />
+    <SolidColorBrush
+        x:Key="Brush.ModConfig.Value.Background.Hover"
+        Opacity="0.5"
+        Color="{DynamicResource Palette.BaseSurface.HoverGlow}" />
+    <SolidColorBrush x:Key="Brush.ModConfig.Value.Background.Selected" Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
 
-    <!-- ==================== -->
-    <!-- Control base styles -->
-    <!-- ==================== -->
+    <!--  ====================  -->
+    <!--  Control base styles  -->
+    <!--  ====================  -->
     <Style TargetType="{x:Type TextBlock}">
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
     </Style>
@@ -326,28 +452,26 @@
     </Style>
 
     <Style TargetType="{x:Type ContextMenu}">
-        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Menu.Text}" />
         <Setter Property="Background" Value="{DynamicResource Brush.Menu.Background}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Menu.Border}" />
     </Style>
 
     <Style TargetType="{x:Type Menu}">
         <Setter Property="Background" Value="{DynamicResource Brush.Menu.Background}" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Menu.Text}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Menu.Border}" />
     </Style>
 
     <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="{x:Type Separator}">
-        <Setter Property="Margin" Value="0,6,0,6" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Separator}">
-                    <Grid Height="8"
-                          Background="{DynamicResource Brush.Border.Default}"
-                          SnapsToDevicePixels="True">
-                        <Border Height="2"
-                                VerticalAlignment="Center"
-                                Background="{DynamicResource Brush.Menu.Background}" />
+                    <Grid Height="8" SnapsToDevicePixels="True">
+                        <Border
+                            Height="1"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource Brush.Menu.Separator}" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>
@@ -355,148 +479,157 @@
     </Style>
 
     <Style TargetType="{x:Type MenuItem}">
-        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
-        <Setter Property="Background" Value="{DynamicResource Brush.Menu.Background}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Menu.Item.Text}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Normal}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Menu.Border}" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="12,6,12,6" />
         <Style.Resources>
-            <ControlTemplate x:Key="{x:Static MenuItem.TopLevelHeaderTemplateKey}"
-                             TargetType="{x:Type MenuItem}">
+            <ControlTemplate x:Key="{x:Static MenuItem.TopLevelHeaderTemplateKey}" TargetType="{x:Type MenuItem}">
                 <Grid SnapsToDevicePixels="True">
-                    <Border x:Name="Border"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}">
-                        <ContentPresenter x:Name="HeaderHost"
-                                          Margin="{TemplateBinding Padding}"
-                                          RecognizesAccessKey="True"
-                                          ContentSource="Header"
-                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    <Border
+                        x:Name="Border"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}">
+                        <ContentPresenter
+                            x:Name="HeaderHost"
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                            ContentSource="Header"
+                            RecognizesAccessKey="True" />
                     </Border>
-                    <Popup x:Name="PART_Popup"
-                           Placement="Bottom"
-                           HorizontalOffset="0"
-                           VerticalOffset="0"
-                           IsOpen="{TemplateBinding IsSubmenuOpen}"
-                           AllowsTransparency="True"
-                           Focusable="False">
-                        <Border x:Name="SubMenuBorder"
-                                Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
-                                BorderBrush="{DynamicResource Brush.Border.Default}"
-                                BorderThickness="1"
-                                SnapsToDevicePixels="True">
+                    <Popup
+                        x:Name="PART_Popup"
+                        AllowsTransparency="True"
+                        Focusable="False"
+                        HorizontalOffset="0"
+                        IsOpen="{TemplateBinding IsSubmenuOpen}"
+                        Placement="Bottom"
+                        VerticalOffset="20">
+                        <Border
+                            x:Name="SubMenuBorder"
+                            Background="{DynamicResource Brush.Menu.Submenu.Background}"
+                            BorderBrush="{DynamicResource Brush.Menu.Submenu.Border}"
+                            BorderThickness="1"
+                            SnapsToDevicePixels="True">
                             <ScrollViewer CanContentScroll="True">
-                                <StackPanel IsItemsHost="True"
-                                            KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
                             </ScrollViewer>
                         </Border>
                     </Popup>
                 </Grid>
                 <ControlTemplate.Triggers>
                     <Trigger Property="IsSubmenuOpen" Value="True">
-                        <Setter TargetName="Border" Property="Background"
-                                Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
-                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
-                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Background}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Menu.Border}" />
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Menu.Text}" />
                     </Trigger>
                     <Trigger Property="IsHighlighted" Value="True">
-                        <Setter TargetName="Border" Property="Background"
-                                Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
-                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Menu.Item.Border.Hover}" />
                     </Trigger>
                     <Trigger Property="IsEnabled" Value="False">
-                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Subtle}" />
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Menu.Item.Text.Disabled}" />
                     </Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate>
-            <ControlTemplate x:Key="{x:Static MenuItem.TopLevelItemTemplateKey}"
-                             TargetType="{x:Type MenuItem}">
+            <ControlTemplate x:Key="{x:Static MenuItem.TopLevelItemTemplateKey}" TargetType="{x:Type MenuItem}">
                 <Grid SnapsToDevicePixels="True">
-                    <Border x:Name="Border"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}">
-                        <ContentPresenter Margin="{TemplateBinding Padding}"
-                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          RecognizesAccessKey="True" />
+                    <Border
+                        x:Name="Border"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}">
+                        <ContentPresenter
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                            RecognizesAccessKey="True" />
                     </Border>
                 </Grid>
                 <ControlTemplate.Triggers>
                     <Trigger Property="IsHighlighted" Value="True">
-                        <Setter TargetName="Border" Property="Background"
-                                Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
-                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Menu.Item.Border.Hover}" />
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Pressed}" />
                     </Trigger>
                     <Trigger Property="IsEnabled" Value="False">
-                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Subtle}" />
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Menu.Item.Text.Disabled}" />
                     </Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate>
-            <ControlTemplate x:Key="{x:Static MenuItem.SubmenuHeaderTemplateKey}"
-                             TargetType="{x:Type MenuItem}">
+            <ControlTemplate x:Key="{x:Static MenuItem.SubmenuHeaderTemplateKey}" TargetType="{x:Type MenuItem}">
                 <Grid SnapsToDevicePixels="True">
-                    <Border x:Name="Border"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            Padding="{TemplateBinding Padding}">
+                    <Border
+                        x:Name="Border"
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <ContentPresenter Grid.Column="1"
-                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                              RecognizesAccessKey="True"
-                                              ContentSource="Header" />
-                            <Path x:Name="Glyph"
-                                  Grid.Column="2"
-                                  Margin="10,0,0,0"
-                                  Width="6"
-                                  Height="10"
-                                  Fill="{DynamicResource Brush.Accent.Primary}"
-                                  Stretch="Uniform"
-                                  RenderTransformOrigin="0.5,0.5"
-                                  Data="M0,0 L0,10 6,5 Z"
-                                  FlowDirection="LeftToRight" />
+                            <ContentPresenter
+                                Grid.Column="1"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                ContentSource="Header"
+                                RecognizesAccessKey="True" />
+                            <Path
+                                x:Name="Glyph"
+                                Grid.Column="2"
+                                Width="6"
+                                Height="10"
+                                Margin="10,0,0,0"
+                                Data="M0,0 L0,10 6,5 Z"
+                                Fill="{DynamicResource Brush.Menu.Glyph}"
+                                FlowDirection="LeftToRight"
+                                RenderTransformOrigin="0.5,0.5"
+                                Stretch="Uniform" />
                         </Grid>
                     </Border>
-                    <Popup x:Name="PART_Popup"
-                           Placement="Right"
-                           HorizontalOffset="2"
-                           VerticalOffset="-3"
-                           IsOpen="{TemplateBinding IsSubmenuOpen}"
-                           AllowsTransparency="True"
-                           Focusable="False"
-                           PopupAnimation="Fade">
-                        <Border x:Name="SubMenuBorder"
-                                Background="{DynamicResource Brush.Menu.Submenu.Background}"
-                                BorderBrush="{DynamicResource Brush.Border.Default}"
-                                BorderThickness="1"
-                                SnapsToDevicePixels="True">
+                    <Popup
+                        x:Name="PART_Popup"
+                        AllowsTransparency="True"
+                        Focusable="False"
+                        HorizontalOffset="2"
+                        IsOpen="{TemplateBinding IsSubmenuOpen}"
+                        Placement="Right"
+                        PopupAnimation="Fade"
+                        VerticalOffset="-3">
+                        <Border
+                            x:Name="SubMenuBorder"
+                            Background="{DynamicResource Brush.Menu.Submenu.Background}"
+                            BorderBrush="{DynamicResource Brush.Menu.Submenu.Border}"
+                            BorderThickness="1"
+                            SnapsToDevicePixels="True">
                             <ScrollViewer CanContentScroll="True">
-                                <StackPanel Margin="0"
-                                            IsItemsHost="True"
-                                            KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                <StackPanel
+                                    Margin="0"
+                                    IsItemsHost="True"
+                                    KeyboardNavigation.DirectionalNavigation="Cycle" />
                             </ScrollViewer>
                         </Border>
                     </Popup>
                 </Grid>
                 <ControlTemplate.Triggers>
                     <Trigger Property="IsHighlighted" Value="True">
-                        <Setter TargetName="Border" Property="Background"
-                                Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
-                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Menu.Item.Border.Hover}" />
                     </Trigger>
                     <Trigger Property="IsSubmenuOpen" Value="True">
-                        <Setter TargetName="Border" Property="Background"
-                                Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
-                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Menu.Item.Border.Hover}" />
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Pressed}" />
                     </Trigger>
                     <Trigger Property="FlowDirection" Value="RightToLeft">
                         <Setter TargetName="Glyph" Property="RenderTransform">
@@ -507,34 +640,41 @@
                         <Setter TargetName="PART_Popup" Property="Placement" Value="Left" />
                     </Trigger>
                     <Trigger Property="IsEnabled" Value="False">
-                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Subtle}" />
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Menu.Item.Text.Disabled}" />
                     </Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate>
-            <ControlTemplate x:Key="{x:Static MenuItem.SubmenuItemTemplateKey}"
-                             TargetType="{x:Type MenuItem}">
+            <ControlTemplate x:Key="{x:Static MenuItem.SubmenuItemTemplateKey}" TargetType="{x:Type MenuItem}">
                 <Grid SnapsToDevicePixels="True">
-                    <Border x:Name="Border"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          RecognizesAccessKey="True" />
+                    <Border
+                        x:Name="Border"
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}">
+                        <ContentPresenter
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                            RecognizesAccessKey="True" />
                     </Border>
                 </Grid>
                 <ControlTemplate.Triggers>
                     <Trigger Property="IsHighlighted" Value="True">
-                        <Setter TargetName="Border" Property="Background"
-                                Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
-                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Hover}" />
+                        <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource Brush.Menu.Item.Border.Hover}" />
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Menu.Item.Background.Pressed}" />
                     </Trigger>
                     <Trigger Property="IsEnabled" Value="False">
-                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Subtle}" />
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Menu.Item.Text.Disabled}" />
                     </Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate>
         </Style.Resources>
     </Style>
+    <SolidColorBrush
+        x:Key="InfoBoxBack"
+        Opacity="0.8"
+        Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
 </ResourceDictionary>

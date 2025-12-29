@@ -13,7 +13,7 @@ namespace SimpleVsManager.Cloud;
 /// <summary>
 ///     Handles Firebase anonymous authentication and persists refresh tokens for reuse.
 /// </summary>
-public sealed class FirebaseAnonymousAuthenticator
+public sealed class FirebaseAnonymousAuthenticator : IDisposable
 {
     private static readonly string SignInEndpoint = DevConfig.FirebaseSignInEndpoint;
     private static readonly string RefreshEndpoint = DevConfig.FirebaseRefreshEndpoint;
@@ -32,8 +32,10 @@ public sealed class FirebaseAnonymousAuthenticator
 
     private readonly string _stateFilePath;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
+    private readonly object _disposeLock = new();
 
     private FirebaseAuthState? _cachedState;
+    private bool _disposed;
 
     public FirebaseAnonymousAuthenticator() : this(DefaultApiKey)
     {
@@ -56,6 +58,7 @@ public sealed class FirebaseAnonymousAuthenticator
     /// </summary>
     public async Task<string> GetIdTokenAsync(CancellationToken ct)
     {
+        if (_disposed) throw new ObjectDisposedException(nameof(FirebaseAnonymousAuthenticator));
         InternetAccessManager.ThrowIfInternetAccessDisabled();
         var session = await GetSessionAsync(ct).ConfigureAwait(false);
         return session.IdToken;
@@ -63,6 +66,7 @@ public sealed class FirebaseAnonymousAuthenticator
 
     public async Task<FirebaseAuthSession> GetSessionAsync(CancellationToken ct)
     {
+        if (_disposed) throw new ObjectDisposedException(nameof(FirebaseAnonymousAuthenticator));
         InternetAccessManager.ThrowIfInternetAccessDisabled();
         await _stateLock.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -99,6 +103,7 @@ public sealed class FirebaseAnonymousAuthenticator
 
     public async Task<FirebaseAuthSession?> TryGetExistingSessionAsync(CancellationToken ct)
     {
+        if (_disposed) throw new ObjectDisposedException(nameof(FirebaseAnonymousAuthenticator));
         if (InternetAccessManager.IsInternetAccessDisabled) return null;
 
         await _stateLock.WaitAsync(ct).ConfigureAwait(false);
@@ -284,6 +289,12 @@ public sealed class FirebaseAnonymousAuthenticator
 
     private static string? TryGetSecureBaseDirectory()
     {
+        // First check if there's a custom config folder configured
+        var customFolder = CustomConfigFolderManager.GetCustomConfigFolder();
+        if (!string.IsNullOrWhiteSpace(customFolder) && TryEnsureDirectory(customFolder))
+            return customFolder;
+
+        // Fall back to default locations
         foreach (var folder in new[]
                  {
                      Environment.SpecialFolder.LocalApplicationData,
@@ -352,19 +363,13 @@ public sealed class FirebaseAnonymousAuthenticator
             var json = File.ReadAllText(_stateFilePath);
             if (string.IsNullOrWhiteSpace(json)) return null;
 
-            var model = JsonSerializer.Deserialize<AuthStateModel>(json, JsonOptions);
-            if (model is null ||
-                string.IsNullOrWhiteSpace(model.IdToken) ||
-                string.IsNullOrWhiteSpace(model.RefreshToken) ||
-                string.IsNullOrWhiteSpace(model.UserId))
-                return null;
+            // Try the current format first
+            var state = TryDeserializeState(json);
+            if (state is not null) return state;
 
-            var expiration = model.ExpirationUtc == default
-                ? DateTimeOffset.MinValue
-                : model.ExpirationUtc;
-
-            return new FirebaseAuthState(model.IdToken.Trim(), model.RefreshToken.Trim(), expiration,
-                model.UserId.Trim());
+            // Attempt to migrate legacy formats before giving up
+            var legacyState = TryDeserializeLegacyState(json);
+            return legacyState;
         }
         catch (IOException)
         {
@@ -382,6 +387,62 @@ public sealed class FirebaseAnonymousAuthenticator
         {
             return null;
         }
+    }
+
+    private static FirebaseAuthState? TryDeserializeState(string json)
+    {
+        var model = JsonSerializer.Deserialize<AuthStateModel>(json, JsonOptions);
+        if (model is null ||
+            string.IsNullOrWhiteSpace(model.IdToken) ||
+            string.IsNullOrWhiteSpace(model.RefreshToken) ||
+            string.IsNullOrWhiteSpace(model.UserId))
+            return null;
+
+        var expiration = model.ExpirationUtc == default
+            ? DateTimeOffset.MinValue
+            : model.ExpirationUtc;
+
+        return new FirebaseAuthState(model.IdToken.Trim(), model.RefreshToken.Trim(), expiration,
+            model.UserId.Trim());
+    }
+
+    private static FirebaseAuthState? TryDeserializeLegacyState(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        var idToken = TryGetString(root, "idToken");
+        var refreshToken = TryGetString(root, "refreshToken");
+        var userId = TryGetString(root, "userId")
+                     ?? TryGetString(root, "uid")
+                     ?? TryGetString(root, "localId");
+
+        if (string.IsNullOrWhiteSpace(idToken) ||
+            string.IsNullOrWhiteSpace(refreshToken) ||
+            string.IsNullOrWhiteSpace(userId))
+            return null;
+
+        var expirationRaw = TryGetString(root, "expirationUtc")
+                            ?? TryGetString(root, "expiration")
+                            ?? TryGetString(root, "expiresAt");
+
+        var expiration = DateTimeOffset.TryParse(expirationRaw, out var parsed)
+            ? parsed
+            : DateTimeOffset.MinValue;
+
+        return new FirebaseAuthState(idToken.Trim(), refreshToken.Trim(), expiration, userId.Trim());
+    }
+
+    private static string? TryGetString(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value)) return null;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.TryGetInt64(out var number) ? number.ToString() : value.ToString(),
+            _ => null
+        };
     }
 
     private void SaveStateToDisk(FirebaseAuthState state)
@@ -491,10 +552,13 @@ public sealed class FirebaseAnonymousAuthenticator
         }
     }
 
-    private static string? GetBackupFilePath()
+    internal static string? GetBackupFilePath()
     {
         try
         {
+            // Always use the default location in LocalApplicationData for the backup
+            // The SVSM Backup folder should remain in its original location
+            // even if the Simple VS Manager folder is moved to a custom location
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (string.IsNullOrWhiteSpace(localAppData)) return null;
 
@@ -752,5 +816,18 @@ public sealed class FirebaseAnonymousAuthenticator
         public string IdToken { get; }
 
         public string UserId { get; }
+    }
+
+    public void Dispose()
+    {
+        lock (_disposeLock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+        }
+
+        // Dispose semaphore outside the lock to avoid potential deadlocks.
+        // The _disposed flag (set atomically above) prevents new operations.
+        _stateLock.Dispose();
     }
 }

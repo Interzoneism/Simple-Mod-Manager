@@ -1,91 +1,91 @@
-<Window x:Class="VintageStoryModManager.Views.Dialogs.HelpDialogWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Simple VS Manager Help"
-        Width="739"
-        MinWidth="640"
-        SizeToContent="Height"
-        ResizeMode="NoResize"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        WindowStyle="SingleBorderWindow"
-        Background="{DynamicResource Brush.Window.Shell.Background.Solid}" Height="342">
-    <Grid Margin="24"
-          Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
-          TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
+<Window
+    x:Class="VintageStoryModManager.Views.Dialogs.HelpDialogWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="Simple VS Manager Help"
+    Width="658"
+    Height="383"
+    MinWidth="640"
+    Background="{DynamicResource Brush.Window.Shell.Background.Solid}"
+    ResizeMode="NoResize"
+    ShowInTaskbar="False"
+    SizeToContent="Height"
+    WindowStartupLocation="CenterOwner"
+    WindowStyle="SingleBorderWindow"
+    mc:Ignorable="d">
+    <Grid
+        Margin="24"
+        Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+        TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ScrollViewer Grid.Row="0"
-                      VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled"
-                      MaxHeight="420"
-                      Background="{DynamicResource Brush.Dialog.TextBox.Background}">
+        <ScrollViewer
+            Grid.Row="0"
+            MaxHeight="420"
+            Background="{DynamicResource Brush.Dialog.TextBox.Background}"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock FontSize="20"
-                           FontWeight="Bold"
-                           Text="Help" />
+                <TextBlock
+                    FontSize="20"
+                    FontWeight="Bold"
+                    Text="Hello!" />
 
-                <TextBlock Margin="0,12,0,0"
-                           TextWrapping="Wrap"
-                           FontSize="15">
-                    <Run
-                        Text="If you are experiencing any errors or problems, start with running &quot;Clear temporary cache&quot; in the Help menu." />
+                <TextBlock
+                    Margin="0,12,0,12"
+                    FontSize="16"
+                    TextWrapping="Wrap"><Run Text="If you are experiencing any problems, have any suggestions or just want to ask a question, join the" /><Run Text=" " /><Hyperlink
+                        x:Name="DiscordLink"
+                        Foreground="{DynamicResource Brush.Text.Emphasis}"
+                        RequestNavigate="OnBackupHyperlinkRequestNavigate">
+                        <Run Text="Discord server!" />
+                    </Hyperlink></TextBlock>
+                <TextBlock FontSize="12" TextWrapping="Wrap"><Run Text="Most issues can be solved by deleting the temp cache (see Help and About menu) which is totally safe" />
                 </TextBlock>
 
-                <TextBlock Margin="0,12,0,0"
-                           TextWrapping="Wrap"
-                           FontSize="15">
-                    <Run
-                        Text="Another thing you can try is to save your installed mods as a local Modlist, delete all your mods, and load the Modlist to reinstall them." />
-                </TextBlock>
+                <TextBlock
+                    Margin="0,12,0,0"
+                    FontSize="12"
+                    TextWrapping="Wrap"><Run Text="If you are still having issues, save a modlist and then delete all your mods. Delete temp cache and load the modlist." /></TextBlock>
 
-                <TextBlock Margin="0,12,0,0"
-                           TextWrapping="Wrap"
-                           FontSize="15">
-                    <Run
-                        Text="If you are having issues with the online Modlists or the Voting function, make sure the firebase-auth.json file is inside the" />
-                    <Hyperlink x:Name="FirebaseFileHyperlink"
-                               RequestNavigate="OnFirebaseHyperlinkRequestNavigate"
-                               Foreground="{DynamicResource Brush.Text.Emphasis}">
-                        <Run Text="Simple VS Manager folder" />
-                    </Hyperlink>
-                    <Run Text="- if it's missing or if still not working you can copy the backup from" />
-                    <Hyperlink x:Name="BackupLink"
-                               RequestNavigate="OnBackupHyperlinkRequestNavigate"
-                               Foreground="{DynamicResource Brush.Text.Emphasis}">
-                        <Run Text="AppData/Local/SVSM Backup" />
-                    </Hyperlink>
-                    <Run Text="and replace the firebase-auth.json file." />
+                <TextBlock
+                    Margin="0,12,0,0"
+                    FontSize="12"
+                    TextWrapping="Wrap"><Run Text="If you are having issues with the online modlists or the user reports/voting, make sure the firebase-auth.json file is inside the" /><Run Text=" " /><Hyperlink
+                        x:Name="FirebaseFileHyperlink"
+                        Foreground="{DynamicResource Brush.Text.Emphasis}"
+                        RequestNavigate="OnFirebaseHyperlinkRequestNavigate">
+                        <Run Text="Simple VS Manager folder." />
+                    </Hyperlink><Run Text=" " /><Run Text="If it's still not working run the Restore firebase-auth command from the Advanced menu." /></TextBlock>
 
-                </TextBlock>
-
-                <TextBlock Margin="0,12,0,0"
-                           TextWrapping="Wrap"
-                           FontSize="15">
-                    <Run Text="Always update to the latest manager version." />
-                    <LineBreak />
-                    <Run Text="Make sure to read the description and check out the latest comments on the" />
-                    <Hyperlink x:Name="ModDBlink"
-                               RequestNavigate="OnModDBlinkNavigate"
-                               Foreground="{DynamicResource Brush.Text.Emphasis}">
+                <TextBlock
+                    Margin="0,12,0,0"
+                    FontSize="16"
+                    TextWrapping="Wrap"><Run Text="Always update to the latest manager version" /><LineBreak /><Run Text="Visit the Discord server or the" /><Run Text=" " /><Hyperlink
+                        x:Name="ModDBlink"
+                        Foreground="{DynamicResource Brush.Text.Emphasis}"
+                        RequestNavigate="OnModDBlinkNavigate">
                         <Run Text="managers Mod DB page" />
-                    </Hyperlink>
-                </TextBlock>
+                    </Hyperlink><Run Text=" for more info" /></TextBlock>
 
             </StackPanel>
         </ScrollViewer>
 
-        <StackPanel Grid.Row="1"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Margin="0,24,0,0">
-            <Button Width="100"
-                    IsDefault="True"
-                    Content="Close"
-                    Click="OnHelpCloseButtonClick" />
+        <StackPanel
+            Grid.Row="1"
+            Margin="0,24,0,0"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal">
+            <Button
+                Width="100"
+                Click="OnHelpCloseButtonClick"
+                Content="Close"
+                IsDefault="True" />
         </StackPanel>
     </Grid>
 </Window>

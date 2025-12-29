@@ -19,7 +19,6 @@ public partial class HelpDialogWindow : Window
 
         ConfigureCachedModsHyperlink(ModDBlink, cachedModsDirectory, true);
         ConfigureFirebaseHyperlink(FirebaseFileHyperlink, managerDirectory, true);
-        ConfigureHyperlinkCommon(BackupLink, DevConfig.FirebaseBackupDirectory, true);
     }
 
     private void ConfigureCachedModsHyperlink(Hyperlink hyperlink, string? path, bool ensureDirectory)

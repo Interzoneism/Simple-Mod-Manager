@@ -24,12 +24,19 @@ public sealed class DataBackupService
     private readonly string _backupRootDirectory;
     private readonly string _savesStoreDirectory;
 
-    public DataBackupService(string configurationDirectory)
+    public DataBackupService(string configurationDirectory, string? customBackupLocation = null)
     {
         if (string.IsNullOrWhiteSpace(configurationDirectory))
             throw new ArgumentException("Configuration directory is required.", nameof(configurationDirectory));
 
-        _backupRootDirectory = Path.Combine(configurationDirectory, DevConfig.DataFolderBackupDirectoryName);
+        if (!string.IsNullOrWhiteSpace(customBackupLocation))
+        {
+            _backupRootDirectory = customBackupLocation;
+        }
+        else
+        {
+            _backupRootDirectory = Path.Combine(configurationDirectory, DevConfig.DataFolderBackupDirectoryName);
+        }
         _savesStoreDirectory = Path.Combine(_backupRootDirectory, DevConfig.DataFolderBackupSaveStoreName);
     }
 

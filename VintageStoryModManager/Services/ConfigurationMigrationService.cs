@@ -1,4 +1,6 @@
+using System;
 using System.IO;
+using System.Security;
 
 namespace VintageStoryModManager.Services;
 
@@ -85,6 +87,8 @@ internal static class ConfigurationMigrationService
 
             // Copy all files and subdirectories
             CopyDirectory(oldDir!, newDir!, true);
+
+            TryRefreshFirebaseBackup(newDir!);
 
             return true;
         }
@@ -203,5 +207,44 @@ internal static class ConfigurationMigrationService
         }
 
         return null;
+    }
+
+    private static void TryRefreshFirebaseBackup(string newConfigDirectory)
+    {
+        try
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localAppData)) return;
+
+            var backupDirectory = Path.Combine(localAppData, DevConfig.FirebaseAuthBackupDirectoryName);
+            Directory.CreateDirectory(backupDirectory);
+
+            var existingBackupPath = Path.Combine(backupDirectory, DevConfig.FirebaseAuthStateFileName);
+            var oldBackupPath = Path.Combine(backupDirectory, $"OLD_BACKUP_{DevConfig.FirebaseAuthStateFileName}");
+            var newBackupPath = Path.Combine(backupDirectory, $"BACKUP_{DevConfig.FirebaseAuthStateFileName}");
+
+            if (File.Exists(existingBackupPath)) File.Move(existingBackupPath, oldBackupPath, true);
+
+            var migratedAuthPath = Path.Combine(newConfigDirectory, DevConfig.FirebaseAuthStateFileName);
+            if (!File.Exists(migratedAuthPath)) return;
+
+            File.Copy(migratedAuthPath, newBackupPath, true);
+        }
+        catch (IOException)
+        {
+            // Backup refresh failures are non-fatal to migration
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Backup refresh failures are non-fatal to migration
+        }
+        catch (NotSupportedException)
+        {
+            // Backup refresh failures are non-fatal to migration
+        }
+        catch (SecurityException)
+        {
+            // Backup refresh failures are non-fatal to migration
+        }
     }
 }

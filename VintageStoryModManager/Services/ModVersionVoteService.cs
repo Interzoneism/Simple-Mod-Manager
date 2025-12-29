@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -13,11 +15,18 @@ namespace VintageStoryModManager.Services;
 /// <summary>
 ///     Provides Firebase-backed storage for per-mod user report votes.
 /// </summary>
-public sealed class ModVersionVoteService
+public sealed class ModVersionVoteService : IDisposable
 {
     private static readonly string DefaultDbUrl = DevConfig.ModVersionVoteDefaultDbUrl;
 
     private static readonly string VotesRootPath = DevConfig.ModVersionVoteRootPath;
+
+    private static readonly string VoteCachePath = Path.Combine(DevConfig.FirebaseBackupDirectory, "compat-votes-cache.json");
+
+    /// <summary>
+    ///     Gets the full path to the votes cache file.
+    /// </summary>
+    public static string GetVoteCachePath() => VoteCachePath;
 
     private static readonly HttpClient HttpClient = new();
 
@@ -35,9 +44,20 @@ public sealed class ModVersionVoteService
     private readonly ConcurrentDictionary<VoteCacheKey, VoteCacheEntry> _voteCache =
         new(VoteCacheKeyComparer.Instance);
 
+    private readonly SemaphoreSlim _voteIndexLock = new(1, 1);
+    private Dictionary<string, HashSet<string>> _voteIndex = new(StringComparer.OrdinalIgnoreCase);
+    private bool _voteIndexLoaded;
+
+    private readonly SemaphoreSlim _cacheLock = new(1, 1);
+    private readonly object _disposeLock = new();
+    private readonly bool _ownsAuthenticator;
+    private bool _voteCacheLoaded;
+    private bool _disposed;
+
     public ModVersionVoteService()
         : this(DefaultDbUrl, new FirebaseAnonymousAuthenticator())
     {
+        _ownsAuthenticator = true;
     }
 
     public ModVersionVoteService(string databaseUrl, FirebaseAnonymousAuthenticator authenticator)
@@ -47,6 +67,7 @@ public sealed class ModVersionVoteService
 
         _dbUrl = databaseUrl.TrimEnd('/');
         _authenticator = authenticator ?? throw new ArgumentNullException(nameof(authenticator));
+        _ownsAuthenticator = false;
     }
 
 
@@ -60,12 +81,13 @@ public sealed class ModVersionVoteService
 
         var cacheKey = new VoteCacheKey(modId, modVersion, vintageStoryVersion);
 
-        if (TryGetCachedSummary(cacheKey, out var cachedSummary)) return cachedSummary.Summary;
+        var (found, cachedSummary) = await TryGetCachedSummaryAsync(cacheKey, cancellationToken).ConfigureAwait(false);
+        if (found) return cachedSummary.Summary;
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         var session = await _authenticator
-            .TryGetExistingSessionAsync(cancellationToken)
+            .GetSessionAsync(cancellationToken)
             .ConfigureAwait(false);
 
         var (Summary, _) = await GetVoteSummaryWithEtagAsync(
@@ -88,13 +110,14 @@ public sealed class ModVersionVoteService
 
         var cacheKey = new VoteCacheKey(modId, modVersion, vintageStoryVersion);
 
-        if (TryGetCachedSummary(cacheKey, out var cachedSummary))
+        var (found, cachedSummary) = await TryGetCachedSummaryAsync(cacheKey, cancellationToken).ConfigureAwait(false);
+        if (found)
             return new VoteSummaryResult(cachedSummary.Summary, cachedSummary.ETag, true);
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         var session = await _authenticator
-            .TryGetExistingSessionAsync(cancellationToken)
+            .GetSessionAsync(cancellationToken)
             .ConfigureAwait(false);
 
         return await GetVoteSummaryInternalAsync(
@@ -116,12 +139,13 @@ public sealed class ModVersionVoteService
 
         var cacheKey = new VoteCacheKey(modId, modVersion, vintageStoryVersion);
 
-        if (TryGetCachedSummary(cacheKey, out var cachedSummary)) return cachedSummary.ToSummaryResult();
+        var (found, cachedSummary) = await TryGetCachedSummaryAsync(cacheKey, cancellationToken).ConfigureAwait(false);
+        if (found) return cachedSummary.ToSummaryResult();
 
         InternetAccessManager.ThrowIfInternetAccessDisabled();
 
         var session = await _authenticator
-            .TryGetExistingSessionAsync(cancellationToken)
+            .GetSessionAsync(cancellationToken)
             .ConfigureAwait(false);
 
         return await GetVoteSummaryWithEtagAsync(
@@ -159,7 +183,7 @@ public sealed class ModVersionVoteService
             Comment = NormalizeComment(comment)
         };
 
-        var url = BuildVotesUrl(session, VotesRootPath, modKey, versionKey, "users", userKey);
+        var url = BuildVotesUrl(session, null, VotesRootPath, modKey, versionKey, "users", userKey);
         var payload = JsonSerializer.Serialize(record, SerializerOptions);
 
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
@@ -168,6 +192,10 @@ public sealed class ModVersionVoteService
             .ConfigureAwait(false);
 
         await EnsureOkAsync(response, "Submit vote").ConfigureAwait(false);
+
+        // Invalidate the vote index so it gets refreshed on next query
+        // This ensures that the newly submitted vote is reflected immediately
+        await InvalidateVoteIndexAsync(cancellationToken).ConfigureAwait(false);
 
         return await GetVoteSummaryWithEtagAsync(
                 session,
@@ -195,7 +223,7 @@ public sealed class ModVersionVoteService
         var userKey = session.UserId ??
                       throw new InvalidOperationException("Firebase session did not provide a user ID.");
 
-        var url = BuildVotesUrl(session, VotesRootPath, modKey, versionKey, "users", userKey);
+        var url = BuildVotesUrl(session, null, VotesRootPath, modKey, versionKey, "users", userKey);
 
         using var response = await HttpClient
             .DeleteAsync(url, cancellationToken)
@@ -203,6 +231,10 @@ public sealed class ModVersionVoteService
 
         if (response.StatusCode != HttpStatusCode.NotFound)
             await EnsureOkAsync(response, "Remove vote").ConfigureAwait(false);
+
+        // Invalidate the vote index so it gets refreshed on next query
+        // This ensures that vote removal is reflected immediately
+        await InvalidateVoteIndexAsync(cancellationToken).ConfigureAwait(false);
 
         return await GetVoteSummaryWithEtagAsync(
                 session,
@@ -238,12 +270,29 @@ public sealed class ModVersionVoteService
         bool bypassCache,
         CancellationToken cancellationToken)
     {
-        if (!bypassCache && TryGetCachedSummary(cacheKey, out var cachedEntry))
-            return new VoteSummaryResult(cachedEntry.Summary, cachedEntry.ETag, true);
+        if (!bypassCache)
+        {
+            var (found, cachedEntry) = await TryGetCachedSummaryAsync(cacheKey, cancellationToken).ConfigureAwait(false);
+            if (found)
+                return new VoteSummaryResult(cachedEntry.Summary, cachedEntry.ETag, true);
+        }
 
         var modKey = SanitizeKey(cacheKey.ModId);
         var versionKey = SanitizeKey(cacheKey.ModVersion);
-        var url = BuildVotesUrl(session, VotesRootPath, modKey, versionKey, "users");
+
+        var (indexAvailable, hasVotes) = await TryHasVotesAsync(session, modKey, versionKey, cancellationToken)
+            .ConfigureAwait(false);
+        if (indexAvailable && !hasVotes)
+        {
+            var emptySummary = CreateEmptySummary(cacheKey);
+
+            await StoreCachedSummaryAsync(cacheKey, emptySummary, knownEtag, cancellationToken, false)
+                .ConfigureAwait(false);
+
+            return new VoteSummaryResult(emptySummary, knownEtag, false);
+        }
+
+        var url = BuildVotesUrl(session, null, VotesRootPath, modKey, versionKey, "users");
 
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.TryAddWithoutValidation("X-Firebase-ETag", "true");
@@ -257,9 +306,10 @@ public sealed class ModVersionVoteService
 
         if (response.StatusCode == HttpStatusCode.NotModified)
         {
-            if (TryGetCachedSummary(cacheKey, out var cachedFromResponse))
+            var (foundCached, cachedFromResponse) = await TryGetCachedSummaryAsync(cacheKey, cancellationToken).ConfigureAwait(false);
+            if (foundCached)
             {
-                StoreCachedSummary(cacheKey, cachedFromResponse.Summary, responseEtag ?? knownEtag);
+                await StoreCachedSummaryAsync(cacheKey, cachedFromResponse.Summary, responseEtag ?? knownEtag, cancellationToken).ConfigureAwait(false);
                 return new VoteSummaryResult(cachedFromResponse.Summary, responseEtag ?? knownEtag, true);
             }
 
@@ -268,16 +318,10 @@ public sealed class ModVersionVoteService
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
-            var emptySummary = new ModVersionVoteSummary(
-                cacheKey.ModId,
-                cacheKey.ModVersion,
-                cacheKey.VintageStoryVersion,
-                ModVersionVoteCounts.Empty,
-                ModVersionVoteComments.Empty,
-                null,
-                null);
+            var emptySummary = CreateEmptySummary(cacheKey);
 
-            StoreCachedSummary(cacheKey, emptySummary, responseEtag ?? knownEtag);
+            await StoreCachedSummaryAsync(cacheKey, emptySummary, responseEtag ?? knownEtag, cancellationToken, false)
+                .ConfigureAwait(false);
 
             return new VoteSummaryResult(emptySummary, responseEtag, false);
         }
@@ -293,32 +337,20 @@ public sealed class ModVersionVoteService
         var root = document.RootElement;
         if (root.ValueKind == JsonValueKind.Null)
         {
-            var emptySummary = new ModVersionVoteSummary(
-                cacheKey.ModId,
-                cacheKey.ModVersion,
-                cacheKey.VintageStoryVersion,
-                ModVersionVoteCounts.Empty,
-                ModVersionVoteComments.Empty,
-                null,
-                null);
+            var emptySummary = CreateEmptySummary(cacheKey);
 
-            StoreCachedSummary(cacheKey, emptySummary, responseEtag ?? knownEtag);
+            await StoreCachedSummaryAsync(cacheKey, emptySummary, responseEtag ?? knownEtag, cancellationToken, false)
+                .ConfigureAwait(false);
 
             return new VoteSummaryResult(emptySummary, responseEtag, false);
         }
 
         if (root.ValueKind != JsonValueKind.Object)
         {
-            var emptySummary = new ModVersionVoteSummary(
-                cacheKey.ModId,
-                cacheKey.ModVersion,
-                cacheKey.VintageStoryVersion,
-                ModVersionVoteCounts.Empty,
-                ModVersionVoteComments.Empty,
-                null,
-                null);
+            var emptySummary = CreateEmptySummary(cacheKey);
 
-            StoreCachedSummary(cacheKey, emptySummary, responseEtag ?? knownEtag);
+            await StoreCachedSummaryAsync(cacheKey, emptySummary, responseEtag ?? knownEtag, cancellationToken, false)
+                .ConfigureAwait(false);
 
             return new VoteSummaryResult(emptySummary, responseEtag, false);
         }
@@ -390,9 +422,122 @@ public sealed class ModVersionVoteService
             userVote,
             userComment);
 
-        StoreCachedSummary(cacheKey, summary, responseEtag ?? knownEtag);
+        await StoreCachedSummaryAsync(cacheKey, summary, responseEtag ?? knownEtag, cancellationToken).ConfigureAwait(false);
 
         return new VoteSummaryResult(summary, responseEtag, false);
+    }
+
+    private async Task<(bool IndexAvailable, bool HasVotes)> TryHasVotesAsync(
+        FirebaseAnonymousAuthenticator.FirebaseAuthSession? session,
+        string modKey,
+        string versionKey,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await EnsureVoteIndexLoadedAsync(session, cancellationToken).ConfigureAwait(false);
+
+            var hasVotes = _voteIndex.TryGetValue(modKey, out var versions)
+                           && versions.Contains(versionKey);
+
+            return (true, hasVotes);
+        }
+        catch
+        {
+            return (false, true);
+        }
+    }
+
+    private async Task EnsureVoteIndexLoadedAsync(
+        FirebaseAnonymousAuthenticator.FirebaseAuthSession? session,
+        CancellationToken cancellationToken)
+    {
+        if (_voteIndexLoaded) return;
+        if (_disposed) throw new ObjectDisposedException(nameof(ModVersionVoteService));
+
+        await _voteIndexLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_voteIndexLoaded) return;
+
+            _voteIndex = await FetchVoteIndexAsync(session, cancellationToken).ConfigureAwait(false);
+            _voteIndexLoaded = true;
+        }
+        finally
+        {
+            _voteIndexLock.Release();
+        }
+    }
+
+    private async Task InvalidateVoteIndexAsync(CancellationToken cancellationToken = default)
+    {
+        await _voteIndexLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            _voteIndexLoaded = false;
+        }
+        finally
+        {
+            _voteIndexLock.Release();
+        }
+    }
+
+    private async Task<Dictionary<string, HashSet<string>>> FetchVoteIndexAsync(
+        FirebaseAnonymousAuthenticator.FirebaseAuthSession? session,
+        CancellationToken cancellationToken)
+    {
+        var rootUrl = BuildVotesUrl(session, "shallow=true", VotesRootPath);
+
+        using var rootResponse = await HttpClient.GetAsync(rootUrl, cancellationToken).ConfigureAwait(false);
+
+        if (rootResponse.StatusCode == HttpStatusCode.NotFound)
+            return new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        await EnsureOkAsync(rootResponse, "Fetch vote index root").ConfigureAwait(false);
+
+        var modList = await rootResponse.Content
+            .ReadFromJsonAsync<Dictionary<string, JsonElement>>(SerializerOptions, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (modList is null || modList.Count == 0)
+            return new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        var map = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var modKey in modList.Keys)
+        {
+            var modUrl = BuildVotesUrl(session, "shallow=true", VotesRootPath, modKey);
+
+            using var modResponse = await HttpClient.GetAsync(modUrl, cancellationToken).ConfigureAwait(false);
+
+            if (modResponse.StatusCode == HttpStatusCode.NotFound)
+                continue;
+
+            await EnsureOkAsync(modResponse, $"Fetch vote index for {modKey}").ConfigureAwait(false);
+
+            var versions = await modResponse.Content
+                .ReadFromJsonAsync<Dictionary<string, JsonElement>>(SerializerOptions, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (versions is null || versions.Count == 0) continue;
+
+            foreach (var versionEntry in versions)
+            {
+                if (versionEntry.Value.ValueKind != JsonValueKind.Object
+                    && versionEntry.Value.ValueKind != JsonValueKind.True)
+                    continue;
+
+                if (!map.TryGetValue(modKey, out var versionSet))
+                {
+                    versionSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    map[modKey] = versionSet;
+                }
+
+                versionSet.Add(versionEntry.Key);
+            }
+        }
+
+        return map;
     }
 
     private static VoteRecord? TryDeserializeRecord(JsonElement element)
@@ -407,8 +552,21 @@ public sealed class ModVersionVoteService
         }
     }
 
+    private static ModVersionVoteSummary CreateEmptySummary(VoteCacheKey cacheKey)
+    {
+        return new ModVersionVoteSummary(
+            cacheKey.ModId,
+            cacheKey.ModVersion,
+            cacheKey.VintageStoryVersion,
+            ModVersionVoteCounts.Empty,
+            ModVersionVoteComments.Empty,
+            null,
+            null);
+    }
+
     private string BuildVotesUrl(
         FirebaseAnonymousAuthenticator.FirebaseAuthSession? session,
+        string? query,
         params string[] segments)
     {
         var builder = new StringBuilder();
@@ -424,9 +582,18 @@ public sealed class ModVersionVoteService
 
         builder.Append(".json");
 
+        var hasQuery = false;
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            builder.Append('?');
+            builder.Append(query);
+            hasQuery = true;
+        }
+
         if (session.HasValue)
         {
-            builder.Append("?auth=");
+            builder.Append(hasQuery ? '&' : '?');
+            builder.Append("auth=");
             builder.Append(Uri.EscapeDataString(session.Value.IdToken));
         }
 
@@ -574,6 +741,8 @@ public sealed class ModVersionVoteService
         [JsonPropertyName("comment")] public string? Comment { get; set; }
     }
 
+    private sealed record VoteCacheFileEntry(ModVersionVoteSummary? Summary, string? ETag);
+
     private readonly record struct VoteCacheKey(string ModId, string ModVersion, string VintageStoryVersion);
 
     private readonly record struct VoteCacheEntry(ModVersionVoteSummary Summary, string? ETag)
@@ -605,13 +774,140 @@ public sealed class ModVersionVoteService
         }
     }
 
-    private bool TryGetCachedSummary(VoteCacheKey key, out VoteCacheEntry entry)
+    private async Task<(bool Found, VoteCacheEntry Entry)> TryGetCachedSummaryAsync(VoteCacheKey key, CancellationToken cancellationToken = default)
     {
-        return _voteCache.TryGetValue(key, out entry);
+        if (_disposed) throw new ObjectDisposedException(nameof(ModVersionVoteService));
+        await EnsureVoteCacheLoadedAsync(cancellationToken).ConfigureAwait(false);
+        if (_voteCache.TryGetValue(key, out var entry))
+        {
+            return (true, entry);
+        }
+        return (false, default);
     }
 
-    private void StoreCachedSummary(VoteCacheKey key, ModVersionVoteSummary summary, string? eTag)
+    private async Task StoreCachedSummaryAsync(
+        VoteCacheKey key,
+        ModVersionVoteSummary summary,
+        string? eTag,
+        CancellationToken cancellationToken = default,
+        bool persist = true)
     {
+        if (_disposed) throw new ObjectDisposedException(nameof(ModVersionVoteService));
+        await EnsureVoteCacheLoadedAsync(cancellationToken).ConfigureAwait(false);
+
         _voteCache[key] = new VoteCacheEntry(summary, eTag);
+
+        if (!persist) return;
+
+        await PersistVoteCacheAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task EnsureVoteCacheLoadedAsync(CancellationToken cancellationToken = default)
+    {
+        if (_voteCacheLoaded) return;
+        if (_disposed) throw new ObjectDisposedException(nameof(ModVersionVoteService));
+
+        await _cacheLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_voteCacheLoaded) return;
+
+            TryLoadVoteCacheFromDisk();
+            _voteCacheLoaded = true;
+        }
+        finally
+        {
+            _cacheLock.Release();
+        }
+    }
+
+    private void TryLoadVoteCacheFromDisk()
+    {
+        try
+        {
+            if (!File.Exists(VoteCachePath)) return;
+
+            var json = File.ReadAllText(VoteCachePath);
+            if (string.IsNullOrWhiteSpace(json)) return;
+
+            var payload = JsonSerializer.Deserialize<Dictionary<string, VoteCacheFileEntry>>(json, SerializerOptions);
+            if (payload is null) return;
+
+            foreach (var pair in payload)
+            {
+                var key = TryParseCacheKey(pair.Key);
+                if (key is null) continue;
+
+                var value = pair.Value;
+                if (value?.Summary is null) continue;
+
+                _voteCache[key.Value] = new VoteCacheEntry(value.Summary, value.ETag);
+            }
+        }
+        catch
+        {
+            // Ignore cache load failures; fall back to network.
+        }
+    }
+
+    private async Task PersistVoteCacheAsync(CancellationToken cancellationToken = default)
+    {
+        await _cacheLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            var directory = Path.GetDirectoryName(VoteCachePath);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+
+            var payload = _voteCache.ToDictionary(
+                pair => BuildCacheKey(pair.Key),
+                pair => new VoteCacheFileEntry(pair.Value.Summary, pair.Value.ETag),
+                StringComparer.Ordinal);
+
+            var json = JsonSerializer.Serialize(payload, SerializerOptions);
+            await File.WriteAllTextAsync(VoteCachePath, json, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Ignore cache persistence issues; cache is best-effort.
+        }
+        finally
+        {
+            _cacheLock.Release();
+        }
+    }
+
+    private static string BuildCacheKey(VoteCacheKey key)
+    {
+        return string.Join("||", key.ModId, key.ModVersion, key.VintageStoryVersion);
+    }
+
+    private static VoteCacheKey? TryParseCacheKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return null;
+
+        var parts = key.Split("||", StringSplitOptions.None);
+        if (parts.Length != 3) return null;
+
+        return new VoteCacheKey(parts[0], parts[1], parts[2]);
+    }
+
+    public void Dispose()
+    {
+        lock (_disposeLock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+        }
+
+        // Dispose resources outside the lock to avoid deadlocks.
+        // The _disposed flag (set atomically above) prevents new operations from starting.
+        _cacheLock.Dispose();
+        _voteIndexLock.Dispose();
+
+        if (_ownsAuthenticator)
+        {
+            _authenticator.Dispose();
+        }
     }
 }

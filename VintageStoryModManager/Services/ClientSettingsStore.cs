@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 
 namespace VintageStoryModManager.Services;
 
@@ -11,7 +12,11 @@ namespace VintageStoryModManager.Services;
 public sealed class ClientSettingsStore
 {
     private readonly string _backupPath;
-    private readonly JsonSerializerOptions _serializerOptions = new() { WriteIndented = true };
+    private readonly JsonSerializerOptions _serializerOptions = new()
+    {
+        WriteIndented = true,
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver()
+    };
     private readonly object _syncRoot = new();
     private readonly string _tempPath;
     private HashSet<string> _disabledLookup = null!;

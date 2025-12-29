@@ -10,6 +10,14 @@ namespace VintageStoryModManager.Services;
 /// </summary>
 internal static class ModCacheService
 {
+    /// <summary>
+    ///     Ensures that a mod is cached to disk for future use, creating a copy if it doesn't already exist.
+    ///     For folder-based mods, creates a zip archive. For file-based mods, creates a file copy.
+    /// </summary>
+    /// <param name="modId">The unique identifier of the mod.</param>
+    /// <param name="version">The version of the mod.</param>
+    /// <param name="sourcePath">The current location of the mod on disk.</param>
+    /// <param name="sourceKind">The type of mod source (folder, zip, assembly, etc.).</param>
     public static void EnsureModCached(string? modId, string? version, string? sourcePath, ModSourceKind sourceKind)
     {
         if (string.IsNullOrWhiteSpace(modId)
@@ -21,14 +29,18 @@ internal static class ModCacheService
         var cachePath = ModCacheLocator.GetModCachePath(modId, version, cacheFileName);
         if (string.IsNullOrWhiteSpace(cachePath)) return;
 
+        // Try to promote legacy cache files to the new location if available
         if (ModCacheLocator.TryPromoteLegacyCacheFile(modId, version, cacheFileName, cachePath)
             && File.Exists(cachePath))
             return;
 
+        // Skip if the source is already the cache location
         if (string.Equals(sourcePath, cachePath, StringComparison.OrdinalIgnoreCase)) return;
 
+        // Skip if the cache already exists
         if (File.Exists(cachePath)) return;
 
+        // Check if a cache file exists in a different location but same directory (avoid duplicates)
         if (ModCacheLocator.TryLocateCachedModFile(modId, version, cacheFileName, out var existingCacheFile)
             && existingCacheFile is not null)
         {
@@ -63,6 +75,11 @@ internal static class ModCacheService
         }
     }
 
+    /// <summary>
+    ///     Caches a single file by copying it to the cache location.
+    /// </summary>
+    /// <param name="sourcePath">The source file path.</param>
+    /// <param name="cachePath">The destination cache path.</param>
     private static void CacheFile(string sourcePath, string cachePath)
     {
         if (!File.Exists(sourcePath)) return;
@@ -81,6 +98,11 @@ internal static class ModCacheService
         }
     }
 
+    /// <summary>
+    ///     Caches a directory by creating a zip archive at the cache location.
+    /// </summary>
+    /// <param name="sourceDirectory">The source directory path.</param>
+    /// <param name="cachePath">The destination cache path for the zip file.</param>
     private static void CacheDirectory(string sourceDirectory, string cachePath)
     {
         if (!Directory.Exists(sourceDirectory)) return;
@@ -98,6 +120,10 @@ internal static class ModCacheService
         }
     }
 
+    /// <summary>
+    ///     Attempts to delete a file from the cache, logging a warning if deletion fails.
+    /// </summary>
+    /// <param name="path">The path to the file to delete.</param>
     private static void TryDelete(string path)
     {
         try

@@ -6,8 +6,8 @@
         xmlns:viewModels="clr-namespace:VintageStoryModManager.ViewModels"
         mc:Ignorable="d"
         Title="{Binding WindowTitle}"
-        Height="520"
-        Width="720"
+        Height="550"
+        Width="729"
         MinWidth="600"
         MinHeight="420"
         WindowStartupLocation="CenterOwner"
@@ -22,223 +22,241 @@
             <EventSetter Event="PreviewMouseLeftButtonDown" Handler="TreeViewItem_OnPreviewMouseLeftButtonDown" />
         </Style>
     </Window.Resources>
-    <Grid Margin="12" Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border BorderBrush="{DynamicResource Brush.Border.Default}" BorderThickness="1" CornerRadius="10"
-                Background="{DynamicResource Brush.Panel.Primary.Background.Solid}" Padding="4">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="16"
-                                  Direction="270"
-                                  ShadowDepth="5"
-                                  Opacity="0.16"
-                                  Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
-            </Border.Effect>
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                          Background="Transparent">
-                <TreeView ItemsSource="{Binding RootNodes}"
-                          PreviewMouseWheel="TreeView_OnPreviewMouseWheel"
-                          Grid.IsSharedSizeScope="True"
-                          ItemContainerStyle="{StaticResource IMM.TreeViewItemStyle}"
-                          BorderThickness="0"
-                          Background="Transparent">
-                    <TreeView.Resources>
-                        <HierarchicalDataTemplate DataType="{x:Type viewModels:ModConfigObjectNodeViewModel}"
-                                                  ItemsSource="{Binding Children}">
-                            <Border x:Name="ObjectHeaderBorder" CornerRadius="8" Padding="10,6">
-                                <Border.Background>
-                                    <SolidColorBrush Color="Transparent" />
-                                </Border.Background>
-                                <Border.Style>
-                                    <Style TargetType="Border">
+        <TabControl ItemsSource="{Binding Configurations}" SelectedItem="{Binding SelectedConfiguration}"
+                    ItemContainerStyle="{StaticResource IMM.ModlistsTabItemStyle}">
+            <TabControl.Resources>
+                <HierarchicalDataTemplate DataType="{x:Type viewModels:ModConfigObjectNodeViewModel}"
+                                          ItemsSource="{Binding Children}">
+                    <Border x:Name="ObjectHeaderBorder" CornerRadius="8" Padding="10,6">
+                        <Border.Background>
+                            <SolidColorBrush Color="Transparent" />
+                        </Border.Background>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background"
+                                                Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Hover}" />
+                                    </Trigger>
+                                    <DataTrigger
+                                        Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                                        Value="True">
+                                        <Setter Property="Background"
+                                                Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Selected}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock x:Name="ObjectHeaderText"
+                                   Text="{Binding DisplayName}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.Text.Primary}"
+                                   IsHitTestVisible="False" />
+                    </Border>
+                    <HierarchicalDataTemplate.Triggers>
+                        <DataTrigger
+                            Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                            Value="True">
+                            <Setter TargetName="ObjectHeaderText" Property="Foreground"
+                                    Value="{DynamicResource Brush.Text.SelectionForeground}" />
+                        </DataTrigger>
+                    </HierarchicalDataTemplate.Triggers>
+                </HierarchicalDataTemplate>
+                <HierarchicalDataTemplate DataType="{x:Type viewModels:ModConfigArrayNodeViewModel}"
+                                          ItemsSource="{Binding Children}">
+                    <Border x:Name="ArrayHeaderBorder" CornerRadius="8" Padding="10,6">
+                        <Border.Background>
+                            <SolidColorBrush Color="Transparent" />
+                        </Border.Background>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background"
+                                                Value="{DynamicResource Brush.ModConfig.Value.Background.Hover}" />
+                                    </Trigger>
+                                    <DataTrigger
+                                        Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                                        Value="True">
+                                        <Setter Property="Background"
+                                                Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Selected}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="ArrayHeaderText"
+                                       Text="{Binding DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Brush.Text.Primary}"
+                                       IsHitTestVisible="False" />
+                            <TextBlock Margin="8,0,0,0"
+                                       Foreground="Gray"
+                                       FontStyle="Italic"
+                                       Text="{Binding ItemCount, StringFormat={}{0} items}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
                                         <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background"
-                                                        Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Hover}" />
-                                            </Trigger>
-                                            <DataTrigger
-                                                Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
-                                                Value="True">
-                                                <Setter Property="Background"
-                                                        Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Selected}" />
+                                            <DataTrigger Binding="{Binding ItemCount}" Value="0">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding ItemCount}" Value="1">
+                                                <Setter Property="Text" Value="1 item" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </Border.Style>
-                                <TextBlock x:Name="ObjectHeaderText"
-                                           Text="{Binding DisplayName}"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Brush.Text.Primary}"
-                                           IsHitTestVisible="False" />
-                            </Border>
-                            <HierarchicalDataTemplate.Triggers>
-                                <DataTrigger
-                                    Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
-                                    Value="True">
-                                    <Setter TargetName="ObjectHeaderText" Property="Foreground"
-                                            Value="{DynamicResource Brush.Text.SelectionForeground}" />
-                                </DataTrigger>
-                            </HierarchicalDataTemplate.Triggers>
-                        </HierarchicalDataTemplate>
-                        <HierarchicalDataTemplate DataType="{x:Type viewModels:ModConfigArrayNodeViewModel}"
-                                                  ItemsSource="{Binding Children}">
-                            <Border x:Name="ArrayHeaderBorder" CornerRadius="8" Padding="10,6">
-                                <Border.Background>
-                                    <SolidColorBrush Color="Transparent" />
-                                </Border.Background>
-                                <Border.Style>
-                                    <Style TargetType="Border">
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                    <HierarchicalDataTemplate.Triggers>
+                        <DataTrigger
+                            Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                            Value="True">
+                            <Setter TargetName="ArrayHeaderText" Property="Foreground"
+                                    Value="{DynamicResource Brush.Text.SelectionForeground}" />
+                        </DataTrigger>
+                    </HierarchicalDataTemplate.Triggers>
+                </HierarchicalDataTemplate>
+                <DataTemplate DataType="{x:Type viewModels:ModConfigValueNodeViewModel}">
+                    <Border x:Name="ValueContainer" Margin="0" CornerRadius="8" Padding="0">
+                        <Border.Background>
+                            <SolidColorBrush Color="Transparent" />
+                        </Border.Background>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background"
+                                                Value="{DynamicResource Brush.ModConfig.Value.Background.Hover}" />
+                                    </Trigger>
+                                    <DataTrigger
+                                        Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                                        Value="True">
+                                        <Setter Property="Background"
+                                                Value="{DynamicResource Brush.ModConfig.Value.Background.Selected}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="ConfigLabelColumn" />
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="ValueLabel"
+                                       Text="{Binding DisplayName}"
+                                       VerticalAlignment="Center"
+                                       Margin="0"
+                                       Foreground="{DynamicResource Brush.Text.Primary}"
+                                       IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Visible" />
                                         <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background"
-                                                        Value="{DynamicResource Brush.ModConfig.Value.Background.Hover}" />
-                                            </Trigger>
-                                            <DataTrigger
-                                                Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
-                                                Value="True">
-                                                <Setter Property="Background"
-                                                        Value="{DynamicResource Brush.ModConfig.TreeNode.Background.Selected}" />
+                                            <DataTrigger Binding="{Binding HasDisplayName}" Value="False">
+                                                <Setter Property="Visibility" Value="Collapsed" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </Border.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock x:Name="ArrayHeaderText"
-                                               Text="{Binding DisplayName}"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource Brush.Text.Primary}"
-                                               IsHitTestVisible="False" />
-                                    <TextBlock Margin="8,0,0,0"
-                                               Foreground="Gray"
-                                               FontStyle="Italic"
-                                               Text="{Binding ItemCount, StringFormat={}{0} items}">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding ItemCount}" Value="0">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding ItemCount}" Value="1">
-                                                        <Setter Property="Text" Value="1 item" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </StackPanel>
-                            </Border>
-                            <HierarchicalDataTemplate.Triggers>
-                                <DataTrigger
-                                    Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
-                                    Value="True">
-                                    <Setter TargetName="ArrayHeaderText" Property="Foreground"
-                                            Value="{DynamicResource Brush.Text.SelectionForeground}" />
-                                </DataTrigger>
-                            </HierarchicalDataTemplate.Triggers>
-                        </HierarchicalDataTemplate>
-                        <DataTemplate DataType="{x:Type viewModels:ModConfigValueNodeViewModel}">
-                            <Border x:Name="ValueContainer" Margin="0" CornerRadius="8" Padding="0">
-                                <Border.Background>
-                                    <SolidColorBrush Color="Transparent" />
-                                </Border.Background>
-                                <Border.Style>
-                                    <Style TargetType="Border">
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBox x:Name="ValueTextBox"
+                                     Grid.Column="2"
+                                     HorizontalAlignment="Stretch"
+                                     TextAlignment="Right"
+                                     Text="{Binding ValueText, UpdateSourceTrigger=PropertyChanged}" />
+                            <ToggleButton x:Name="BooleanToggle"
+                                          Grid.Column="2"
+                                          Margin="0"
+                                          HorizontalAlignment="Left"
+                                          Width="80"
+                                          IsChecked="{Binding BooleanValue, Mode=TwoWay}"
+                                          Visibility="Collapsed">
+                                <ToggleButton.Style>
+                                    <Style TargetType="ToggleButton"
+                                           BasedOn="{StaticResource IMM.ToggleButtonBaseStyle}">
+                                        <Setter Property="Content" Value="Off" />
+                                        <Setter Property="Padding" Value="12,2" />
                                         <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background"
-                                                        Value="{DynamicResource Brush.ModConfig.Value.Background.Hover}" />
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter Property="Content" Value="On" />
                                             </Trigger>
-                                            <DataTrigger
-                                                Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
-                                                Value="True">
-                                                <Setter Property="Background"
-                                                        Value="{DynamicResource Brush.ModConfig.Value.Background.Selected}" />
-                                            </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </Border.Style>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" SharedSizeGroup="ConfigLabelColumn" />
-                                        <ColumnDefinition Width="20" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="ValueLabel"
-                                               Text="{Binding DisplayName}"
-                                               VerticalAlignment="Center"
-                                               Margin="0"
-                                               Foreground="{DynamicResource Brush.Text.Primary}"
-                                               IsHitTestVisible="False">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding HasDisplayName}" Value="False">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                    <TextBox x:Name="ValueTextBox"
-                                             Grid.Column="2"
-                                             HorizontalAlignment="Stretch"
-                                             TextAlignment="Right"
-                                             Text="{Binding ValueText, UpdateSourceTrigger=PropertyChanged}" />
-                                    <ToggleButton x:Name="BooleanToggle"
-                                                  Grid.Column="2"
-                                                  Margin="0"
-                                                  HorizontalAlignment="Left"
-                                                  Width="80"
-                                                  IsChecked="{Binding BooleanValue, Mode=TwoWay}"
-                                                  Visibility="Collapsed">
-                                        <ToggleButton.Style>
-                                            <Style TargetType="ToggleButton"
-                                                   BasedOn="{StaticResource IMM.ToggleButtonBaseStyle}">
-                                                <Setter Property="Content" Value="Off" />
-                                                <Setter Property="Padding" Value="12,2" />
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsChecked" Value="True">
-                                                        <Setter Property="Content" Value="On" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </ToggleButton.Style>
-                                    </ToggleButton>
-                                </Grid>
-                            </Border>
-                            <DataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding IsBoolean}" Value="True">
-                                    <Setter TargetName="ValueTextBox" Property="UIElement.Visibility" Value="Collapsed" />
-                                    <Setter TargetName="BooleanToggle" Property="UIElement.Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </DataTemplate.Triggers>
-                        </DataTemplate>
-                    </TreeView.Resources>
-                </TreeView>
-            </ScrollViewer>
-        </Border>
+                                </ToggleButton.Style>
+                            </ToggleButton>
+                        </Grid>
+                    </Border>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsBoolean}" Value="True">
+                            <Setter TargetName="ValueTextBox" Property="UIElement.Visibility" Value="Collapsed" />
+                            <Setter TargetName="BooleanToggle" Property="UIElement.Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </TabControl.Resources>
+            <TabControl.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding DisplayName}" Padding="8,4" />
+                </DataTemplate>
+            </TabControl.ItemTemplate>
+            <TabControl.ContentTemplate>
+                <DataTemplate DataType="{x:Type viewModels:ModConfigurationViewModel}">
+                    <Border BorderBrush="{DynamicResource Brush.Border.Default}" BorderThickness="1" CornerRadius="10"
+                            Background="{DynamicResource Brush.Panel.Primary.Background.Solid}" Padding="4">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="16"
+                                              Direction="270"
+                                              ShadowDepth="5"
+                                              Opacity="0.16"
+                                              Color="{DynamicResource Palette.BaseSurface.Shadowed}" />
+                        </Border.Effect>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                      Background="Transparent">
+                            <TreeView ItemsSource="{Binding RootNodes}"
+                                      PreviewMouseWheel="TreeView_OnPreviewMouseWheel"
+                                      Grid.IsSharedSizeScope="True"
+                                      ItemContainerStyle="{StaticResource IMM.TreeViewItemStyle}"
+                                      BorderThickness="0"
+                                      Background="Transparent">
+                            </TreeView>
+                        </ScrollViewer>
+                    </Border>
+                </DataTemplate>
+            </TabControl.ContentTemplate>
+        </TabControl>
 
-        <DockPanel Grid.Row="1" Margin="0,12,0,0" LastChildFill="False">
-            <TextBlock x:Name="FilePathTextBlock"
-                       Text="{Binding FilePath}"
-                       Foreground="{DynamicResource Brush.Text.Placeholder}"
-                       VerticalAlignment="Center"
-                       Margin="0,0,16,0"
-                       TextTrimming="CharacterEllipsis" />
+        <DockPanel Grid.Row="2" Margin="0,12,0,0" LastChildFill="False">
             <StackPanel x:Name="ActionButtonsPanel" Orientation="Horizontal" HorizontalAlignment="Right"
                         DockPanel.Dock="Right">
+                <Button Content="Add"
+                        Width="110"
+                        Margin="0,0,8,0"
+                        Click="AddButton_OnClick" />
+                <Button Content="Clear"
+                        Width="110"
+                        Margin="0,0,8,0"
+                        IsEnabled="{Binding HasConfigurations}"
+                        Click="ClearButton_OnClick" />
                 <Button Content="Browse..."
                         Width="110"
                         Margin="0,0,8,0"
+                        IsEnabled="{Binding HasConfigurations}"
                         Click="BrowseButton_OnClick" />
                 <Button Content="Save"
                         Width="110"
                         Margin="0,0,8,0"
                         IsDefault="True"
+                        IsEnabled="{Binding HasConfigurations}"
                         Click="SaveButton_OnClick" />
                 <Button Content="Cancel"
                         Width="110"
@@ -246,5 +264,10 @@
                         Click="CancelButton_OnClick" />
             </StackPanel>
         </DockPanel>
+        <TextBlock x:Name="FilePathTextBlock"
+                       Text="{Binding FilePath}"
+                       Foreground="{DynamicResource Brush.Text.Placeholder}"
+                       VerticalAlignment="Top"
+                       TextTrimming="CharacterEllipsis" Grid.Row="1" HorizontalAlignment="Left" />
     </Grid>
 </Window>

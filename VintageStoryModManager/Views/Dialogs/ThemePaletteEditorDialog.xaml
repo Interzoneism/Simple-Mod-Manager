@@ -11,13 +11,26 @@
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <TextBlock Text="Select a color to customise the current theme palette. Changes apply immediately."
                    TextWrapping="Wrap"
                    Margin="0,0,0,16" />
-        <ListView Grid.Row="1"
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,16">
+            <TextBlock Text="Load palette from:" 
+                       VerticalAlignment="Center" 
+                       Margin="0,0,12,0" />
+            <ComboBox x:Name="PaletteComboBox"
+                      MinWidth="200"
+                      SelectionChanged="PaletteComboBox_OnSelectionChanged">
+                <ComboBoxItem Content="Vintage Story" Tag="VintageStory" />
+                <ComboBoxItem Content="Dark" Tag="Dark" />
+                <ComboBoxItem Content="Light" Tag="Light" />
+            </ComboBox>
+        </StackPanel>
+        <ListView Grid.Row="2"
                   ItemsSource="{Binding PaletteItems}"
                   MinHeight="220"
                   VerticalAlignment="Stretch">
@@ -59,7 +72,7 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
-        <StackPanel Grid.Row="2"
+        <StackPanel Grid.Row="3"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,16,0,0">

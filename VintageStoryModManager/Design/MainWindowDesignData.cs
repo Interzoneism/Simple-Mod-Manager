@@ -7,7 +7,7 @@ using VintageStoryModManager.ViewModels;
 namespace VintageStoryModManager.Design;
 
 /// <summary>
-///     Provides design-time data for the <see cref="VintageStoryModManager.Views.MainWindow" />.
+///     Provides design-time data for the <see cref="VintageStoryModManager.MainWindow" />.
 /// </summary>
 public sealed class MainWindowDesignData
 {

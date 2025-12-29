@@ -7,10 +7,10 @@
         MinWidth="520"
         MinHeight="360"
         WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize"
+        ResizeMode="CanResize"
         WindowStyle="SingleBorderWindow"
         ShowInTaskbar="False"
-        Background="{DynamicResource Brush.Window.Shell.Background.Solid}" MaxWidth="650">
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}" MaxHeight="950">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Window.Resources>
@@ -39,8 +39,7 @@
         <ScrollViewer Grid.Row="2"
                       VerticalScrollBarVisibility="Auto"
                       Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
-                      BorderBrush="{DynamicResource Brush.Panel.Primary.Background.Solid}"
-                      MaxHeight="420">
+                      BorderBrush="{DynamicResource Brush.Panel.Primary.Background.Solid}">
             <ItemsControl ItemsSource="{Binding Mods}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type viewModels:UpdateModSelectionViewModel}">

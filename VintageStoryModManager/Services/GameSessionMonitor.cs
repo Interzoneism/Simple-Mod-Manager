@@ -41,6 +41,8 @@ public sealed class GameSessionMonitor : IDisposable
     private readonly Dispatcher _dispatcher;
 
     private readonly string _logsDirectory;
+    private readonly ConcurrentDictionary<string, Task> _inFlightProcessing =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, LogTailState> _logStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _sessionLock = new();
 
@@ -184,7 +186,29 @@ public sealed class GameSessionMonitor : IDisposable
     {
         if (_disposed || string.IsNullOrWhiteSpace(path)) return;
 
-        _ = Task.Run(() => ProcessLogChangesAsync(category, path));
+        string fullPath;
+        try
+        {
+            fullPath = Path.GetFullPath(path);
+        }
+        catch (Exception) when (path is not null)
+        {
+            return;
+        }
+
+        if (!IsSupportedLog(fullPath)) return;
+
+        _ = _inFlightProcessing.GetOrAdd(fullPath, key => Task.Run(async () =>
+        {
+            try
+            {
+                await ProcessLogChangesAsync(category, fullPath).ConfigureAwait(false);
+            }
+            finally
+            {
+                _inFlightProcessing.TryRemove(fullPath, out _);
+            }
+        }));
     }
 
     private void RemoveLogState(string? path)
