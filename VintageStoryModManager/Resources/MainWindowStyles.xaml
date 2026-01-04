@@ -2,6 +2,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="clr-namespace:VintageStoryModManager.Converters"
+    xmlns:helpers="clr-namespace:VintageStoryModManager.Helpers"
     xmlns:sys="clr-namespace:System;assembly=mscorlib"
     xmlns:views="clr-namespace:VintageStoryModManager.Views">
 
@@ -91,9 +92,13 @@
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                            </MultiDataTrigger.Conditions>
                             <Setter TargetName="HoverOverlay" Property="Opacity" Value="0.3" />
-                        </Trigger>
+                        </MultiDataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -186,9 +191,13 @@
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                            </MultiDataTrigger.Conditions>
                             <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource Brush.DataGrid.Header.Background.Hover}" />
-                        </Trigger>
+                        </MultiDataTrigger>
                         <Trigger Property="SortDirection" Value="Ascending">
                             <Setter TargetName="SortArrow" Property="Visibility" Value="Visible" />
                             <Setter TargetName="SortArrow" Property="Data" Value="M 0 3 L 3 0 6 3 Z" />
@@ -503,9 +512,13 @@
                             RecognizesAccessKey="True" />
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                            </MultiDataTrigger.Conditions>
                             <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
-                        </Trigger>
+                        </MultiDataTrigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
                         </Trigger>
@@ -543,9 +556,13 @@
                             RecognizesAccessKey="True" />
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                            </MultiDataTrigger.Conditions>
                             <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
-                        </Trigger>
+                        </MultiDataTrigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
                         </Trigger>
@@ -827,9 +844,10 @@
                             <Setter TargetName="RowBorder" Property="BorderThickness" Value="2,2,2,2" />
                         </Trigger>
 
-                        <!--  Hover effect - only active when not loading mods or mod details  -->
+                        <!--  Hover effect - only active when not loading mods or mod details and hover effects are enabled  -->
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
                                 <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
                                 <Condition Binding="{Binding DataContext.IsLoadingMods, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="False" />
                                 <Condition Binding="{Binding DataContext.IsLoadingModDetails, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="False" />
@@ -942,9 +960,13 @@
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                            </MultiDataTrigger.Conditions>
                             <Setter TargetName="HoverOverlay" Property="Opacity" Value="0.5" />
-                        </Trigger>
+                        </MultiDataTrigger>
                         <Trigger Property="IsMouseOver" Value="False">
                             <Setter TargetName="HoverOverlay" Property="Opacity" Value="0" />
                         </Trigger>

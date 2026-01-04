@@ -37,6 +37,8 @@ public partial class ModBrowserViewModel : ObservableObject
     private long _lastLoadMoreTicks;
     private const int LoadMoreThrottleMs = 300;
     private int _activeSearchCount;
+    private CancellationTokenSource? _pendingLoadMoreCts;
+    private bool _isLoadingMore;
 
     #region Observable Properties
 
@@ -197,6 +199,8 @@ public partial class ModBrowserViewModel : ObservableObject
         if (!isVisible)
         {
             _searchCts?.Cancel();
+            _pendingLoadMoreCts?.Cancel();
+            _pendingLoadMoreCts = null;
         }
     }
 
@@ -400,9 +404,11 @@ public partial class ModBrowserViewModel : ObservableObject
         if (!_isTabVisible)
             return;
 
-        // Cancel any pending search
+        // Cancel any pending search and pending load more operations
         _searchCts?.Cancel();
         _searchCts = new CancellationTokenSource();
+        _pendingLoadMoreCts?.Cancel();
+        _pendingLoadMoreCts = null;
         var token = _searchCts.Token;
 
         // Increment active search counter
@@ -503,76 +509,151 @@ public partial class ModBrowserViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadMore()
     {
-        // Throttle load requests to prevent rapid consecutive calls (lock-free, thread-safe)
-        var nowTicks = Environment.TickCount64;
-
-        // Atomically check and update timestamp to prevent race conditions
-        while (true)
+        // Check if we have more mods to load early
+        if (VisibleModsCount >= ModsList.Count)
         {
-            var lastTicks = Interlocked.Read(ref _lastLoadMoreTicks);
-            var timeSinceLastLoad = nowTicks - lastTicks;
-
-            if (timeSinceLastLoad < LoadMoreThrottleMs)
-            {
-                return; // Too soon, throttle this request
-            }
-
-            // Try to atomically update the timestamp
-            if (Interlocked.CompareExchange(ref _lastLoadMoreTicks, nowTicks, lastTicks) == lastTicks)
-            {
-                break; // Successfully updated, proceed with load
-            }
-            // Another thread updated the timestamp, retry the check
+            return;
         }
 
-        var previousCount = VisibleModsCount;
-        var nextBatch = ModsList.Skip(previousCount).Take(LoadMoreCount).ToList();
-
-        if (nextBatch.Count == 0) return;
-
-        foreach (var mod in nextBatch)
+        // Prevent concurrent load operations
+        if (_isLoadingMore)
         {
-            VisibleMods.Add(mod);
-        }
-
-        VisibleModsCount = VisibleMods.Count;
-
-        // Notify UI of changes - using Normal priority to maintain responsiveness
-        // OnPropertyChanged(nameof(VisibleMods)); // Not needed
-
-        await Task.CompletedTask;
-
-        // Load metadata for newly visible mods + prefetch buffer asynchronously
-        var prefetchEndIndex = Math.Min(VisibleModsCount + PrefetchBufferCount, ModsList.Count);
-        var modsToPrefetch = ModsList.Skip(previousCount).Take(prefetchEndIndex - previousCount).ToList();
-
-        if (modsToPrefetch.Any())
-        {
-            var token = _searchCts?.Token ?? CancellationToken.None;
-
-            // Run these operations in parallel on background threads to avoid blocking UI
+            // If already loading, schedule a delayed retry to ensure we eventually load
+            // This prevents missing loads when scrolling rapidly
+            // Only retry if we have more mods to load
+            if (VisibleModsCount >= ModsList.Count)
+            {
+                return;
+            }
+            
+            _pendingLoadMoreCts?.Cancel();
+            _pendingLoadMoreCts = new CancellationTokenSource();
+            var delayCts = _pendingLoadMoreCts;
+            
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    // Run thumbnail and user report loading in parallel for better performance
-                    var tasks = new List<Task>();
-
-                    // Only populate thumbnails if "Faster thumbnails" setting is disabled (i.e., using correct thumbnails)
-                    if (ShouldUseCorrectThumbnails)
+                    await Task.Delay(LoadMoreThrottleMs, delayCts.Token);
+                    if (!delayCts.Token.IsCancellationRequested)
                     {
-                        tasks.Add(PopulateModThumbnailsAsync(modsToPrefetch, token));
+                        // Call the method directly to avoid command infrastructure overhead
+                        await LoadMore();
                     }
-
-                    tasks.Add(PopulateUserReportsAsync(modsToPrefetch, token));
-
-                    await Task.WhenAll(tasks);
                 }
                 catch (OperationCanceledException)
                 {
                     // Expected when cancelled
                 }
-            }, token);
+            });
+            return;
+        }
+
+        // Throttle load requests to prevent rapid consecutive calls
+        var nowTicks = Environment.TickCount64;
+        var lastTicks = Interlocked.Read(ref _lastLoadMoreTicks);
+        var timeSinceLastLoad = nowTicks - lastTicks;
+
+        if (timeSinceLastLoad < LoadMoreThrottleMs)
+        {
+            // Too soon, schedule a delayed retry instead of rejecting
+            // Only retry if we have more mods to load
+            if (VisibleModsCount >= ModsList.Count)
+            {
+                return;
+            }
+            
+            _pendingLoadMoreCts?.Cancel();
+            _pendingLoadMoreCts = new CancellationTokenSource();
+            var delayCts = _pendingLoadMoreCts;
+            
+            var remainingDelay = (int)(LoadMoreThrottleMs - timeSinceLastLoad);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(remainingDelay, delayCts.Token);
+                    if (!delayCts.Token.IsCancellationRequested)
+                    {
+                        // Call the method directly to avoid command infrastructure overhead
+                        await LoadMore();
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected when cancelled
+                }
+            });
+            return;
+        }
+
+        try
+        {
+            _isLoadingMore = true;
+            Interlocked.Exchange(ref _lastLoadMoreTicks, nowTicks);
+
+            var previousCount = VisibleModsCount;
+            var nextBatch = ModsList.Skip(previousCount).Take(LoadMoreCount).ToList();
+
+            // Double-check we have mods to load (could have changed since initial check)
+            if (nextBatch.Count == 0)
+            {
+                return;
+            }
+
+            // Add items to VisibleMods on the UI thread to avoid cross-thread exceptions
+            // Using BeginInvoke for non-blocking asynchronous dispatch
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                foreach (var mod in nextBatch)
+                {
+                    VisibleMods.Add(mod);
+                }
+
+                VisibleModsCount = VisibleMods.Count;
+            });
+
+            // Notify UI of changes - using Normal priority to maintain responsiveness
+            // OnPropertyChanged(nameof(VisibleMods)); // Not needed
+
+            await Task.CompletedTask;
+
+            // Load metadata for newly visible mods + prefetch buffer asynchronously
+            var prefetchEndIndex = Math.Min(VisibleModsCount + PrefetchBufferCount, ModsList.Count);
+            var modsToPrefetch = ModsList.Skip(previousCount).Take(prefetchEndIndex - previousCount).ToList();
+
+            if (modsToPrefetch.Any())
+            {
+                var token = _searchCts?.Token ?? CancellationToken.None;
+
+                // Run these operations in parallel on background threads to avoid blocking UI
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        // Run thumbnail and user report loading in parallel for better performance
+                        var tasks = new List<Task>();
+
+                        // Only populate thumbnails if "Faster thumbnails" setting is disabled (i.e., using correct thumbnails)
+                        if (ShouldUseCorrectThumbnails)
+                        {
+                            tasks.Add(PopulateModThumbnailsAsync(modsToPrefetch, token));
+                        }
+
+                        tasks.Add(PopulateUserReportsAsync(modsToPrefetch, token));
+
+                        await Task.WhenAll(tasks);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Expected when cancelled
+                    }
+                }, token);
+            }
+        }
+        finally
+        {
+            _isLoadingMore = false;
         }
     }
 

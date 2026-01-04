@@ -3,7 +3,9 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="clr-namespace:VintageStoryModManager.Converters"
+    xmlns:helpers="clr-namespace:VintageStoryModManager.Helpers"
     xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
+    xmlns:sys="clr-namespace:System;assembly=mscorlib"
     xmlns:ui="http://schemas.modernwpf.com/2019"
     StartupUri="Views/MainWindow.xaml">
     <Application.Resources>
@@ -16,6 +18,7 @@
                 <ResourceDictionary Source="Resources/MainWindowStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
+            <sys:Boolean x:Key="DisableHoverEffects">False</sys:Boolean>
             <BooleanToVisibilityConverter x:Key="IMM.BooleanToVisibilityConverter" />
             <converters:ScaledThicknessConverter x:Key="IMM.ScaledThicknessConverter" />
             <converters:ScaledDoubleConverter x:Key="IMM.ScaledDoubleConverter" />
@@ -130,9 +133,13 @@
                                     <Setter TargetName="Thumb" Property="Background" Value="{DynamicResource Brush.ToggleSwitch.Thumb.Background.Disabled}" />
                                     <Setter TargetName="HeaderContent" Property="Opacity" Value="0.6" />
                                 </Trigger>
-                                <Trigger Property="IsMouseOver" Value="True">
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brush.ToggleSwitch.Hover.Border}" />
-                                </Trigger>
+                                </MultiDataTrigger>
                                 <Trigger Property="IsKeyboardFocusWithin" Value="True">
                                     <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brush.ToggleSwitch.Focus.Border}" />
                                 </Trigger>
@@ -145,7 +152,17 @@
                 </Setter>
             </Style>
 
-            <Style BasedOn="{StaticResource IMM.ToggleSwitchBaseStyle}" TargetType="{x:Type ui:ToggleSwitch}" />
+            <Style BasedOn="{StaticResource IMM.ToggleSwitchBaseStyle}" TargetType="{x:Type ui:ToggleSwitch}">
+                <Style.Triggers>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                            <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                        </MultiDataTrigger.Conditions>
+                        <!-- Hover effect would be applied here if needed at style level -->
+                    </MultiDataTrigger>
+                </Style.Triggers>
+            </Style>
 
             <Style x:Key="IMM.ClearTextButtonStyle" TargetType="Button">
                 <Setter Property="Width" Value="24" />
@@ -168,9 +185,13 @@
                                     RecognizesAccessKey="True" />
                             </Border>
                             <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
-                                </Trigger>
+                                </MultiDataTrigger>
                                 <Trigger Property="IsPressed" Value="True">
                                     <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
                                 </Trigger>
@@ -217,9 +238,13 @@
                                 </ContentPresenter>
                             </Border>
                             <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Link}" />
-                                </Trigger>
+                                </MultiDataTrigger>
                                 <Trigger Property="IsPressed" Value="True">
                                     <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource Brush.Panel.Secondary.Background.Solid}" />
                                 </Trigger>
@@ -283,9 +308,13 @@
                                 </Path>
                             </Border>
                             <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.ScrollBar.Thumb}" />
-                                </Trigger>
+                                </MultiDataTrigger>
                                 <Trigger Property="IsPressed" Value="True">
                                     <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.ScrollBar.Thumb}" />
                                     <Setter TargetName="Border" Property="Opacity" Value="0.85" />
@@ -693,10 +722,14 @@
                                 </Border>
                             </Grid>
                             <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
                                     <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
-                                </Trigger>
+                                </MultiDataTrigger>
                                 <Trigger Property="IsPressed" Value="True">
                                     <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
                                     <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.Primary}" />
@@ -804,10 +837,14 @@
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
                                     <Setter Property="Opacity" Value="0.6" />
                                 </Trigger>
-                                <Trigger Property="IsMouseOver" Value="True">
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="Transparent" />
                                     <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
-                                </Trigger>
+                                </MultiDataTrigger>
                                 <Trigger Property="Text" Value="">
                                     <Setter TargetName="PlaceholderTextBlock" Property="Visibility" Value="Visible" />
                                 </Trigger>
@@ -872,9 +909,13 @@
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Placeholder}" />
                                     <Setter Property="Opacity" Value="0.6" />
                                 </Trigger>
-                                <Trigger Property="IsMouseOver" Value="True">
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
-                                </Trigger>
+                                </MultiDataTrigger>
                                 <Trigger Property="IsKeyboardFocused" Value="True">
                                     <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
                                 </Trigger>
@@ -889,10 +930,14 @@
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Padding" Value="8,4" />
                 <Style.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True">
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                            <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                        </MultiDataTrigger.Conditions>
                         <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
                         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Button.Primary.Border.Normal}" />
-                    </Trigger>
+                    </MultiDataTrigger>
                     <Trigger Property="IsPressed" Value="True">
                         <Setter Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Pressed}" />
                         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Button.Primary.Border.Normal}" />
@@ -919,9 +964,13 @@
                             <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Item.Background.Normal}" />
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Item.Background.Hover}" />
-                                </Trigger>
+                                </MultiDataTrigger>
                                 <Trigger Property="IsSelected" Value="True">
                                     <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Item.Background.Selected}" />
                                 </Trigger>
@@ -1015,10 +1064,14 @@
                                     <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource Brush.ComboBox.Border.Open}" />
                                     <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Open}" />
                                 </Trigger>
-                                <Trigger Property="IsMouseOver" Value="True">
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Hover}" />
                                     <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource Brush.ComboBox.Border.Hover}" />
-                                </Trigger>
+                                </MultiDataTrigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Placeholder}" />
                                     <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Disabled}" />
@@ -1115,14 +1168,15 @@
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter TargetName="LayoutRoot" Property="Opacity" Value="0.5" />
                                 </Trigger>
-                                <MultiTrigger>
-                                    <MultiTrigger.Conditions>
-                                        <Condition Property="IsMouseOver" Value="True" />
-                                        <Condition Property="IsChecked" Value="False" />
-                                    </MultiTrigger.Conditions>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsChecked}" Value="False" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter TargetName="ChromeBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
                                     <Setter TargetName="ChromeBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border.Hover}" />
-                                </MultiTrigger>
+                                </MultiDataTrigger>
                                 <MultiTrigger>
                                     <MultiTrigger.Conditions>
                                         <Condition Property="IsPressed" Value="True" />
@@ -1188,9 +1242,13 @@
                                     <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.Primary}" />
                                     <Setter Property="FontWeight" Value="SemiBold" />
                                 </Trigger>
-                                <Trigger Property="IsMouseOver" Value="True">
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Hover}" />
-                                </Trigger>
+                                </MultiDataTrigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Subtle}" />
                                     <Setter TargetName="TabBorder" Property="Opacity" Value="0.6" />

@@ -266,6 +266,15 @@
                         <Bold>Faster thumbnails (Faster to load in mod database)</Bold>
                         <Run Text=" uses faster thumbnail loading for improved performance when browsing mods. For most mods you won't notice a visual difference. Disabling this option loads thumbnails more accurately from the Mod Database but takes longer." />
                     </TextBlock>
+
+                    <TextBlock
+                        Margin="0,8,0,0"
+                        FontSize="12"
+                        TextWrapping="Wrap">
+                        <Bold>Disable hover and transition visual effects</Bold>
+                        <Run Text=" disables all hover overlays and animations (minimal performance win)" />
+                    </TextBlock>
+
                 </StackPanel>
 
                 <StackPanel Margin="0,20,0,0">
@@ -288,10 +297,8 @@
                         TextWrapping="Wrap">
                         <Bold>Themes</Bold>
                         <Run Text=" changes the manager's colour scheme. " />
-                        <Bold>Custom…</Bold>
-                        <Run Text=" opens the palette editor, and " />
-                        <Bold>Surprise me! (In A Bad Way)</Bold>
-                        <Run Text=" picks a random palette." />
+                        <Bold>Edit theme…</Bold>
+                        <Run Text=" opens the palette editor." />
                     </TextBlock>
 
                     <TextBlock
@@ -393,7 +400,7 @@
                         FontSize="12"
                         TextWrapping="Wrap">
                         <Bold>Enable server options</Bold>
-                        <Run Text=" unlocks features aimed at server admins, such as generating installation macros for remote servers." />
+                        <Run Text=" unlocks features aimed at server admins, currently adds a Copy to Server button for selected mods, which copies a ./moddb install command to paste in game." />
                     </TextBlock>
 
                     <TextBlock

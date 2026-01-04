@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <!-- Update AppVersion to bump the application version in all outputs. -->
-    <AppVersion>2.0.0</AppVersion>
+    <AppVersion>2.1.0</AppVersion>
     <AppFileVersion>$(AppVersion).0</AppFileVersion>
   </PropertyGroup>
 </Project>
