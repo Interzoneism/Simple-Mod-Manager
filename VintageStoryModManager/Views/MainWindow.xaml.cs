@@ -34,7 +34,6 @@ using System.Windows.Threading;
 using UglyToad.PdfPig;
 using VintageStoryModManager.Models;
 using VintageStoryModManager.Services;
-using VintageStoryModManager.Helpers;
 using VintageStoryModManager.ViewModels;
 using VintageStoryModManager.Views.Dialogs;
 using YamlDotNet.Core;
@@ -62,7 +61,6 @@ using ProgressBar = System.Windows.Controls.ProgressBar;
 using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 using ScrollBar = System.Windows.Controls.Primitives.ScrollBar;
 using TabControl = System.Windows.Controls.TabControl;
-using TextBox = System.Windows.Controls.TextBox;
 using TextBoxBase = System.Windows.Controls.Primitives.TextBoxBase;
 using VerticalAlignment = System.Windows.VerticalAlignment;
 using WinForms = System.Windows.Forms;
@@ -383,7 +381,6 @@ public partial class MainWindow : Window
     // ViewModel
     private MainViewModel? _viewModel;
     private ModBrowserViewModel? _modBrowserViewModel;
-    private readonly List<MenuItem> _customThemeMenuItems = new();
 
     #endregion
 
@@ -422,14 +419,11 @@ public partial class MainWindow : Window
         InternetAccessManager.SetInternetAccessDisabled(_userConfiguration.DisableInternetAccess);
         UpdateServerOptionsState(_userConfiguration.EnableServerOptions);
         UseFasterThumbnailsMenuItem.IsChecked = _userConfiguration.UseFasterThumbnails;
-        DisableHoverEffectsMenuItem.IsChecked = _userConfiguration.DisableHoverEffects;
-        HoverEffectHelper.SetDisableHoverEffects(this, _userConfiguration.DisableHoverEffects);
         UpdateLoggingMenuState();
         InitializeTraceListener();
         _modActivityLoggingService.LogAppLaunch();
 
-        RefreshCustomThemeMenuItems();
-        UpdateThemeMenuSelection(_userConfiguration.ColorTheme, _userConfiguration.GetCurrentThemeName());
+        UpdateThemeMenuSelection(_userConfiguration.ColorTheme);
 
         if (ManagerVersionMenuItem is not null)
         {
@@ -1381,19 +1375,13 @@ public partial class MainWindow : Window
 
     private void ThemeMenuItem_OnClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not MenuItem menuItem) return;
+        if (sender is not MenuItem menuItem || menuItem.Tag is not ColorTheme theme) return;
 
-        if (menuItem.Tag is string themeName)
+        if (theme == ColorTheme.Custom)
         {
-            if (!_userConfiguration.TryActivateTheme(themeName)) return;
-
-            var selectedPalette = _userConfiguration.GetThemePaletteColors();
-            UpdateThemeMenuSelection(_userConfiguration.ColorTheme, themeName);
-            App.ApplyTheme(_userConfiguration.ColorTheme, selectedPalette.Count > 0 ? selectedPalette : null);
+            ShowCustomThemeEditor();
             return;
         }
-
-        if (menuItem.Tag is not ColorTheme theme) return;
 
         var currentTheme = _userConfiguration.ColorTheme;
         IReadOnlyDictionary<string, string>? paletteOverride = null;
@@ -1402,23 +1390,17 @@ public partial class MainWindow : Window
 
         if (theme == currentTheme && paletteOverride is null)
         {
-            UpdateThemeMenuSelection(currentTheme, _userConfiguration.GetCurrentThemeName());
+            UpdateThemeMenuSelection(currentTheme);
             return;
         }
 
-        UpdateThemeMenuSelection(theme, UserConfigurationService.GetThemeDisplayName(theme));
+        UpdateThemeMenuSelection(theme);
         _userConfiguration.SetColorTheme(theme, paletteOverride);
         var palette = _userConfiguration.GetThemePaletteColors();
         App.ApplyTheme(theme, palette.Count > 0 ? palette : null);
-        ClearScrollViewerCache();
     }
 
-    private void EditThemeMenuItem_OnClick(object sender, RoutedEventArgs e)
-    {
-        ShowCustomThemeEditor();
-    }
-
-    private void UpdateThemeMenuSelection(ColorTheme theme, string? themeName = null)
+    private void UpdateThemeMenuSelection(ColorTheme theme)
     {
         if (VintageStoryThemeMenuItem is not null)
             VintageStoryThemeMenuItem.IsChecked = theme == ColorTheme.VintageStory;
@@ -1427,14 +1409,9 @@ public partial class MainWindow : Window
 
         if (LightThemeMenuItem is not null) LightThemeMenuItem.IsChecked = theme == ColorTheme.Light;
 
-        var normalizedName = themeName ?? _userConfiguration.GetCurrentThemeName();
-        foreach (var menuItem in _customThemeMenuItems)
-        {
-            var header = menuItem.Header?.ToString();
-            menuItem.IsChecked = theme == ColorTheme.Custom
-                                 && !string.IsNullOrWhiteSpace(header)
-                                 && string.Equals(header, normalizedName, StringComparison.OrdinalIgnoreCase);
-        }
+        if (SurpriseMeThemeMenuItem is not null) SurpriseMeThemeMenuItem.IsChecked = theme == ColorTheme.SurpriseMe;
+
+        if (CustomThemeMenuItem is not null) CustomThemeMenuItem.IsChecked = theme == ColorTheme.Custom;
     }
 
     private static IReadOnlyDictionary<string, string> GenerateSurprisePalette()
@@ -1464,66 +1441,14 @@ public partial class MainWindow : Window
         return $"#{alpha:X2}{rgb[0]:X2}{rgb[1]:X2}{rgb[2]:X2}";
     }
 
-    private void RefreshCustomThemeMenuItems()
-    {
-        if (ThemesMenuItem is null) return;
-
-        foreach (var item in _customThemeMenuItems)
-        {
-            item.Click -= ThemeMenuItem_OnClick;
-            ThemesMenuItem.Items.Remove(item);
-        }
-
-        _customThemeMenuItems.Clear();
-
-        var customThemes = _userConfiguration.GetCustomThemeNames();
-
-        if (customThemes.Count == 0)
-        {
-            if (CustomThemesSeparator is not null)
-                CustomThemesSeparator.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        if (CustomThemesSeparator is not null)
-            CustomThemesSeparator.Visibility = Visibility.Visible;
-
-        var toggleStyle = TryFindResource("ToggleMenuItemStyle") as Style;
-
-        // Find the separator index
-        var separatorIndex = CustomThemesSeparator is not null && ThemesMenuItem.Items.Contains(CustomThemesSeparator)
-            ? ThemesMenuItem.Items.IndexOf(CustomThemesSeparator)
-            : ThemesMenuItem.Items.Count;
-
-        // Insert custom themes BEFORE the separator
-        foreach (var name in customThemes)
-        {
-            var menuItem = new MenuItem
-            {
-                Header = name,
-                Height = 35,
-                IsCheckable = true,
-                Tag = name,
-                Style = toggleStyle
-            };
-
-            menuItem.Click += ThemeMenuItem_OnClick;
-            _customThemeMenuItems.Add(menuItem);
-            ThemesMenuItem.Items.Insert(separatorIndex, menuItem);
-            separatorIndex++; // Increment to keep adding before the separator
-        }
-    }
-
     private void ShowCustomThemeEditor()
     {
-        var currentTheme = _userConfiguration.ColorTheme;
-        var currentThemeName = _userConfiguration.GetCurrentThemeName();
+        if (_userConfiguration.ColorTheme != ColorTheme.Custom) _userConfiguration.SetColorTheme(ColorTheme.Custom);
 
-        UpdateThemeMenuSelection(currentTheme, currentThemeName);
+        UpdateThemeMenuSelection(ColorTheme.Custom);
 
         var palette = _userConfiguration.GetThemePaletteColors();
-        App.ApplyTheme(currentTheme, palette.Count > 0 ? palette : null);
-        ClearScrollViewerCache();
+        App.ApplyTheme(ColorTheme.Custom, palette.Count > 0 ? palette : null);
 
         var dialog = new ThemePaletteEditorDialog(_userConfiguration)
         {
@@ -1531,11 +1456,7 @@ public partial class MainWindow : Window
         };
 
         _ = dialog.ShowDialog();
-
-        RefreshCustomThemeMenuItems();
-        UpdateThemeMenuSelection(_userConfiguration.ColorTheme, _userConfiguration.GetCurrentThemeName());
-        ClearScrollViewerCache();
-
+        UpdateThemeMenuSelection(_userConfiguration.ColorTheme);
     }
 
     private void AlwaysClearModlistsMenuItem_OnClick(object sender, RoutedEventArgs e)
@@ -1714,19 +1635,6 @@ public partial class MainWindow : Window
 
         _userConfiguration.SetUseFasterThumbnails(menuItem.IsChecked);
         menuItem.IsChecked = _userConfiguration.UseFasterThumbnails;
-    }
-
-    private void DisableHoverEffectsMenuItem_OnClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not MenuItem menuItem) return;
-
-        _userConfiguration.SetDisableHoverEffects(menuItem.IsChecked);
-        menuItem.IsChecked = _userConfiguration.DisableHoverEffects;
-
-        // Set the attached property on the main window to disable hover effects globally
-        HoverEffectHelper.SetDisableHoverEffects(this, menuItem.IsChecked);
-
-        RefreshHoverOverlayState();
     }
 
     private void LogModUpdateMenuItem_OnClick(object sender, RoutedEventArgs e)
@@ -4706,10 +4614,6 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.A && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
-            // Allow CTRL+A to select text when a TextBox has focus
-            if (Keyboard.FocusedElement is TextBox)
-                return false;
-
             if (ModsDataGrid?.IsVisible == true)
             {
                 SelectAllModsInCurrentView();
@@ -4882,11 +4786,7 @@ public partial class MainWindow : Window
 
         if (hoverOverlay != null)
         {
-            var shouldShowHover =
-                isHovered
-                && !isModSelected
-                && !AreHoverEffectsDisabled(row)
-                && !AreHoverOverlaysSuppressed(row);
+            var shouldShowHover = isHovered && !isModSelected && !AreHoverOverlaysSuppressed(row);
             hoverOverlay.Opacity = shouldShowHover ? HoverOverlayOpacity : 0;
         }
     }
@@ -4899,11 +4799,6 @@ public partial class MainWindow : Window
     private static bool AreHoverOverlaysSuppressed(DataGridRow row)
     {
         return GetWindow(row) is MainWindow mainWindow && mainWindow.AreHoverOverlaysSuppressed();
-    }
-
-    private static bool AreHoverEffectsDisabled(DependencyObject dependencyObject)
-    {
-        return HoverEffectHelper.GetDisableHoverEffects(dependencyObject);
     }
 
     private static void ClearRowOverlayValues(DataGridRow row)
@@ -13680,12 +13575,6 @@ public partial class MainWindow : Window
         _modsScrollViewer = FindDescendantScrollViewer(targetGrid);
         _modsScrollViewerSource = targetGrid;
         return _modsScrollViewer;
-    }
-
-    private void ClearScrollViewerCache()
-    {
-        _modsScrollViewer = null;
-        _modsScrollViewerSource = null;
     }
 
     private static ScrollViewer? FindDescendantScrollViewer(DependencyObject? current)

@@ -289,13 +289,6 @@
                             Header="_Faster thumbnails (Faster to load in mod database)"
                             IsCheckable="True"
                             Style="{StaticResource ToggleMenuItemStyle}" />
-                        <MenuItem
-                            x:Name="DisableHoverEffectsMenuItem"
-                            Height="35"
-                            Click="DisableHoverEffectsMenuItem_OnClick"
-                            Header="Disable _hover and transition visual effects"
-                            IsCheckable="True"
-                            Style="{StaticResource ToggleMenuItemStyle}" />
                     </MenuItem>
                     <MenuItem
                         Height="24"
@@ -308,7 +301,7 @@
                             IsCheckable="True"
                             IsChecked="{Binding IsCompactView, Mode=TwoWay}"
                             Style="{StaticResource ToggleMenuItemStyle}" />
-                        <MenuItem x:Name="ThemesMenuItem" Height="35" Header="_Themes">
+                        <MenuItem Height="35" Header="_Themes">
                             <MenuItem
                                 x:Name="VintageStoryThemeMenuItem"
                                 Height="35"
@@ -333,12 +326,22 @@
                                 IsCheckable="True"
                                 Style="{StaticResource ToggleMenuItemStyle}"
                                 Tag="{x:Static services:ColorTheme.Light}" />
-                            <Separator x:Name="CustomThemesSeparator" />
                             <MenuItem
-                                x:Name="EditThemeMenuItem"
+                                x:Name="CustomThemeMenuItem"
                                 Height="35"
-                                Click="EditThemeMenuItem_OnClick"
-                                Header="_Edit theme..." />
+                                Click="ThemeMenuItem_OnClick"
+                                Header="_Custom..."
+                                IsCheckable="True"
+                                Style="{StaticResource ToggleMenuItemStyle}"
+                                Tag="{x:Static services:ColorTheme.Custom}" />
+                            <MenuItem
+                                x:Name="SurpriseMeThemeMenuItem"
+                                Height="35"
+                                Click="ThemeMenuItem_OnClick"
+                                Header="_Surprise me! (In A Bad Way)"
+                                IsCheckable="True"
+                                Style="{StaticResource ToggleMenuItemStyle}"
+                                Tag="{x:Static services:ColorTheme.SurpriseMe}" />
                         </MenuItem>
                         <MenuItem
                             x:Name="ColumnsMenuItem"
@@ -1544,7 +1547,7 @@
                                                             <TextBlock
                                                                 x:Name="SelectedLocalModlistDescription"
                                                                 Grid.Row="1"
-                                                                Margin="0,16,0,0"
+                                                                Margin="0,8,0,0"
                                                                 Foreground="{DynamicResource Brush.Text.Primary}"
                                                                 Text=""
                                                                 TextWrapping="Wrap" />

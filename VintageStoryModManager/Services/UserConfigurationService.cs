@@ -63,16 +63,6 @@ public sealed class UserConfigurationService
             ["Palette.Error"] = "#FFED4337"
         };
 
-    private static readonly IReadOnlyDictionary<ColorTheme, string> BuiltInThemeNames =
-        new Dictionary<ColorTheme, string>
-        {
-            [ColorTheme.VintageStory] = "Vintage Story",
-            [ColorTheme.Dark] = "Dark",
-            [ColorTheme.Light] = "Light",
-            [ColorTheme.SurpriseMe] = "Surprise Me",
-            [ColorTheme.Custom] = "Custom"
-        };
-
     private static readonly IReadOnlyDictionary<string, string> DarkPaletteColors =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -136,8 +126,6 @@ public sealed class UserConfigurationService
     private readonly Dictionary<string, GameProfileState> _gameProfiles = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, bool> _installedColumnVisibility = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _modConfigPathsPath;
-    private readonly Dictionary<string, Dictionary<string, string>> _savedCustomThemes =
-        new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, List<ModConfigPathEntry>> _storedModConfigPaths =
         new(StringComparer.OrdinalIgnoreCase);
@@ -152,7 +140,6 @@ public sealed class UserConfigurationService
     private double? _modInfoPanelTop;
     private ListSortDirection _modsSortDirection = ListSortDirection.Ascending;
     private string? _modsSortMemberPath;
-    private string? _currentThemeName;
     private string? _selectedPresetName;
     private bool _suppressRefreshCachePrompt;
     private string? _suppressRefreshCachePromptVersion;
@@ -166,9 +153,6 @@ public sealed class UserConfigurationService
         _configurationPath = DetermineConfigurationPath();
         _modConfigPathsPath = DetermineModConfigPathsPath(ModConfigPathsFileName);
         Load();
-
-        if (string.IsNullOrWhiteSpace(_currentThemeName))
-            _currentThemeName = GetThemeDisplayName(ColorTheme);
 
         _hasPendingSave |= !File.Exists(_configurationPath);
         _hasPendingModConfigPathSave = false;
@@ -337,8 +321,6 @@ public sealed class UserConfigurationService
     public bool RebuiltModlistMigrationCompleted { get; private set; }
 
     public bool UseFasterThumbnails { get; private set; } = true;
-
-    public bool DisableHoverEffects { get; private set; }
 
     public IReadOnlyList<string> GetGameProfileNames()
     {
@@ -786,126 +768,6 @@ public sealed class UserConfigurationService
         return true;
     }
 
-    public IReadOnlyList<string> GetCustomThemeNames()
-    {
-        return _savedCustomThemes.Keys
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    public IReadOnlyList<string> GetAllThemeNames()
-    {
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            GetThemeDisplayName(ColorTheme.VintageStory),
-            GetThemeDisplayName(ColorTheme.Dark),
-            GetThemeDisplayName(ColorTheme.Light)
-        };
-
-        // Add custom themes (duplicates of built-in names are automatically filtered by HashSet)
-        foreach (var name in GetCustomThemeNames())
-        {
-            result.Add(name);
-        }
-
-        return result.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
-    }
-
-    public string GetCurrentThemeName()
-    {
-        if (!string.IsNullOrWhiteSpace(_currentThemeName)) return _currentThemeName!;
-
-        return GetThemeDisplayName(ColorTheme);
-    }
-
-    public bool TryActivateTheme(string? name)
-    {
-        var normalized = NormalizeThemeName(name);
-        if (normalized is null) return false;
-
-        // Check custom themes first to allow overriding built-in themes
-        if (_savedCustomThemes.TryGetValue(normalized, out var palette))
-        {
-            _currentThemeName = normalized;
-            SetColorTheme(ColorTheme.Custom, palette);
-            SyncCustomThemePaletteWithCurrentTheme();
-            return true;
-        }
-
-        if (TryGetBuiltInTheme(normalized, out var builtInTheme))
-        {
-            _currentThemeName = GetThemeDisplayName(builtInTheme);
-            SetColorTheme(builtInTheme);
-            return true;
-        }
-
-        return false;
-    }
-
-    public bool TryGetThemePalette(string? name, out IReadOnlyDictionary<string, string> palette)
-    {
-        palette = Array.Empty<KeyValuePair<string, string>>()
-            .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
-
-        var normalized = NormalizeThemeName(name);
-        if (normalized is null) return false;
-
-        // Check custom themes first to allow overriding built-in themes
-        if (_savedCustomThemes.TryGetValue(normalized, out var savedPalette))
-        {
-            palette = new Dictionary<string, string>(savedPalette, StringComparer.OrdinalIgnoreCase);
-            return true;
-        }
-
-        if (TryGetBuiltInTheme(normalized, out var builtInTheme))
-        {
-            palette = GetDefaultThemePalette(builtInTheme);
-            return true;
-        }
-
-        return false;
-    }
-
-    public bool SaveCustomTheme(string? name)
-    {
-        var normalized = NormalizeThemeName(name);
-        if (normalized is null) return false;
-
-        var palette = new Dictionary<string, string>(_themePaletteColors, StringComparer.OrdinalIgnoreCase);
-        EnsurePaletteDefaults(palette, GetDefaultPalette(ColorTheme.Custom));
-
-        _savedCustomThemes[normalized] = palette;
-        _currentThemeName = normalized;
-        SetColorTheme(ColorTheme.Custom, palette);
-        SyncCustomThemePaletteWithCurrentTheme();
-        Save();
-        return true;
-    }
-
-    public bool DeleteCustomTheme(string? name)
-    {
-        var normalized = NormalizeThemeName(name);
-        if (normalized is null) return false;
-
-        if (!_savedCustomThemes.Remove(normalized)) return false;
-
-        if (string.Equals(_currentThemeName, normalized, StringComparison.OrdinalIgnoreCase))
-        {
-            _currentThemeName = GetThemeDisplayName(ColorTheme.VintageStory);
-            SetColorTheme(ColorTheme.VintageStory);
-        }
-
-        Save();
-        return true;
-    }
-
-    public static string GetThemeDisplayName(ColorTheme theme)
-    {
-        if (BuiltInThemeNames.TryGetValue(theme, out var name)) return name;
-
-        return theme.ToString();
-    }
-
     public void ResetThemePalette()
     {
         if (ColorTheme == ColorTheme.Custom) ResetCustomThemePaletteToDefaults();
@@ -1167,17 +1029,11 @@ public sealed class UserConfigurationService
         if (ColorTheme != theme)
         {
             ColorTheme = theme;
-            _currentThemeName = GetThemeDisplayName(theme);
             ResetThemePaletteToDefaults();
             paletteChanged = true;
         }
 
-        if (paletteOverride is not null)
-        {
-            paletteChanged |= ApplyThemePaletteOverride(paletteOverride);
-            if (theme == ColorTheme.Custom && string.IsNullOrWhiteSpace(_currentThemeName))
-                _currentThemeName = GetThemeDisplayName(ColorTheme.Custom);
-        }
+        if (paletteOverride is not null) paletteChanged |= ApplyThemePaletteOverride(paletteOverride);
 
         if (paletteChanged) Save();
     }
@@ -1629,14 +1485,6 @@ public sealed class UserConfigurationService
         Save();
     }
 
-    public void SetDisableHoverEffects(bool disableHoverEffects)
-    {
-        if (DisableHoverEffects == disableHoverEffects) return;
-
-        DisableHoverEffects = disableHoverEffects;
-        Save();
-    }
-
     public bool IsModExcludedFromBulkUpdates(string? modId)
     {
         var normalized = NormalizeModId(modId);
@@ -1779,11 +1627,6 @@ public sealed class UserConfigurationService
                 _hasPendingSave = true;
             }
 
-            _currentThemeName = NormalizeThemeName(GetOptionalString(obj["currentThemeName"]))
-                                ?? GetThemeDisplayName(ColorTheme);
-
-            LoadCustomThemes(obj["customThemes"]);
-
             var hasCustomPalette = LoadCustomThemePalette(obj["customThemePalette"]);
             ResetThemePaletteToDefaults();
             ModlistAutoLoadBehavior = ParseModlistAutoLoadBehavior(GetOptionalString(obj["modlistAutoLoadBehavior"]));
@@ -1833,7 +1676,6 @@ public sealed class UserConfigurationService
             // Migration: Invert old useCorrectThumbnails value if present, otherwise default to true (faster)
             UseFasterThumbnails = obj["useFasterThumbnails"]?.GetValue<bool?>() ??
                                   !(obj["useCorrectThumbnails"]?.GetValue<bool?>() ?? false);
-            DisableHoverEffects = obj["disableHoverEffects"]?.GetValue<bool?>() ?? false;
 
             var profilesFound = false;
             if (obj["gameProfiles"] is JsonObject profilesObj)
@@ -2018,7 +1860,6 @@ public sealed class UserConfigurationService
                 ["gameProfileCreationWarningAcknowledged"] = GameProfileCreationWarningAcknowledged,
                 ["useDarkVsMode"] = ColorTheme != ColorTheme.Light,
                 ["colorTheme"] = ColorTheme.ToString(),
-                ["currentThemeName"] = _currentThemeName,
                 ["modlistAutoLoadBehavior"] = ModlistAutoLoadBehavior.ToString(),
                 ["preferredModlistsTab"] = PreferredModlistsTab.ToString(),
                 ["modsSortMemberPath"] = _modsSortMemberPath,
@@ -2051,7 +1892,6 @@ public sealed class UserConfigurationService
                 ["themePalette"] = BuildThemePaletteJson(),
                 ["darkVsPalette"] = BuildThemePaletteJson(),
                 ["customThemePalette"] = BuildCustomThemePaletteJson(),
-                ["customThemes"] = BuildCustomThemesJson(),
                 ["selectedPreset"] = _selectedPresetName,
                 ["customShortcutPath"] = ActiveProfile.CustomShortcutPath,
                 ["cloudUploaderName"] = CloudUploaderName,
@@ -2060,7 +1900,6 @@ public sealed class UserConfigurationService
                 ["clientSettingsCleanupCompleted"] = ClientSettingsCleanupCompleted,
                 ["rebuiltModlistMigrationCompleted"] = RebuiltModlistMigrationCompleted,
                 ["useFasterThumbnails"] = UseFasterThumbnails,
-                ["disableHoverEffects"] = DisableHoverEffects,
                 ["gameProfiles"] = BuildGameProfilesJson()
             };
 
@@ -2292,20 +2131,6 @@ public sealed class UserConfigurationService
     private JsonObject BuildCustomThemePaletteJson()
     {
         return BuildPaletteJson(_customThemePaletteColors, GetDefaultPalette(ColorTheme.Custom));
-    }
-
-    private JsonObject BuildCustomThemesJson()
-    {
-        var result = new JsonObject();
-
-        foreach (var pair in _savedCustomThemes.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(pair.Key) || pair.Value.Count == 0) continue;
-
-            result[pair.Key] = BuildPaletteJson(pair.Value, GetDefaultPalette(ColorTheme.Custom));
-        }
-
-        return result;
     }
 
     private static JsonArray BuildStringListJson(List<string> strings)
@@ -2546,57 +2371,6 @@ public sealed class UserConfigurationService
         if (requiresSave) _hasPendingSave = true;
     }
 
-    private void LoadCustomThemes(JsonNode? node)
-    {
-        _savedCustomThemes.Clear();
-
-        if (node is not JsonObject obj) return;
-
-        foreach (var (name, paletteNode) in obj)
-        {
-            var normalizedName = NormalizeThemeName(name);
-            if (normalizedName is null || paletteNode is not JsonObject paletteObj)
-            {
-                _hasPendingSave = true;
-                continue;
-            }
-
-            var defaults = GetDefaultPalette(ColorTheme.Custom);
-            var requiresSave = false;
-            var processedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var palette = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var pair in paletteObj)
-            {
-                var key = pair.Key;
-                if (string.IsNullOrWhiteSpace(key)) continue;
-
-                var normalizedKey = key.Trim();
-                var value = GetOptionalString(pair.Value);
-                if (!TryNormalizeHexColor(value, out var normalized))
-                {
-                    requiresSave = true;
-                    continue;
-                }
-
-                palette[normalizedKey] = normalized;
-                processedKeys.Add(normalizedKey);
-            }
-
-            foreach (var pair in defaults)
-            {
-                if (!processedKeys.Contains(pair.Key)) requiresSave = true;
-
-                if (!palette.ContainsKey(pair.Key)) palette[pair.Key] = pair.Value;
-            }
-
-            if (palette.Count == 0) continue;
-
-            _savedCustomThemes[normalizedName] = palette;
-            if (requiresSave) _hasPendingSave = true;
-        }
-    }
-
     private void LoadModUsageTracking(JsonNode? node, GameProfileState profile)
     {
         profile.LongRunningSessionCount = 0;
@@ -2662,15 +2436,6 @@ public sealed class UserConfigurationService
     {
         var defaults = GetDefaultPalette(ColorTheme.Custom);
         _customThemePaletteColors.Clear();
-
-        if (!string.IsNullOrWhiteSpace(_currentThemeName)
-            && _savedCustomThemes.TryGetValue(_currentThemeName, out var savedPalette))
-        {
-            foreach (var pair in savedPalette) _customThemePaletteColors[pair.Key] = pair.Value;
-
-            EnsurePaletteDefaults(_customThemePaletteColors, defaults);
-            return true;
-        }
 
         var requiresSave = false;
         bool propertyFound;
@@ -2808,26 +2573,6 @@ public sealed class UserConfigurationService
         foreach (var pair in defaults)
             if (!palette.ContainsKey(pair.Key))
                 palette[pair.Key] = pair.Value;
-    }
-
-    private static string? NormalizeThemeName(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return null;
-
-        return name.Trim();
-    }
-
-    private static bool TryGetBuiltInTheme(string name, out ColorTheme theme)
-    {
-        foreach (var pair in BuiltInThemeNames)
-            if (string.Equals(pair.Value, name, StringComparison.OrdinalIgnoreCase))
-            {
-                theme = pair.Key;
-                return true;
-            }
-
-        theme = ColorTheme.Custom;
-        return false;
     }
 
     private static IReadOnlyDictionary<string, string> GetDefaultPalette(ColorTheme theme)

@@ -5,7 +5,6 @@
     xmlns:converters="clr-namespace:VintageStoryModManager.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:design="clr-namespace:VintageStoryModManager.Design"
-    xmlns:helpers="clr-namespace:VintageStoryModManager.Helpers"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="http://schemas.modernwpf.com/2019"
     xmlns:views="clr-namespace:VintageStoryModManager.Views"
@@ -420,6 +419,38 @@
                                     Tag="{Binding ModId}"
                                     UseLayoutRounding="True">
 
+                                    <Border.Triggers>
+                                        <EventTrigger RoutedEvent="UIElement.MouseEnter">
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation
+                                                        Storyboard.TargetName="ModCardHoverOverlay"
+                                                        Storyboard.TargetProperty="Opacity"
+                                                        To="0.10"
+                                                        Duration="0:0:0.15">
+                                                        <DoubleAnimation.EasingFunction>
+                                                            <QuadraticEase EasingMode="EaseOut" />
+                                                        </DoubleAnimation.EasingFunction>
+                                                    </DoubleAnimation>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                        <EventTrigger RoutedEvent="UIElement.MouseLeave">
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation
+                                                        Storyboard.TargetName="ModCardHoverOverlay"
+                                                        Storyboard.TargetProperty="Opacity"
+                                                        To="0"
+                                                        Duration="0:0:0.2">
+                                                        <DoubleAnimation.EasingFunction>
+                                                            <QuadraticEase EasingMode="EaseIn" />
+                                                        </DoubleAnimation.EasingFunction>
+                                                    </DoubleAnimation>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Border.Triggers>
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="*" />
@@ -489,48 +520,7 @@
                                             Background="{DynamicResource Brush.ModCard.Hover.Bright}"
                                             CornerRadius="8"
                                             IsHitTestVisible="False"
-                                            Opacity="0">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Style.Triggers>
-                                                        <MultiDataTrigger>
-                                                            <MultiDataTrigger.Conditions>
-                                                                <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
-                                                                <Condition Binding="{Binding IsMouseOver, ElementName=ModCardBorder}" Value="True" />
-                                                            </MultiDataTrigger.Conditions>
-                                                            <MultiDataTrigger.EnterActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard>
-                                                                        <DoubleAnimation
-                                                                            Storyboard.TargetProperty="Opacity"
-                                                                            To="0.10"
-                                                                            Duration="0:0:0.15">
-                                                                            <DoubleAnimation.EasingFunction>
-                                                                                <QuadraticEase EasingMode="EaseOut" />
-                                                                            </DoubleAnimation.EasingFunction>
-                                                                        </DoubleAnimation>
-                                                                    </Storyboard>
-                                                                </BeginStoryboard>
-                                                            </MultiDataTrigger.EnterActions>
-                                                            <MultiDataTrigger.ExitActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard>
-                                                                        <DoubleAnimation
-                                                                            Storyboard.TargetProperty="Opacity"
-                                                                            To="0"
-                                                                            Duration="0:0:0.2">
-                                                                            <DoubleAnimation.EasingFunction>
-                                                                                <QuadraticEase EasingMode="EaseIn" />
-                                                                            </DoubleAnimation.EasingFunction>
-                                                                        </DoubleAnimation>
-                                                                    </Storyboard>
-                                                                </BeginStoryboard>
-                                                            </MultiDataTrigger.ExitActions>
-                                                        </MultiDataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                        </Border>
+                                            Opacity="0" />
 
                                         <!--  Abbreviation Text - DISABLED: Kept for future use but not displayed  -->
                                         <!--<Viewbox
@@ -612,21 +602,15 @@
                                                         <Style BasedOn="{StaticResource ModCardButtonStyle}" TargetType="{x:Type Button}">
                                                             <Setter Property="Opacity" Value="0" />
                                                             <Style.Triggers>
-                                                                <!-- Animated transition when hover effects are enabled -->
-                                                                <MultiDataTrigger>
-                                                                    <MultiDataTrigger.Conditions>
-                                                                        <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
-                                                                        <Condition Value="True">
-                                                                            <Condition.Binding>
-                                                                                <MultiBinding Converter="{StaticResource FavoriteButtonShouldShow}">
-                                                                                    <Binding ElementName="ModCardBorder" Path="IsMouseOver" />
-                                                                                    <Binding Path="ModId" />
-                                                                                    <Binding Path="DataContext.FavoriteMods" RelativeSource="{RelativeSource AncestorType={x:Type UserControl}}" />
-                                                                                </MultiBinding>
-                                                                            </Condition.Binding>
-                                                                        </Condition>
-                                                                    </MultiDataTrigger.Conditions>
-                                                                    <MultiDataTrigger.EnterActions>
+                                                                <DataTrigger Value="True">
+                                                                    <DataTrigger.Binding>
+                                                                        <MultiBinding Converter="{StaticResource FavoriteButtonShouldShow}">
+                                                                            <Binding ElementName="ModCardBorder" Path="IsMouseOver" />
+                                                                            <Binding Path="ModId" />
+                                                                            <Binding Path="DataContext.FavoriteMods" RelativeSource="{RelativeSource AncestorType={x:Type UserControl}}" />
+                                                                        </MultiBinding>
+                                                                    </DataTrigger.Binding>
+                                                                    <DataTrigger.EnterActions>
                                                                         <BeginStoryboard>
                                                                             <Storyboard>
                                                                                 <DoubleAnimation
@@ -639,8 +623,8 @@
                                                                                 </DoubleAnimation>
                                                                             </Storyboard>
                                                                         </BeginStoryboard>
-                                                                    </MultiDataTrigger.EnterActions>
-                                                                    <MultiDataTrigger.ExitActions>
+                                                                    </DataTrigger.EnterActions>
+                                                                    <DataTrigger.ExitActions>
                                                                         <BeginStoryboard>
                                                                             <Storyboard>
                                                                                 <DoubleAnimation
@@ -653,24 +637,8 @@
                                                                                 </DoubleAnimation>
                                                                             </Storyboard>
                                                                         </BeginStoryboard>
-                                                                    </MultiDataTrigger.ExitActions>
-                                                                </MultiDataTrigger>
-                                                                <!-- Immediate transition when hover effects are disabled -->
-                                                                <MultiDataTrigger>
-                                                                    <MultiDataTrigger.Conditions>
-                                                                        <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="True" />
-                                                                        <Condition Value="True">
-                                                                            <Condition.Binding>
-                                                                                <MultiBinding Converter="{StaticResource FavoriteButtonShouldShow}">
-                                                                                    <Binding ElementName="ModCardBorder" Path="IsMouseOver" />
-                                                                                    <Binding Path="ModId" />
-                                                                                    <Binding Path="DataContext.FavoriteMods" RelativeSource="{RelativeSource AncestorType={x:Type UserControl}}" />
-                                                                                </MultiBinding>
-                                                                            </Condition.Binding>
-                                                                        </Condition>
-                                                                    </MultiDataTrigger.Conditions>
-                                                                    <Setter Property="Opacity" Value="0.9" />
-                                                                </MultiDataTrigger>
+                                                                    </DataTrigger.ExitActions>
+                                                                </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </Button.Style>
@@ -718,20 +686,14 @@
                                                         <Style BasedOn="{StaticResource ModCardButtonStyle}" TargetType="{x:Type Button}">
                                                             <Setter Property="Opacity" Value="0" />
                                                             <Style.Triggers>
-                                                                <!-- Animated transition when hover effects are enabled -->
-                                                                <MultiDataTrigger>
-                                                                    <MultiDataTrigger.Conditions>
-                                                                        <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
-                                                                        <Condition Value="True">
-                                                                            <Condition.Binding>
-                                                                                <MultiBinding Converter="{StaticResource InstallButtonShouldShow}">
-                                                                                    <Binding ElementName="ModCardBorder" Path="IsMouseOver" />
-                                                                                    <Binding Path="IsInstalled" />
-                                                                                </MultiBinding>
-                                                                            </Condition.Binding>
-                                                                        </Condition>
-                                                                    </MultiDataTrigger.Conditions>
-                                                                    <MultiDataTrigger.EnterActions>
+                                                                <DataTrigger Value="True">
+                                                                    <DataTrigger.Binding>
+                                                                        <MultiBinding Converter="{StaticResource InstallButtonShouldShow}">
+                                                                            <Binding ElementName="ModCardBorder" Path="IsMouseOver" />
+                                                                            <Binding Path="IsInstalled" />
+                                                                        </MultiBinding>
+                                                                    </DataTrigger.Binding>
+                                                                    <DataTrigger.EnterActions>
                                                                         <BeginStoryboard>
                                                                             <Storyboard>
                                                                                 <DoubleAnimation
@@ -744,8 +706,8 @@
                                                                                 </DoubleAnimation>
                                                                             </Storyboard>
                                                                         </BeginStoryboard>
-                                                                    </MultiDataTrigger.EnterActions>
-                                                                    <MultiDataTrigger.ExitActions>
+                                                                    </DataTrigger.EnterActions>
+                                                                    <DataTrigger.ExitActions>
                                                                         <BeginStoryboard>
                                                                             <Storyboard>
                                                                                 <DoubleAnimation
@@ -758,23 +720,8 @@
                                                                                 </DoubleAnimation>
                                                                             </Storyboard>
                                                                         </BeginStoryboard>
-                                                                    </MultiDataTrigger.ExitActions>
-                                                                </MultiDataTrigger>
-                                                                <!-- Immediate transition when hover effects are disabled -->
-                                                                <MultiDataTrigger>
-                                                                    <MultiDataTrigger.Conditions>
-                                                                        <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="True" />
-                                                                        <Condition Value="True">
-                                                                            <Condition.Binding>
-                                                                                <MultiBinding Converter="{StaticResource InstallButtonShouldShow}">
-                                                                                    <Binding ElementName="ModCardBorder" Path="IsMouseOver" />
-                                                                                    <Binding Path="IsInstalled" />
-                                                                                </MultiBinding>
-                                                                            </Condition.Binding>
-                                                                        </Condition>
-                                                                    </MultiDataTrigger.Conditions>
-                                                                    <Setter Property="Opacity" Value="1" />
-                                                                </MultiDataTrigger>
+                                                                    </DataTrigger.ExitActions>
+                                                                </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </Button.Style>
