@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="clr-namespace:VintageStoryModManager.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="clr-namespace:VintageStoryModManager.Helpers"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignHeight="32"
     d:DesignWidth="160"
@@ -72,10 +73,14 @@
                         </Border>
                     </Grid>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                            </MultiDataTrigger.Conditions>
                             <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource Brush.ComboBox.Background.Hover}" />
                             <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Dark}" />
-                        </Trigger>
+                        </MultiDataTrigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="{DynamicResource Brush.Button.Bevel.Dark}" />
                             <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource Brush.Button.Primary.Background.Normal}" />
@@ -119,9 +124,13 @@
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=(helpers:HoverEffectHelper.DisableHoverEffects)}" Value="False" />
+                                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True" />
+                                                    </MultiDataTrigger.Conditions>
                                                     <Setter Property="Background" Value="{DynamicResource Brush.ComboBox.Item.Background.Hover}" />
-                                                </Trigger>
+                                                </MultiDataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>

@@ -1,0 +1,40 @@
+<Window x:Class="VintageStoryModManager.Views.Dialogs.ThemeNameDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Save Theme"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner"
+        MinWidth="320"
+        MinHeight="160"
+        ResizeMode="NoResize"
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <TextBlock Text="Enter a name for the theme:" Margin="0,0,0,8" />
+        <TextBox x:Name="ThemeNameTextBox"
+                 Grid.Row="1"
+                 MinWidth="260"
+                 Margin="0,0,0,12"
+                 Text="{Binding ThemeName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+            <Button x:Name="SaveButton"
+                    Width="88"
+                    Height="30"
+                    Margin="0,0,8,0"
+                    Content="Save"
+                    IsDefault="True"
+                    Click="OkButton_OnClick" />
+            <Button Width="88"
+                    Height="30"
+                    Content="Cancel"
+                    IsCancel="True"
+                    Click="CancelButton_OnClick" />
+        </StackPanel>
+    </Grid>
+</Window>
