@@ -1,0 +1,217 @@
+<Window x:Class="VintageStoryModManager.Views.Dialogs.ManageCategoriesDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Manage Categories"
+        Width="500"
+        Height="450"
+        MinWidth="400"
+        MinHeight="350"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        WindowStyle="SingleBorderWindow"
+        ShowInTaskbar="False"
+        Background="{DynamicResource Brush.Window.Shell.Background.Solid}">
+    <Grid Margin="16"
+          Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+          TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Global Categories Section -->
+        <TextBlock Grid.Row="0"
+                   Text="Global Categories (shared across all profiles)"
+                   FontSize="14"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,8"
+                   Foreground="{DynamicResource Brush.Text.Primary}" />
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <ListBox x:Name="GlobalCategoriesListBox"
+                     Grid.Column="0"
+                     Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                     BorderBrush="{DynamicResource Brush.Button.Bevel.Light}"
+                     BorderThickness="1"
+                     SelectionMode="Single">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="{x:Type ListBoxItem}">
+                        <Setter Property="Padding" Value="12,8" />
+                        <Setter Property="FontSize" Value="13" />
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                    <Border x:Name="Bd"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Accent.Primary}" />
+                                            <Setter Property="Foreground" Value="White" />
+                                        </Trigger>
+                                        <MultiTrigger>
+                                            <MultiTrigger.Conditions>
+                                                <Condition Property="IsMouseOver" Value="True" />
+                                                <Condition Property="IsSelected" Value="False" />
+                                            </MultiTrigger.Conditions>
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Panel.Primary.Background.Solid}" />
+                                        </MultiTrigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                       Text="(default)"
+                                       FontStyle="Italic"
+                                       Opacity="0.6"
+                                       Margin="8,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Visibility="{Binding IsDefault, Converter={StaticResource IMM.VisibleWhenTrueConverter}}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Top">
+                <Button x:Name="AddGlobalButton"
+                        Content="Add"
+                        MinWidth="70"
+                        Padding="8,6"
+                        Margin="0,0,0,4"
+                        Click="AddGlobalButton_OnClick" />
+                <Button x:Name="RenameGlobalButton"
+                        Content="Rename"
+                        MinWidth="70"
+                        Padding="8,6"
+                        Margin="0,0,0,4"
+                        Click="RenameGlobalButton_OnClick" />
+                <Button x:Name="DeleteGlobalButton"
+                        Content="Delete"
+                        MinWidth="70"
+                        Padding="8,6"
+                        Click="DeleteGlobalButton_OnClick" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Profile Categories Section -->
+        <TextBlock Grid.Row="2"
+                   Text="Profile Categories (only for current profile)"
+                   FontSize="14"
+                   FontWeight="SemiBold"
+                   Margin="0,16,0,8"
+                   Foreground="{DynamicResource Brush.Text.Primary}" />
+
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <ListBox x:Name="ProfileCategoriesListBox"
+                     Grid.Column="0"
+                     Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                     BorderBrush="{DynamicResource Brush.Button.Bevel.Light}"
+                     BorderThickness="1"
+                     SelectionMode="Single">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="{x:Type ListBoxItem}">
+                        <Setter Property="Padding" Value="12,8" />
+                        <Setter Property="FontSize" Value="13" />
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                    <Border x:Name="Bd"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Accent.Primary}" />
+                                            <Setter Property="Foreground" Value="White" />
+                                        </Trigger>
+                                        <MultiTrigger>
+                                            <MultiTrigger.Conditions>
+                                                <Condition Property="IsMouseOver" Value="True" />
+                                                <Condition Property="IsSelected" Value="False" />
+                                            </MultiTrigger.Conditions>
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Panel.Primary.Background.Solid}" />
+                                        </MultiTrigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Name}" />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Top">
+                <Button x:Name="AddProfileButton"
+                        Content="Add"
+                        MinWidth="70"
+                        Padding="8,6"
+                        Margin="0,0,0,4"
+                        Click="AddProfileButton_OnClick" />
+                <Button x:Name="RenameProfileButton"
+                        Content="Rename"
+                        MinWidth="70"
+                        Padding="8,6"
+                        Margin="0,0,0,4"
+                        Click="RenameProfileButton_OnClick" />
+                <Button x:Name="DeleteProfileButton"
+                        Content="Delete"
+                        MinWidth="70"
+                        Padding="8,6"
+                        Click="DeleteProfileButton_OnClick" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Close Button -->
+        <Button x:Name="CloseButton"
+                Grid.Row="4"
+                Content="Close"
+                HorizontalAlignment="Right"
+                MinWidth="80"
+                Padding="12,8"
+                Margin="0,16,0,0"
+                IsCancel="True"
+                Click="CloseButton_OnClick" />
+    </Grid>
+</Window>

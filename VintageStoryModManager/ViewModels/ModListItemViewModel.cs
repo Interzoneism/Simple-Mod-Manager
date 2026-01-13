@@ -78,6 +78,11 @@ public sealed class ModListItemViewModel : ObservableObject
     // Cached tag display string to avoid repeated string.Join allocations
     private string? _cachedDatabaseTagsDisplay;
 
+    // Category grouping support
+    private string _categoryId = Models.ModCategory.UncategorizedId;
+    private string _categoryName = Models.ModCategory.UncategorizedName;
+    private int _categorySortOrder = int.MaxValue;
+
     // Property change batching support
     private int _propertyChangeSuspendCount;
     private readonly HashSet<string> _pendingPropertyChanges = new();
@@ -659,6 +664,68 @@ public sealed class ModListItemViewModel : ObservableObject
         get => _isSelected;
         set => SetProperty(ref _isSelected, value);
     }
+
+    #region Category Properties
+
+    /// <summary>
+    ///     The ID of the category this mod is assigned to.
+    /// </summary>
+    public string CategoryId
+    {
+        get => _categoryId;
+        private set
+        {
+            if (SetProperty(ref _categoryId, value))
+                OnPropertyChanged(nameof(CategoryGroupKey));
+        }
+    }
+
+    /// <summary>
+    ///     The display name of the category this mod is assigned to.
+    /// </summary>
+    public string CategoryName
+    {
+        get => _categoryName;
+        private set
+        {
+            if (SetProperty(ref _categoryName, value))
+                OnPropertyChanged(nameof(CategoryGroupKey));
+        }
+    }
+
+    /// <summary>
+    ///     The sort order of the category (lower values appear first).
+    /// </summary>
+    public int CategorySortOrder
+    {
+        get => _categorySortOrder;
+        private set
+        {
+            if (SetProperty(ref _categorySortOrder, value))
+                OnPropertyChanged(nameof(CategoryGroupKey));
+        }
+    }
+
+    /// <summary>
+    ///     Composite key for grouping by category. Format: "{Order:D10}|{Name}"
+    ///     This ensures categories are sorted by order, then by name for display.
+    /// </summary>
+    public string CategoryGroupKey => $"{_categorySortOrder:D10}|{_categoryName}";
+
+    /// <summary>
+    ///     Updates the category assignment for this mod.
+    /// </summary>
+    public void UpdateCategory(string categoryId, string categoryName, int categorySortOrder)
+    {
+        using (SuspendPropertyChangeNotifications())
+        {
+            CategoryId = categoryId ?? Models.ModCategory.UncategorizedId;
+            CategoryName = categoryName ?? Models.ModCategory.UncategorizedName;
+            CategorySortOrder = categorySortOrder;
+        }
+    }
+
+    #endregion
 
     public void RefreshInternetAccessDependentState()
     {

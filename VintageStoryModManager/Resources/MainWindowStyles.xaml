@@ -10,6 +10,7 @@
     <converters:BooleanToVisibilityConverter x:Key="IMM.VisibleWhenTrueConverter" />
     <converters:BooleanToVisibilityConverter x:Key="IMM.VisibleWhenFalseConverter" IsInverted="True" />
     <converters:BooleanToVisibilityConverter x:Key="IMM.HiddenWhenFalseConverter" UseHidden="True" />
+    <converters:CategoryNameConverter x:Key="IMM.CategoryNameConverter" />
     <Thickness x:Key="IMM.RowPaddingBase">0,0,0,0</Thickness>
     <sys:Double x:Key="IMM.NormalRowHeightOffset">10</sys:Double>
     <sys:Double x:Key="IMM.CompactRowHeightOffset">-12</sys:Double>
@@ -381,31 +382,33 @@
 
                         <Popup
                             x:Name="SubMenuPopup"
-                            Margin="0,12,0,12"
                             AllowsTransparency="True"
                             Focusable="False"
-                            HorizontalOffset="2"
+                            HorizontalOffset="-10"
                             IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
                             Placement="Right"
                             PlacementTarget="{Binding ElementName=templateRoot}"
                             VerticalOffset="-4">
 
-                            <Border
-                                MinWidth="{Binding ActualWidth, ElementName=templateRoot}"
-                                Margin="0,0,0,4"
-                                Background="{DynamicResource Brush.Menu.Item.Background.Hover}"
-                                BorderBrush="{DynamicResource Brush.Menu.Border}"
-                                BorderThickness="1,1,1,1"
-                                CornerRadius="4"
-                                SnapsToDevicePixels="True">
-                                <ScrollViewer
-                                    CanContentScroll="False"
-                                    Focusable="False"
-                                    HorizontalScrollBarVisibility="Hidden"
-                                    VerticalScrollBarVisibility="Auto">
-                                    <ItemsPresenter Margin="4" />
-                                </ScrollViewer>
-                            </Border>
+                            <Grid>
+                                <Border Background="#01000000" />
+                                <Border
+                                    MinWidth="{Binding ActualWidth, ElementName=templateRoot}"
+                                    Margin="12,0,0,0"
+                                    Background="{DynamicResource Brush.Menu.Item.Background.Hover}"
+                                    BorderBrush="{DynamicResource Brush.Menu.Border}"
+                                    BorderThickness="1,1,1,1"
+                                    CornerRadius="4"
+                                    SnapsToDevicePixels="True">
+                                    <ScrollViewer
+                                        CanContentScroll="False"
+                                        Focusable="False"
+                                        HorizontalScrollBarVisibility="Hidden"
+                                        VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter Margin="4" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Grid>
                         </Popup>
                     </Grid>
 
@@ -429,7 +432,7 @@
                         <Trigger Property="Role" Value="TopLevelHeader">
                             <Setter TargetName="SubMenuPopup" Property="Placement" Value="Bottom" />
                             <Setter TargetName="SubMenuPopup" Property="HorizontalOffset" Value="0" />
-                            <Setter TargetName="SubMenuPopup" Property="VerticalOffset" Value="0" />
+                            <Setter TargetName="SubMenuPopup" Property="VerticalOffset" Value="-8" />
                             <Setter TargetName="ArrowGlyph" Property="Visibility" Value="Collapsed" />
                         </Trigger>
 

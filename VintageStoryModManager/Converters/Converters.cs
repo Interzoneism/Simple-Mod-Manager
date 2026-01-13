@@ -484,3 +484,28 @@ public class InstallButtonShouldShowConverter : IMultiValueConverter
         throw new NotSupportedException();
     }
 }
+
+/// <summary>
+/// Extracts the category name from a CategoryGroupKey.
+/// The CategoryGroupKey format is "{Order:D10}|{CategoryName}".
+/// </summary>
+public class CategoryNameConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not string groupKey || string.IsNullOrEmpty(groupKey))
+            return string.Empty;
+
+        // The format is "{Order:D10}|{CategoryName}"
+        var pipeIndex = groupKey.IndexOf('|');
+        if (pipeIndex >= 0 && pipeIndex < groupKey.Length - 1)
+            return groupKey.Substring(pipeIndex + 1);
+
+        return groupKey;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+}
