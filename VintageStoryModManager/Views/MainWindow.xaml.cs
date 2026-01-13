@@ -1418,6 +1418,169 @@ public partial class MainWindow : Window
         ShowCustomThemeEditor();
     }
 
+    private void ManageCategoriesMenuItem_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel == null) return;
+
+        var dialog = new Dialogs.ManageCategoriesDialog(_viewModel)
+        {
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+
+        dialog.ShowDialog();
+    }
+
+    private void ModsDataGridRow_OnMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not DataGridRow row) return;
+        if (_viewModel == null) return;
+
+        // Get the mod from the row's data context
+        var mod = row.DataContext as ModListItemViewModel;
+        if (mod == null) return;
+
+        ShowCategorySelectionDialog(mod);
+
+        e.Handled = true;
+    }
+
+    private void ShowCategorySelectionDialog(ModListItemViewModel mod)
+    {
+        if (_viewModel == null) return;
+
+        var categories = _viewModel.GetEffectiveCategories();
+
+        var dialog = new Dialogs.CategorySelectionDialog(
+            categories,
+            mod.CategoryId,
+            categoryName => _viewModel.CreateCategory(categoryName))
+        {
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+
+        if (dialog.ShowDialog() == true && dialog.SelectedCategoryId != null)
+        {
+            _viewModel.AssignModToCategory(mod, dialog.SelectedCategoryId);
+        }
+    }
+
+    #region Category Drag-Drop
+
+    private Point _dragStartPoint;
+    private bool _isDragging;
+
+    private void ModsDataGridRow_OnMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        if (sender is not DataGridRow row) return;
+        if (_viewModel == null || !_viewModel.IsGroupedByCategory) return;
+
+        var mod = row.DataContext as ModListItemViewModel;
+        if (mod == null) return;
+
+        // Check if we've moved enough to start a drag
+        var currentPosition = e.GetPosition(null);
+        var diff = _dragStartPoint - currentPosition;
+
+        if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+            Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+        {
+            if (_isDragging) return;
+            _isDragging = true;
+
+            // Create drag data
+            var dragData = new System.Windows.DataObject("ModCategoryDrag", mod);
+
+            // Start drag-drop
+            DragDrop.DoDragDrop(row, dragData, System.Windows.DragDropEffects.Move);
+
+            _isDragging = false;
+        }
+    }
+
+    private void ModsDataGrid_OnDragOver(object sender, System.Windows.DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent("ModCategoryDrag"))
+        {
+            e.Effects = System.Windows.DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
+        // Check if we're over a category header
+        var categoryGroupKey = GetCategoryGroupKeyFromDropTarget(e.OriginalSource as DependencyObject);
+        if (categoryGroupKey != null)
+        {
+            e.Effects = System.Windows.DragDropEffects.Move;
+        }
+        else
+        {
+            e.Effects = System.Windows.DragDropEffects.None;
+        }
+
+        e.Handled = true;
+    }
+
+    private void ModsDataGrid_OnDrop(object sender, System.Windows.DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent("ModCategoryDrag")) return;
+        if (_viewModel == null) return;
+
+        var mod = e.Data.GetData("ModCategoryDrag") as ModListItemViewModel;
+        if (mod == null) return;
+
+        // Get the category from the drop target
+        var categoryGroupKey = GetCategoryGroupKeyFromDropTarget(e.OriginalSource as DependencyObject);
+        if (categoryGroupKey == null) return;
+
+        // Extract category ID from the group key
+        // The CategoryGroupKey format is "{Order:D10}|{CategoryName}"
+        // We need to find the category by name
+        var pipeIndex = categoryGroupKey.IndexOf('|');
+        if (pipeIndex < 0) return;
+
+        var categoryName = categoryGroupKey.Substring(pipeIndex + 1);
+        var categories = _viewModel.GetEffectiveCategories();
+        var targetCategory = categories.FirstOrDefault(c =>
+            string.Equals(c.Name, categoryName, StringComparison.OrdinalIgnoreCase));
+
+        if (targetCategory != null)
+        {
+            _viewModel.AssignModToCategory(mod, targetCategory.Id);
+        }
+
+        e.Handled = true;
+    }
+
+    private string? GetCategoryGroupKeyFromDropTarget(DependencyObject? source)
+    {
+        if (source == null) return null;
+
+        // Walk up the visual tree to find a Border with a Tag containing the category group key
+        var current = source;
+        while (current != null)
+        {
+            if (current is Border border && border.Tag is string groupKey && groupKey.Contains('|'))
+            {
+                return groupKey;
+            }
+
+            // Also check if we're in a GroupItem
+            if (current is GroupItem groupItem && groupItem.Content is System.Windows.Data.CollectionViewGroup group)
+            {
+                return group.Name as string;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    #endregion
+
     private void UpdateThemeMenuSelection(ColorTheme theme, string? themeName = null)
     {
         if (VintageStoryThemeMenuItem is not null)
@@ -4764,6 +4927,9 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
+
+        // Capture drag start point for category drag-drop
+        _dragStartPoint = e.GetPosition(null);
 
         if (ShouldIgnoreRowSelection(e.OriginalSource as DependencyObject)) return;
 

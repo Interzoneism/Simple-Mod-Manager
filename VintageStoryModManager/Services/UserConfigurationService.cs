@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
+using VintageStoryModManager.Models;
 using VintageStoryModManager.ViewModels;
 
 namespace VintageStoryModManager.Services;
@@ -143,6 +144,8 @@ public sealed class UserConfigurationService
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, string> _themePaletteColors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<ModCategory> _globalModCategories = new();
+    private bool _isGroupedByCategory;
     private bool _hasPendingModConfigPathSave;
     private bool _hasPendingSave;
     private bool _isModUsageTrackingDisabled;
@@ -339,6 +342,274 @@ public sealed class UserConfigurationService
     public bool UseFasterThumbnails { get; private set; } = true;
 
     public bool DisableHoverEffects { get; private set; }
+
+    /// <summary>
+    ///     Whether the mod list should be grouped by category.
+    /// </summary>
+    public bool IsGroupedByCategory
+    {
+        get => _isGroupedByCategory;
+        set
+        {
+            if (_isGroupedByCategory == value) return;
+            _isGroupedByCategory = value;
+            Save();
+        }
+    }
+
+    #region Mod Categories
+
+    /// <summary>
+    ///     Gets the global mod categories (shared across all profiles).
+    /// </summary>
+    public IReadOnlyList<ModCategory> GetGlobalModCategories()
+    {
+        if (_globalModCategories.Count == 0)
+            return new[] { ModCategory.CreateDefault() };
+
+        return _globalModCategories.OrderBy(c => c.Order).ToArray();
+    }
+
+    /// <summary>
+    ///     Gets all effective categories for the current profile (global + profile overrides).
+    /// </summary>
+    public IReadOnlyList<ModCategory> GetEffectiveModCategories()
+    {
+        var result = new Dictionary<string, ModCategory>(StringComparer.OrdinalIgnoreCase);
+
+        // Add global categories
+        foreach (var category in _globalModCategories)
+            result[category.Id] = category.Clone();
+
+        // Add/override with profile-specific categories
+        foreach (var category in ActiveProfile.ProfileCategoryOverrides)
+        {
+            var clone = category.Clone();
+            clone.IsProfileSpecific = true;
+            result[category.Id] = clone;
+        }
+
+        // Ensure Uncategorized always exists
+        if (!result.ContainsKey(ModCategory.UncategorizedId))
+            result[ModCategory.UncategorizedId] = ModCategory.CreateDefault();
+
+        return result.Values.OrderBy(c => c.Order).ToArray();
+    }
+
+    /// <summary>
+    ///     Adds a new global category.
+    /// </summary>
+    public ModCategory AddGlobalCategory(string name)
+    {
+        var maxOrder = _globalModCategories.Count > 0
+            ? _globalModCategories.Max(c => c.Order)
+            : 0;
+
+        var category = new ModCategory(name, maxOrder + 1);
+        _globalModCategories.Add(category);
+        Save();
+        return category;
+    }
+
+    /// <summary>
+    ///     Adds a profile-specific category.
+    /// </summary>
+    public ModCategory AddProfileCategory(string name)
+    {
+        var allCategories = GetEffectiveModCategories();
+        var maxOrder = allCategories.Count > 0
+            ? allCategories.Max(c => c.Order)
+            : 0;
+
+        var category = new ModCategory(name, maxOrder + 1) { IsProfileSpecific = true };
+        ActiveProfile.ProfileCategoryOverrides.Add(category);
+        Save();
+        return category;
+    }
+
+    /// <summary>
+    ///     Renames a category (global or profile-specific).
+    /// </summary>
+    public bool RenameCategory(string categoryId, string newName)
+    {
+        if (string.IsNullOrWhiteSpace(newName)) return false;
+        if (string.Equals(categoryId, ModCategory.UncategorizedId, StringComparison.OrdinalIgnoreCase))
+            return false; // Cannot rename default category
+
+        // Try profile overrides first
+        var profileCategory = ActiveProfile.ProfileCategoryOverrides
+            .FirstOrDefault(c => string.Equals(c.Id, categoryId, StringComparison.OrdinalIgnoreCase));
+
+        if (profileCategory != null)
+        {
+            profileCategory.Name = newName;
+            Save();
+            return true;
+        }
+
+        // Try global categories
+        var globalCategory = _globalModCategories
+            .FirstOrDefault(c => string.Equals(c.Id, categoryId, StringComparison.OrdinalIgnoreCase));
+
+        if (globalCategory != null)
+        {
+            globalCategory.Name = newName;
+            Save();
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    ///     Deletes a category and moves its mods to Uncategorized.
+    /// </summary>
+    public bool DeleteCategory(string categoryId)
+    {
+        if (string.Equals(categoryId, ModCategory.UncategorizedId, StringComparison.OrdinalIgnoreCase))
+            return false; // Cannot delete default category
+
+        var removed = false;
+
+        // Remove from profile overrides
+        removed |= ActiveProfile.ProfileCategoryOverrides
+            .RemoveAll(c => string.Equals(c.Id, categoryId, StringComparison.OrdinalIgnoreCase)) > 0;
+
+        // Remove from global categories
+        removed |= _globalModCategories
+            .RemoveAll(c => string.Equals(c.Id, categoryId, StringComparison.OrdinalIgnoreCase)) > 0;
+
+        if (removed)
+        {
+            // Move all mods in this category to Uncategorized
+            var modsToReassign = ActiveProfile.ModCategoryAssignments
+                .Where(kvp => string.Equals(kvp.Value, categoryId, StringComparison.OrdinalIgnoreCase))
+                .Select(kvp => kvp.Key)
+                .ToArray();
+
+            foreach (var modId in modsToReassign)
+                ActiveProfile.ModCategoryAssignments[modId] = ModCategory.UncategorizedId;
+
+            Save();
+        }
+
+        return removed;
+    }
+
+    /// <summary>
+    ///     Reorders categories by setting their Order values.
+    /// </summary>
+    public void ReorderCategories(IReadOnlyList<string> orderedCategoryIds)
+    {
+        var allCategories = GetEffectiveModCategories().ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
+
+        for (var i = 0; i < orderedCategoryIds.Count; i++)
+        {
+            var categoryId = orderedCategoryIds[i];
+            if (!allCategories.TryGetValue(categoryId, out var category)) continue;
+
+            // Update order in the source collection
+            if (category.IsProfileSpecific)
+            {
+                var profileCategory = ActiveProfile.ProfileCategoryOverrides
+                    .FirstOrDefault(c => string.Equals(c.Id, categoryId, StringComparison.OrdinalIgnoreCase));
+                if (profileCategory != null) profileCategory.Order = i;
+            }
+            else
+            {
+                var globalCategory = _globalModCategories
+                    .FirstOrDefault(c => string.Equals(c.Id, categoryId, StringComparison.OrdinalIgnoreCase));
+                if (globalCategory != null) globalCategory.Order = i;
+            }
+        }
+
+        Save();
+    }
+
+    /// <summary>
+    ///     Gets the category ID assigned to a mod.
+    /// </summary>
+    public string GetModCategoryAssignment(string modId)
+    {
+        if (string.IsNullOrWhiteSpace(modId)) return ModCategory.UncategorizedId;
+
+        return ActiveProfile.ModCategoryAssignments.TryGetValue(modId, out var categoryId)
+            ? categoryId
+            : ModCategory.UncategorizedId;
+    }
+
+    /// <summary>
+    ///     Assigns a mod to a category.
+    /// </summary>
+    public void SetModCategoryAssignment(string modId, string categoryId)
+    {
+        if (string.IsNullOrWhiteSpace(modId)) return;
+
+        var normalizedCategoryId = string.IsNullOrWhiteSpace(categoryId)
+            ? ModCategory.UncategorizedId
+            : categoryId;
+
+        if (string.Equals(normalizedCategoryId, ModCategory.UncategorizedId, StringComparison.OrdinalIgnoreCase))
+        {
+            // Remove assignment for uncategorized (it's the default)
+            if (ActiveProfile.ModCategoryAssignments.Remove(modId))
+                Save();
+        }
+        else
+        {
+            ActiveProfile.ModCategoryAssignments[modId] = normalizedCategoryId;
+            Save();
+        }
+    }
+
+    /// <summary>
+    ///     Assigns multiple mods to a category.
+    /// </summary>
+    public void SetModsCategoryAssignment(IEnumerable<string> modIds, string categoryId)
+    {
+        var normalizedCategoryId = string.IsNullOrWhiteSpace(categoryId)
+            ? ModCategory.UncategorizedId
+            : categoryId;
+
+        var isUncategorized = string.Equals(normalizedCategoryId, ModCategory.UncategorizedId,
+            StringComparison.OrdinalIgnoreCase);
+
+        var changed = false;
+        foreach (var modId in modIds)
+        {
+            if (string.IsNullOrWhiteSpace(modId)) continue;
+
+            if (isUncategorized)
+            {
+                changed |= ActiveProfile.ModCategoryAssignments.Remove(modId);
+            }
+            else
+            {
+                ActiveProfile.ModCategoryAssignments[modId] = normalizedCategoryId;
+                changed = true;
+            }
+        }
+
+        if (changed) Save();
+    }
+
+    /// <summary>
+    ///     Gets all mod category assignments for the current profile.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> GetAllModCategoryAssignments()
+    {
+        return new Dictionary<string, string>(ActiveProfile.ModCategoryAssignments, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    ///     Gets profile-specific category overrides.
+    /// </summary>
+    public IReadOnlyList<ModCategory> GetProfileCategoryOverrides()
+    {
+        return ActiveProfile.ProfileCategoryOverrides.ToArray();
+    }
+
+    #endregion
 
     public IReadOnlyList<string> GetGameProfileNames()
     {
@@ -561,6 +832,8 @@ public sealed class UserConfigurationService
         LoadBulkUpdateModExclusions(obj["bulkUpdateModExclusions"], profile.BulkUpdateModExclusions);
         LoadSkippedModVersions(obj["skippedModVersions"], profile.SkippedModVersions);
         LoadModUsageTracking(obj["modUsageTracking"], profile);
+        LoadModCategoryAssignments(obj["modCategoryAssignments"], profile.ModCategoryAssignments);
+        LoadProfileCategoryOverrides(obj["profileCategoryOverrides"], profile.ProfileCategoryOverrides);
     }
 
     private void ApplyLegacyProfileData(JsonObject root, GameProfileState profile)
@@ -1834,6 +2107,8 @@ public sealed class UserConfigurationService
             UseFasterThumbnails = obj["useFasterThumbnails"]?.GetValue<bool?>() ??
                                   !(obj["useCorrectThumbnails"]?.GetValue<bool?>() ?? false);
             DisableHoverEffects = obj["disableHoverEffects"]?.GetValue<bool?>() ?? false;
+            _isGroupedByCategory = obj["isGroupedByCategory"]?.GetValue<bool?>() ?? false;
+            LoadGlobalModCategories(obj["modCategories"]);
 
             var profilesFound = false;
             if (obj["gameProfiles"] is JsonObject profilesObj)
@@ -2061,6 +2336,8 @@ public sealed class UserConfigurationService
                 ["rebuiltModlistMigrationCompleted"] = RebuiltModlistMigrationCompleted,
                 ["useFasterThumbnails"] = UseFasterThumbnails,
                 ["disableHoverEffects"] = DisableHoverEffects,
+                ["isGroupedByCategory"] = _isGroupedByCategory,
+                ["modCategories"] = BuildCategoriesJson(_globalModCategories),
                 ["gameProfiles"] = BuildGameProfilesJson()
             };
 
@@ -2253,6 +2530,39 @@ public sealed class UserConfigurationService
         return result;
     }
 
+    private static JsonObject BuildModCategoryAssignmentsJson(IReadOnlyDictionary<string, string> source)
+    {
+        var result = new JsonObject();
+
+        foreach (var pair in source.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value)) continue;
+
+            result[pair.Key] = pair.Value;
+        }
+
+        return result;
+    }
+
+    private static JsonArray BuildCategoriesJson(IEnumerable<ModCategory> categories)
+    {
+        var result = new JsonArray();
+
+        foreach (var category in categories.OrderBy(c => c.Order))
+        {
+            if (string.IsNullOrWhiteSpace(category.Id) || string.IsNullOrWhiteSpace(category.Name)) continue;
+
+            result.Add(new JsonObject
+            {
+                ["id"] = category.Id,
+                ["name"] = category.Name,
+                ["order"] = category.Order
+            });
+        }
+
+        return result;
+    }
+
     private static JsonObject BuildModUsageTrackingJson(GameProfileState profile)
     {
         var counts = new JsonArray();
@@ -2345,7 +2655,9 @@ public sealed class UserConfigurationService
                 ["customShortcutPath"] = profile.CustomShortcutPath,
                 ["bulkUpdateModExclusions"] = BuildBulkUpdateModExclusionsJson(profile.BulkUpdateModExclusions),
                 ["skippedModVersions"] = BuildSkippedModVersionsJson(profile.SkippedModVersions),
-                ["modUsageTracking"] = BuildModUsageTrackingJson(profile)
+                ["modUsageTracking"] = BuildModUsageTrackingJson(profile),
+                ["modCategoryAssignments"] = BuildModCategoryAssignmentsJson(profile.ModCategoryAssignments),
+                ["profileCategoryOverrides"] = BuildCategoriesJson(profile.ProfileCategoryOverrides)
             };
 
             if (profile.RequiresDataDirectorySelection) profileObject["requiresDataDirectorySelection"] = true;
@@ -2443,6 +2755,68 @@ public sealed class UserConfigurationService
         }
 
         if (requiresSave) _hasPendingSave = true;
+    }
+
+    private void LoadModCategoryAssignments(JsonNode? node, Dictionary<string, string> target)
+    {
+        target.Clear();
+
+        if (node is not JsonObject obj) return;
+
+        foreach (var (key, value) in obj)
+        {
+            var normalizedModId = NormalizeModId(key);
+            if (normalizedModId is null) continue;
+
+            var categoryId = GetOptionalString(value);
+            if (string.IsNullOrWhiteSpace(categoryId)) continue;
+
+            if (target.ContainsKey(normalizedModId)) continue;
+
+            target[normalizedModId] = categoryId;
+        }
+    }
+
+    private void LoadProfileCategoryOverrides(JsonNode? node, List<ModCategory> target)
+    {
+        target.Clear();
+
+        if (node is not JsonArray array) return;
+
+        foreach (var item in array)
+        {
+            if (item is not JsonObject categoryObj) continue;
+
+            var id = GetOptionalString(categoryObj["id"]);
+            var name = GetOptionalString(categoryObj["name"]);
+
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name)) continue;
+
+            var order = categoryObj["order"]?.GetValue<int?>() ?? 0;
+
+            target.Add(new ModCategory(id, name, order, true));
+        }
+    }
+
+    private void LoadGlobalModCategories(JsonNode? node)
+    {
+        _globalModCategories.Clear();
+
+        if (node is not JsonArray array) return;
+
+        foreach (var item in array)
+        {
+            if (item is not JsonObject categoryObj) continue;
+
+            var id = GetOptionalString(categoryObj["id"]);
+            var name = GetOptionalString(categoryObj["name"]);
+
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name)) continue;
+
+            var order = categoryObj["order"]?.GetValue<int?>() ?? 0;
+
+            _globalModCategories.Add(new ModCategory(id, name, order));
+        }
     }
 
     private void LoadInstalledColumnVisibility(JsonNode? node)
@@ -3608,6 +3982,16 @@ public sealed class UserConfigurationService
         public int LongRunningSessionCount { get; set; }
 
         public bool HasPendingModUsagePrompt { get; set; }
+
+        /// <summary>
+        ///     Per-profile mod-to-category assignments (mod ID -> category ID).
+        /// </summary>
+        public Dictionary<string, string> ModCategoryAssignments { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        ///     Profile-specific category definitions that override or extend global categories.
+        /// </summary>
+        public List<ModCategory> ProfileCategoryOverrides { get; } = new();
     }
 
     private sealed class ModConfigPathEntry

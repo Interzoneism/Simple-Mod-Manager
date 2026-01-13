@@ -308,6 +308,19 @@
                             IsCheckable="True"
                             IsChecked="{Binding IsCompactView, Mode=TwoWay}"
                             Style="{StaticResource ToggleMenuItemStyle}" />
+                        <MenuItem
+                            Height="35"
+                            Header="_Group by Category"
+                            IsCheckable="True"
+                            IsChecked="{Binding IsGroupedByCategory, Mode=TwoWay}"
+                            Style="{StaticResource ToggleMenuItemStyle}"
+                            Visibility="{Binding IsViewingMainTab, Converter={StaticResource IMM.BooleanToVisibilityConverter}}" />
+                        <MenuItem
+                            Height="35"
+                            Header="_Manage Categories..."
+                            Click="ManageCategoriesMenuItem_OnClick"
+                            Visibility="{Binding IsViewingMainTab, Converter={StaticResource IMM.BooleanToVisibilityConverter}}" />
+                        <Separator Visibility="{Binding IsViewingMainTab, Converter={StaticResource IMM.BooleanToVisibilityConverter}}" />
                         <MenuItem x:Name="ThemesMenuItem" Height="35" Header="_Themes">
                             <MenuItem
                                 x:Name="VintageStoryThemeMenuItem"
@@ -758,6 +771,39 @@
                                     <DataGrid.DragIndicatorStyle>
                                         <Style />
                                     </DataGrid.DragIndicatorStyle>
+                                    <DataGrid.GroupStyle>
+                                        <GroupStyle>
+                                            <GroupStyle.Panel>
+                                                <ItemsPanelTemplate>
+                                                    <DataGridRowsPresenter />
+                                                </ItemsPanelTemplate>
+                                            </GroupStyle.Panel>
+                                            <GroupStyle.HeaderTemplate>
+                                                <DataTemplate>
+                                                    <Border
+                                                        Margin="0,8,0,4"
+                                                        Padding="12,8"
+                                                        Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                                                        BorderBrush="{DynamicResource Brush.Button.Bevel.Light}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="8">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock
+                                                                FontSize="14"
+                                                                FontWeight="SemiBold"
+                                                                Foreground="{DynamicResource Brush.Text.Primary}"
+                                                                Text="{Binding Name, Converter={StaticResource IMM.CategoryNameConverter}}" />
+                                                            <TextBlock
+                                                                Margin="8,0,0,0"
+                                                                FontSize="12"
+                                                                Foreground="{DynamicResource Brush.Text.Subtle}"
+                                                                Text="{Binding ItemCount, StringFormat='({0} mods)'}" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </GroupStyle.HeaderTemplate>
+                                        </GroupStyle>
+                                    </DataGrid.GroupStyle>
                                     <DataGrid.CellStyle>
                                         <StaticResource ResourceKey="IMM.DataGridCellBaseStyle" />
                                     </DataGrid.CellStyle>
@@ -768,6 +814,7 @@
                                             <EventSetter Event="FrameworkElement.Unloaded" Handler="ModsDataGridRow_OnUnloaded" />
                                             <EventSetter Event="UIElement.MouseEnter" Handler="ModsDataGridRow_OnMouseEnter" />
                                             <EventSetter Event="UIElement.MouseLeave" Handler="ModsDataGridRow_OnMouseLeave" />
+                                            <EventSetter Event="UIElement.MouseRightButtonUp" Handler="ModsDataGridRow_OnMouseRightButtonUp" />
                                         </Style>
                                     </DataGrid.RowStyle>
                                     <DataGrid.Columns>

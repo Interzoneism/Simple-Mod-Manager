@@ -329,6 +329,187 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set => SetProperty(ref _isCompactView, value);
     }
 
+    #region Category Grouping
+
+    /// <summary>
+    ///     Whether the mod list is grouped by category.
+    /// </summary>
+    public bool IsGroupedByCategory
+    {
+        get => _configuration.IsGroupedByCategory;
+        set
+        {
+            if (_configuration.IsGroupedByCategory == value) return;
+            _configuration.IsGroupedByCategory = value;
+            OnPropertyChanged();
+            ApplyCategoryGrouping();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the effective categories for the current profile.
+    /// </summary>
+    public IReadOnlyList<ModCategory> GetEffectiveCategories()
+    {
+        return _configuration.GetEffectiveModCategories();
+    }
+
+    /// <summary>
+    ///     Assigns a mod to a category.
+    /// </summary>
+    public void AssignModToCategory(ModListItemViewModel mod, string categoryId)
+    {
+        if (mod == null) return;
+
+        _configuration.SetModCategoryAssignment(mod.ModId, categoryId);
+        UpdateModCategoryFromConfiguration(mod);
+
+        if (IsGroupedByCategory)
+            ModsView.Refresh();
+    }
+
+    /// <summary>
+    ///     Assigns multiple mods to a category.
+    /// </summary>
+    public void AssignModsToCategory(IEnumerable<ModListItemViewModel> mods, string categoryId)
+    {
+        if (mods == null) return;
+
+        var modList = mods.ToList();
+        _configuration.SetModsCategoryAssignment(modList.Select(m => m.ModId), categoryId);
+
+        foreach (var mod in modList)
+            UpdateModCategoryFromConfiguration(mod);
+
+        if (IsGroupedByCategory)
+            ModsView.Refresh();
+    }
+
+    /// <summary>
+    ///     Creates a new global category.
+    /// </summary>
+    public ModCategory CreateCategory(string name)
+    {
+        var category = _configuration.AddGlobalCategory(name);
+        RefreshAllModCategories();
+        return category;
+    }
+
+    /// <summary>
+    ///     Creates a profile-specific category.
+    /// </summary>
+    public ModCategory CreateProfileCategory(string name)
+    {
+        var category = _configuration.AddProfileCategory(name);
+        RefreshAllModCategories();
+        return category;
+    }
+
+    /// <summary>
+    ///     Deletes a category and moves its mods to Uncategorized.
+    /// </summary>
+    public bool DeleteCategory(string categoryId)
+    {
+        var result = _configuration.DeleteCategory(categoryId);
+        if (result)
+            RefreshAllModCategories();
+        return result;
+    }
+
+    /// <summary>
+    ///     Renames a category.
+    /// </summary>
+    public bool RenameCategory(string categoryId, string newName)
+    {
+        var result = _configuration.RenameCategory(categoryId, newName);
+        if (result)
+            RefreshAllModCategories();
+        return result;
+    }
+
+    /// <summary>
+    ///     Gets the global mod categories (shared across all profiles).
+    /// </summary>
+    public IReadOnlyList<ModCategory> GetGlobalCategories()
+    {
+        return _configuration.GetGlobalModCategories();
+    }
+
+    /// <summary>
+    ///     Gets the profile-specific category overrides.
+    /// </summary>
+    public IReadOnlyList<ModCategory> GetProfileCategories()
+    {
+        return _configuration.GetProfileCategoryOverrides();
+    }
+
+    /// <summary>
+    ///     Applies category grouping to the collection view.
+    /// </summary>
+    private void ApplyCategoryGrouping()
+    {
+        using (ModsView.DeferRefresh())
+        {
+            ModsView.GroupDescriptions.Clear();
+
+            if (IsGroupedByCategory)
+            {
+                ModsView.GroupDescriptions.Add(
+                    new PropertyGroupDescription(nameof(ModListItemViewModel.CategoryGroupKey)));
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Updates all mod category assignments from configuration.
+    /// </summary>
+    public void RefreshAllModCategories()
+    {
+        var categories = _configuration.GetEffectiveModCategories()
+            .ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mod in _mods)
+            UpdateModCategoryFromConfiguration(mod, categories);
+
+        if (IsGroupedByCategory)
+            ModsView.Refresh();
+    }
+
+    /// <summary>
+    ///     Updates a single mod's category from configuration.
+    /// </summary>
+    private void UpdateModCategoryFromConfiguration(ModListItemViewModel mod)
+    {
+        var categories = _configuration.GetEffectiveModCategories()
+            .ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
+        UpdateModCategoryFromConfiguration(mod, categories);
+    }
+
+    /// <summary>
+    ///     Updates a single mod's category from configuration using cached categories.
+    /// </summary>
+    private void UpdateModCategoryFromConfiguration(
+        ModListItemViewModel mod,
+        IReadOnlyDictionary<string, ModCategory> categories)
+    {
+        var categoryId = _configuration.GetModCategoryAssignment(mod.ModId);
+
+        if (categories.TryGetValue(categoryId, out var category))
+        {
+            mod.UpdateCategory(category.Id, category.Name, category.Order);
+        }
+        else
+        {
+            // Category not found, use Uncategorized
+            mod.UpdateCategory(
+                ModCategory.UncategorizedId,
+                ModCategory.UncategorizedName,
+                int.MaxValue);
+        }
+    }
+
+    #endregion
+
     public bool HasSelectedTags
     {
         get => _hasSelectedTags;
@@ -1751,6 +1932,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
 
             TotalMods = _mods.Count;
+
+            // Initialize category assignments for all mods (but don't refresh the view yet)
+            var categories = _configuration.GetEffectiveModCategories()
+                .ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
+            foreach (var mod in _mods)
+                UpdateModCategoryFromConfiguration(mod, categories);
+
+            // Apply category grouping if enabled (this will refresh the view)
+            if (IsGroupedByCategory)
+                ApplyCategoryGrouping();
 
             if (!string.IsNullOrWhiteSpace(previousSelection)
                 && _modViewModelsBySourcePath.TryGetValue(previousSelection, out var selected))
