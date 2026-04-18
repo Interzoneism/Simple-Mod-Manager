@@ -29,6 +29,8 @@ public sealed partial class UpdateModSelectionViewModel : ObservableObject
 
     public string DisplayName => Mod.DisplayName;
 
+    public bool IsDowngrade => Mod.NeedsDowngrade;
+
     public string InstalledVersionDisplay => string.IsNullOrWhiteSpace(Mod.Version) ? "—" : Mod.Version!;
 
     public string TargetVersionDisplay
@@ -36,13 +38,16 @@ public sealed partial class UpdateModSelectionViewModel : ObservableObject
         get
         {
             var target = _overrideRelease?.Version
+                         ?? (IsDowngrade ? Mod.LatestCompatibleRelease?.Version : null)
                          ?? Mod.LatestRelease?.Version
                          ?? Mod.Version;
             return string.IsNullOrWhiteSpace(target) ? "—" : target!;
         }
     }
 
-    public string? TargetUpdateVersion => _overrideRelease?.Version ?? Mod.LatestRelease?.Version;
+    public string? TargetUpdateVersion => _overrideRelease?.Version
+                                          ?? (IsDowngrade ? Mod.LatestCompatibleRelease?.Version : null)
+                                          ?? Mod.LatestRelease?.Version;
 
     public bool CanSkip => !string.IsNullOrWhiteSpace(TargetUpdateVersion);
 
@@ -65,7 +70,9 @@ public sealed partial class UpdateModSelectionViewModel : ObservableObject
             var target = TargetVersionDisplay;
             if (string.Equals(installed, target, StringComparison.OrdinalIgnoreCase)) return $"Installed: {installed}";
 
-            return $"Installed: {installed} → Update to: {target}";
+            return IsDowngrade
+                ? $"Installed: {installed} → Downgrade to: {target}"
+                : $"Installed: {installed} → Update to: {target}";
         }
     }
 

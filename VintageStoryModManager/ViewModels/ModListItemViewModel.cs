@@ -386,6 +386,16 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public bool HasCompatibleUpdate => LatestCompatibleRelease != null;
 
+    /// <summary>
+    ///     True when the installed mod version is newer than the latest compatible release
+    ///     for the current game version, meaning the mod should be downgraded.
+    /// </summary>
+    public bool NeedsDowngrade => !CanUpdate
+                                  && LatestCompatibleRelease != null
+                                  && !string.IsNullOrWhiteSpace(Version)
+                                  && !string.Equals(LatestCompatibleRelease.Version, Version, StringComparison.OrdinalIgnoreCase)
+                                  && VersionStringUtility.IsCandidateVersionNewer(Version, LatestCompatibleRelease.Version);
+
     public bool LatestReleaseIsCompatible => LatestRelease?.IsCompatibleWithInstalledGame ?? false;
 
     public bool ShouldHighlightLatestVersion => CanUpdate;
@@ -1218,6 +1228,7 @@ public sealed class ModListItemViewModel : ObservableObject
             OnPropertyChanged(nameof(LatestReleaseIsCompatible));
             OnPropertyChanged(nameof(ShouldHighlightLatestVersion));
             OnPropertyChanged(nameof(CanUpdate));
+            OnPropertyChanged(nameof(NeedsDowngrade));
             OnPropertyChanged(nameof(LatestVersionSortKey));
             OnPropertyChanged(nameof(RequiresCompatibilitySelection));
             OnPropertyChanged(nameof(HasCompatibleUpdate));
@@ -1250,6 +1261,7 @@ public sealed class ModListItemViewModel : ObservableObject
         if (previousHasUpdate != CanUpdate)
         {
             OnPropertyChanged(nameof(CanUpdate));
+            OnPropertyChanged(nameof(NeedsDowngrade));
             OnPropertyChanged(nameof(ShouldHighlightLatestVersion));
             OnPropertyChanged(nameof(LatestVersionSortKey));
             OnPropertyChanged(nameof(RequiresCompatibilitySelection));

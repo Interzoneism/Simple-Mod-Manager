@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using VintageStoryModManager.Models;
@@ -41,6 +42,22 @@ public partial class UpdateModsDialog : Window
 
         _viewModel = new UpdateModsDialogViewModel(items);
         DataContext = _viewModel;
+
+        var hasDowngrades = items.Any(item => item.IsDowngrade);
+        var hasUpdates = items.Any(item => !item.IsDowngrade);
+
+        if (hasDowngrades && hasUpdates)
+        {
+            Title = "Select Mods to Update or Downgrade";
+            DescriptionTextBlock.Text =
+                "Select which mods to update or downgrade for compatibility. Deselect any mods you want to skip.";
+        }
+        else if (hasDowngrades)
+        {
+            Title = "Select Mods to Downgrade";
+            DescriptionTextBlock.Text =
+                "These mods need to be downgraded for compatibility with your Vintage Story version. Deselect any mods you want to skip.";
+        }
 
         foreach (var item in _viewModel.Mods) item.PropertyChanged += OnSelectionPropertyChanged;
     }

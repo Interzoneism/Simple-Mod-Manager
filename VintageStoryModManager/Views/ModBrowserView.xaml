@@ -935,6 +935,15 @@
                                             Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
                                             CornerRadius="6"
                                             Visibility="{Binding ShowUserReportBadge, Converter={StaticResource IMM.BooleanToVisibilityConverter}}">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasUserVoted}" Value="False">
+                                                            <Setter Property="Opacity" Value="0.75" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
                                             <TextBlock
                                                 FontSize="12"
                                                 FontWeight="SemiBold"

@@ -4881,15 +4881,22 @@ public partial class MainWindow : Window
 
         if (!EnsureUserReportVotingConsent()) return;
 
-        _viewModel.EnableUserReportFetching();
-
         try
         {
-            var summary = await _viewModel
-                .RefreshUserReportAsync(mod)
-                .ConfigureAwait(true);
+            // Use the existing summary when available so the dialog opens instantly
+            // instead of waiting behind background refresh tasks in the semaphore queue.
+            var summary = mod.UserReportSummary;
 
-            summary ??= mod.UserReportSummary;
+            if (summary is null)
+            {
+                // No cached summary yet — refresh before enabling background fetching
+                // so this explicit user action gets semaphore priority.
+                summary = await _viewModel
+                    .RefreshUserReportAsync(mod)
+                    .ConfigureAwait(true);
+
+                summary ??= mod.UserReportSummary;
+            }
 
             if (summary is null)
                 summary = new ModVersionVoteSummary(
@@ -4900,6 +4907,10 @@ public partial class MainWindow : Window
                     ModVersionVoteComments.Empty,
                     null,
                     null);
+
+            // Enable background fetching after the dialog summary is resolved
+            // so background tasks don't block the user's request.
+            _viewModel.EnableUserReportFetching();
 
             var dialog = new ModVoteDialog(
                 mod,
@@ -5983,20 +5994,27 @@ public partial class MainWindow : Window
         if (_isModUpdateInProgress || _viewModel?.ModsView == null) return;
 
         var mods = _viewModel.ModsView.Cast<ModListItemViewModel>()
-            .Where(mod => mod.CanUpdate)
+            .Where(mod => mod.CanUpdate || mod.NeedsDowngrade)
             .ToList();
 
         Dictionary<ModListItemViewModel, ModReleaseInfo>? overrides = null;
         foreach (var mod in mods)
-            if (mod.SelectedVersionOption is { Release: { } selectedRelease, IsInstalled: false })
+        {
+            if (mod.NeedsDowngrade && mod.LatestCompatibleRelease != null)
+            {
+                overrides ??= new Dictionary<ModListItemViewModel, ModReleaseInfo>();
+                overrides[mod] = mod.LatestCompatibleRelease;
+            }
+            else if (mod.SelectedVersionOption is { Release: { } selectedRelease, IsInstalled: false })
             {
                 overrides ??= new Dictionary<ModListItemViewModel, ModReleaseInfo>();
                 overrides[mod] = selectedRelease;
             }
+        }
 
         if (mods.Count == 0)
         {
-            WpfMessageBox.Show("All mods are already up to date.",
+            WpfMessageBox.Show("All mods are already up to date and compatible.",
                 "Simple VS Manager",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);

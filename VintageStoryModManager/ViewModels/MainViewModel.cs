@@ -1945,7 +1945,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateUpdatableCount()
     {
-        UpdatableModsCount = _mods.Count(item => item.CanUpdate);
+        UpdatableModsCount = _mods.Count(item => item.CanUpdate || item.NeedsDowngrade);
     }
 
     private void ClearSearchResults()
@@ -2087,7 +2087,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (string.Equals(e.PropertyName, nameof(ModListItemViewModel.CanUpdate), StringComparison.Ordinal))
+        if (string.Equals(e.PropertyName, nameof(ModListItemViewModel.CanUpdate), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ModListItemViewModel.NeedsDowngrade), StringComparison.Ordinal))
             UpdateUpdatableCount();
     }
 

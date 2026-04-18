@@ -24,7 +24,8 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0"
+        <TextBlock x:Name="DescriptionTextBlock"
+                   Grid.Row="0"
                    Text="Select which mods to update. Deselect any mods you want to skip."
                    Margin="0,0,0,12"
                    TextWrapping="Wrap"
@@ -59,7 +60,7 @@
                                                 <TextBlock FontSize="14"
                                                            FontWeight="SemiBold">
                                                     <Hyperlink Command="{Binding Mod.OpenModDatabasePageCommand}">
-                                                        <Run Text="{Binding DisplayName}" />
+                                                        <Run Text="{Binding DisplayName, Mode=OneWay}" />
                                                     </Hyperlink>
                                                 </TextBlock>
                                                 <TextBlock Text="{Binding VersionSummary}"
@@ -118,7 +119,7 @@
                     HorizontalAlignment="Right"
                     Margin="0,18,0,0">
             <Button x:Name="UpdateButton"
-                    Content="Update Selected"
+                    Content="Apply Selected"
                     MinWidth="120"
                     Margin="0,0,12,0"
                     IsDefault="True"

@@ -128,7 +128,14 @@ public partial class ModVoteDialog : Window
         try
         {
             var result = await _submitVoteAsync(requestedOption, comment).ConfigureAwait(true);
-            if (result is not null) _summary = result;
+
+            if (result is null)
+            {
+                StatusTextBlock.Text = "Vote could not be submitted. Please try again.";
+                return;
+            }
+
+            _summary = result;
 
             var statusPrefix = requestedOption.HasValue
                 ? "Your vote has been recorded."

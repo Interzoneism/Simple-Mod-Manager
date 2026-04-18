@@ -1209,6 +1209,9 @@
                                                                     <DataTrigger Binding="{Binding HasUserVoted}" Value="True">
                                                                         <Setter Property="FontWeight" Value="SemiBold" />
                                                                     </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding HasUserVoted}" Value="False">
+                                                                        <Setter Property="Opacity" Value="0.75" />
+                                                                    </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
                                                         </Button.Style>
