@@ -20,7 +20,7 @@ public partial class ModBrowserViewModel : ObservableObject
     private readonly IModApiService _modApiService;
     private readonly UserConfigurationService? _userConfigService;
     private readonly ModVersionVoteService _voteService;
-    private readonly string? _installedGameVersion;
+    private string? _installedGameVersion;
     private CancellationTokenSource? _searchCts;
     private const int DefaultLoadedMods = 45;
     private const int LoadMoreCount = 15;
@@ -75,6 +75,7 @@ public partial class ModBrowserViewModel : ObservableObject
     private ObservableCollection<GameVersion> _availableVersions = [];
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ClearTagsCommand))]
     private ObservableCollection<ModTag> _selectedTags = [];
 
     [ObservableProperty]
@@ -105,6 +106,7 @@ public partial class ModBrowserViewModel : ObservableObject
     private bool _isInstallDialogOpen;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(DownloadAllFavoritesCommand))]
     private ObservableCollection<int> _favoriteMods = [];
 
     [ObservableProperty]
@@ -119,6 +121,11 @@ public partial class ModBrowserViewModel : ObservableObject
     /// When faster thumbnails are disabled, uses higher quality thumbnails which load slower.
     /// </summary>
     private bool ShouldUseCorrectThumbnails => !(_userConfigService?.UseFasterThumbnails ?? true);
+
+    private string? EffectiveGameVersion =>
+        string.IsNullOrWhiteSpace(_userConfigService?.TargetGameVersionOverride)
+            ? _installedGameVersion
+            : _userConfigService.TargetGameVersionOverride;
 
     #endregion
 
@@ -156,7 +163,7 @@ public partial class ModBrowserViewModel : ObservableObject
         _modApiService = modApiService;
         _userConfigService = userConfigService;
         _voteService = new ModVersionVoteService();
-        _installedGameVersion = VintageStoryVersionLocator.GetInstalledVersion(_userConfigService?.GameDirectory);
+        RefreshInstalledGameVersion();
         _isInitializing = true;
 
         // Subscribe to collection changes for multi-select filters
@@ -187,6 +194,11 @@ public partial class ModBrowserViewModel : ObservableObject
     public void SetInstallModCallback(Func<DownloadableMod, Task> callback)
     {
         _installModCallback = callback;
+    }
+
+    public void RefreshInstalledGameVersion()
+    {
+        _installedGameVersion = VintageStoryVersionLocator.GetInstalledVersion(_userConfigService?.GameDirectory);
     }
 
     /// <summary>
@@ -230,10 +242,19 @@ public partial class ModBrowserViewModel : ObservableObject
         {
             System.Diagnostics.Debug.WriteLine($"Error during filter search: {ex.Message}");
         }
+        finally
+        {
+            if (sender == SelectedTags)
+            {
+                ClearTagsCommand.NotifyCanExecuteChanged();
+            }
+        }
     }
 
     private void OnFavoriteModsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        DownloadAllFavoritesCommand.NotifyCanExecuteChanged();
+
         if (_isInitializing)
             return;
 
@@ -674,6 +695,40 @@ public partial class ModBrowserViewModel : ObservableObject
     {
         OnlyFavorites = !OnlyFavorites;
     }
+
+    [RelayCommand(CanExecute = nameof(CanDownloadAllFavorites))]
+    private async Task DownloadAllFavoritesAsync()
+    {
+        if (_installModCallback == null || FavoriteMods.Count == 0)
+            return;
+
+        var favoriteModIds = FavoriteMods.ToList();
+        foreach (var modId in favoriteModIds)
+        {
+            try
+            {
+                var mod = await _modApiService.GetModAsync(modId);
+                if (mod != null)
+                {
+                    await _installModCallback(mod);
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning($"Failed to bulk download favorite mod {modId}: {ex}");
+            }
+        }
+    }
+
+    private bool CanDownloadAllFavorites() => FavoriteMods.Count > 0;
+
+    [RelayCommand(CanExecute = nameof(CanClearTags))]
+    private void ClearTags()
+    {
+        SelectedTags.Clear();
+    }
+
+    private bool CanClearTags() => SelectedTags.Count > 0;
 
     [RelayCommand]
     private void ToggleRelevantSearchResults()
@@ -1225,7 +1280,9 @@ public partial class ModBrowserViewModel : ObservableObject
 
     private async Task LoadUserReportAsync(DownloadableModOnList mod, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(_installedGameVersion))
+        var effectiveGameVersion = EffectiveGameVersion;
+
+        if (string.IsNullOrWhiteSpace(effectiveGameVersion))
         {
             mod.ShowUserReportBadge = false;
             mod.UserReportDisplay = string.Empty;
@@ -1266,21 +1323,22 @@ public partial class ModBrowserViewModel : ObservableObject
         var summary = await _voteService.GetVoteSummaryAsync(
             modId,
             latestRelease.ModVersion,
-            _installedGameVersion,
+            effectiveGameVersion,
             cancellationToken);
 
         var display = BuildUserReportDisplay(summary);
         mod.ShowUserReportBadge = !string.IsNullOrWhiteSpace(display);
         mod.UserReportDisplay = display ?? string.Empty;
-        mod.UserReportTooltip = BuildUserReportTooltip(summary, _installedGameVersion);
+        mod.UserReportTooltip = BuildUserReportTooltip(summary, effectiveGameVersion);
     }
 
     private void ApplyUserReportSummary(DownloadableModOnList mod, ModVersionVoteSummary summary)
     {
+        var effectiveGameVersion = EffectiveGameVersion;
         var display = BuildUserReportDisplay(summary);
         mod.ShowUserReportBadge = !string.IsNullOrWhiteSpace(display);
         mod.UserReportDisplay = display ?? string.Empty;
-        mod.UserReportTooltip = BuildUserReportTooltip(summary, _installedGameVersion ?? string.Empty);
+        mod.UserReportTooltip = BuildUserReportTooltip(summary, effectiveGameVersion ?? string.Empty);
     }
 
     private static string? BuildUserReportDisplay(ModVersionVoteSummary? summary)

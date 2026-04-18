@@ -178,6 +178,8 @@ public sealed class UserConfigurationService
 
     public string? GameDirectory => ActiveProfile.GameDirectory;
 
+    public string? TargetGameVersionOverride => ActiveProfile.TargetGameVersionOverride;
+
     public bool RequiresDataDirectorySelection => ActiveProfile.RequiresDataDirectorySelection;
 
     public bool RequiresGameDirectorySelection => ActiveProfile.RequiresGameDirectorySelection;
@@ -549,6 +551,9 @@ public sealed class UserConfigurationService
 
         var gameDirectory = NormalizePath(GetOptionalString(obj["gameDirectory"]));
         if (gameDirectory is not null) profile.GameDirectory = gameDirectory;
+
+        var targetOverride = GetOptionalString(obj["targetGameVersionOverride"]);
+        if (!string.IsNullOrWhiteSpace(targetOverride)) profile.TargetGameVersionOverride = targetOverride;
 
         var shortcut = NormalizePath(GetOptionalString(obj["customShortcutPath"]));
         if (shortcut is not null) profile.CustomShortcutPath = shortcut;
@@ -1496,6 +1501,15 @@ public sealed class UserConfigurationService
         Save();
     }
 
+    public void SetTargetGameVersionOverride(string? value)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        if (string.Equals(ActiveProfile.TargetGameVersionOverride, trimmed, StringComparison.Ordinal)) return;
+
+        ActiveProfile.TargetGameVersionOverride = trimmed;
+        Save();
+    }
+
     public void ClearGameDirectory()
     {
         if (ActiveProfile.GameDirectory is null)
@@ -2342,6 +2356,7 @@ public sealed class UserConfigurationService
             {
                 ["dataDirectory"] = profile.DataDirectory,
                 ["gameDirectory"] = profile.GameDirectory,
+                ["targetGameVersionOverride"] = profile.TargetGameVersionOverride,
                 ["customShortcutPath"] = profile.CustomShortcutPath,
                 ["bulkUpdateModExclusions"] = BuildBulkUpdateModExclusionsJson(profile.BulkUpdateModExclusions),
                 ["skippedModVersions"] = BuildSkippedModVersionsJson(profile.SkippedModVersions),
@@ -3590,6 +3605,8 @@ public sealed class UserConfigurationService
         public string? DataDirectory { get; set; }
 
         public string? GameDirectory { get; set; }
+
+        public string? TargetGameVersionOverride { get; set; }
 
         public string? CustomShortcutPath { get; set; }
 

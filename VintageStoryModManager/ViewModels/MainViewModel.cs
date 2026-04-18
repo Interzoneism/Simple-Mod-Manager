@@ -22,7 +22,7 @@ namespace VintageStoryModManager.ViewModels;
 /// <summary>
 ///     Main view model that coordinates mod discovery and activation.
 /// </summary>
-public sealed class MainViewModel : ObservableObject, IDisposable
+public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private const string InternetAccessDisabledStatusMessage = "Enable Internet Access in the File menu to use.";
     private const string TagsColumnName = "Tags";
@@ -145,6 +145,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private int _pendingModDetailsRefreshCount;
     private string _searchText = string.Empty;
     private string[] _searchTokens = Array.Empty<string>();
+    [ObservableProperty]
+    private string _modlistSearchText = string.Empty;
     private ModListItemViewModel? _selectedMod;
 
     private SortOption? _selectedSortOption;
@@ -486,6 +488,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public IAsyncRelayCommand RefreshCommand { get; }
 
     public string? InstalledGameVersion { get; }
+
+    public string? EffectiveGameVersion =>
+        string.IsNullOrWhiteSpace(_configuration.TargetGameVersionOverride)
+            ? InstalledGameVersion
+            : _configuration.TargetGameVersionOverride;
 
     public void Dispose()
     {
@@ -1886,7 +1893,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             isActive,
             location,
             ApplyActivationChangeAsync,
-            InstalledGameVersion,
+            EffectiveGameVersion,
             true,
             _configuration.ShouldSkipModVersion,
             () => _configuration.RequireExactVsVersionMatch,
@@ -3060,7 +3067,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private ModListItemViewModel CreateSearchResultViewModel(ModEntry entry, bool isInstalled)
     {
-        return new ModListItemViewModel(entry, false, "Mod Database", RejectActivationChangeAsync, InstalledGameVersion,
+        return new ModListItemViewModel(entry, false, "Mod Database", RejectActivationChangeAsync, EffectiveGameVersion,
             isInstalled, null, () => _configuration.RequireExactVsVersionMatch, _allowModDetailsRefresh);
     }
 
@@ -3098,6 +3105,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_searchTokens.Length == 0) return true;
 
         return mod.MatchesSearchTokens(_searchTokens);
+    }
+
+    partial void OnModlistSearchTextChanged(string value)
+    {
+        var hasSearchText = !string.IsNullOrWhiteSpace(value);
+        LocalModlistsView.Filter = hasSearchText ? FilterModlist : null;
+        CloudModlistsView.Filter = hasSearchText ? FilterModlist : null;
+        LocalModlistsView.Refresh();
+        CloudModlistsView.Refresh();
+    }
+
+    private bool FilterModlist(object? item)
+    {
+        if (string.IsNullOrWhiteSpace(ModlistSearchText)) return true;
+
+        return item switch
+        {
+            LocalModlistListEntry local =>
+                local.DisplayName.Contains(ModlistSearchText, StringComparison.OrdinalIgnoreCase)
+                || (!string.IsNullOrWhiteSpace(local.Description)
+                    && local.Description.Contains(ModlistSearchText, StringComparison.OrdinalIgnoreCase)),
+            CloudModlistListEntry cloud =>
+                cloud.DisplayName.Contains(ModlistSearchText, StringComparison.OrdinalIgnoreCase)
+                || (!string.IsNullOrWhiteSpace(cloud.Description)
+                    && cloud.Description.Contains(ModlistSearchText, StringComparison.OrdinalIgnoreCase)),
+            _ => true
+        };
     }
 
     private static string[] CreateSearchTokens(string value)
@@ -3555,7 +3589,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 using (_timingService.MeasureDbCacheLoad())
                 {
                     cachedInfo = await _databaseService
-                        .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, InstalledGameVersion,
+                        .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, EffectiveGameVersion,
                             _configuration.RequireExactVsVersionMatch)
                         .ConfigureAwait(false);
                 }
@@ -3590,7 +3624,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             using (_timingService.MeasureDbCacheLoad())
             {
                 (cachedInfo2, needsRefresh) = await _databaseService
-                    .TryLoadCachedDatabaseInfoWithRefreshCheckAsync(entry.ModId, entry.Version, InstalledGameVersion,
+                    .TryLoadCachedDatabaseInfoWithRefreshCheckAsync(entry.ModId, entry.Version, EffectiveGameVersion,
                         _configuration.RequireExactVsVersionMatch)
                     .ConfigureAwait(false);
             }
@@ -3644,7 +3678,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 using (_timingService.MeasureDbNetworkLoad())
                 {
                     info = await _databaseService
-                        .TryLoadDatabaseInfoAsync(entry.ModId, entry.Version, InstalledGameVersion,
+                        .TryLoadDatabaseInfoAsync(entry.ModId, entry.Version, EffectiveGameVersion,
                             _configuration.RequireExactVsVersionMatch, cachedInfo2, cancellationToken, _timingService)
                         .ConfigureAwait(false);
                 }
@@ -3729,7 +3763,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var cachedInfo = entry.DatabaseInfo;
         if (cachedInfo is null)
             cachedInfo = await _databaseService
-                .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, InstalledGameVersion,
+                .TryLoadCachedDatabaseInfoAsync(entry.ModId, entry.Version, EffectiveGameVersion,
                     _configuration.RequireExactVsVersionMatch)
                 .ConfigureAwait(false);
 
@@ -4476,7 +4510,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (dependencies is null || dependencies.Count == 0) return true;
 
-        if (string.IsNullOrWhiteSpace(InstalledGameVersion)) return true;
+        if (string.IsNullOrWhiteSpace(EffectiveGameVersion)) return true;
 
         foreach (var dependency in dependencies)
         {
@@ -4484,12 +4518,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
             // Check if the installed game version satisfies the dependency's minimum version requirement
             // (e.g., if mod requires 1.21.0 and user has 1.21.4, that's OK as 1.21.4 >= 1.21.0)
-            if (!VersionStringUtility.SatisfiesMinimumVersion(dependency.Version, InstalledGameVersion)) return false;
+            if (!VersionStringUtility.SatisfiesMinimumVersion(dependency.Version, EffectiveGameVersion)) return false;
 
             // When exact version match is required, also verify first 3 version parts match
             // (e.g., with exact mode, 1.21.3 won't be compatible with 1.21.4 even though 1.21.4 >= 1.21.3)
             if (_configuration.RequireExactVsVersionMatch)
-                if (!VersionStringUtility.MatchesFirstThreeDigits(dependency.Version, InstalledGameVersion))
+                if (!VersionStringUtility.MatchesFirstThreeDigits(dependency.Version, EffectiveGameVersion))
                     return false;
         }
 

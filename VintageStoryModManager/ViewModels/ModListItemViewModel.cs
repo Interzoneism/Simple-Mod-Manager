@@ -24,7 +24,7 @@ namespace VintageStoryModManager.ViewModels;
 /// </summary>
 public sealed class ModListItemViewModel : ObservableObject
 {
-    private static readonly HttpClient HttpClient = new();
+    private static readonly HttpClient HttpClient = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     private readonly Func<ModListItemViewModel, bool, Task<ActivationResult>> _activationHandler;
     private readonly IReadOnlyList<string> _authors;
@@ -112,6 +112,7 @@ public sealed class ModListItemViewModel : ObservableObject
         NetworkVersion = entry.NetworkVersion;
         Website = entry.Website;
         SourcePath = entry.SourcePath;
+        DateModified = GetDateModifiedTimestamp(SourcePath);
         Location = location;
         IsModDatabaseEntry = string.Equals(location, "Mod Database", StringComparison.Ordinal);
         SourceKind = entry.SourceKind;
@@ -150,10 +151,11 @@ public sealed class ModListItemViewModel : ObservableObject
             _databaseRecentDownloads = CalculateDownloadsLastThirtyDaysFromReleases(_releases);
         if (_databaseTenDayDownloads is null)
             _databaseTenDayDownloads = CalculateDownloadsLastTenDaysFromReleases(_releases);
-        LatestDatabaseVersion = LatestRelease?.Version
-                                ?? databaseInfo?.LatestVersion
-                                ?? LatestCompatibleRelease?.Version
-                                ?? databaseInfo?.LatestCompatibleVersion;
+        LatestDatabaseVersion = LatestCompatibleRelease?.Version
+                    ?? databaseInfo?.LatestCompatibleVersion
+                    ?? Version
+                    ?? LatestRelease?.Version
+                    ?? databaseInfo?.LatestVersion;
         var initialUserReportVersion = !string.IsNullOrWhiteSpace(entry.Version)
             ? entry.Version
             : SelectPreferredUserReportVersion(LatestRelease, LatestCompatibleRelease, databaseInfo);
@@ -434,6 +436,8 @@ public sealed class ModListItemViewModel : ObservableObject
 
     public ModVersionVoteOption? UserVoteOption => UserReportSummary?.UserVote;
 
+    public bool HasUserVoted => UserVoteOption.HasValue;
+
     public string UserReportDisplay
     {
         get => _userReportDisplay;
@@ -516,6 +520,12 @@ public sealed class ModListItemViewModel : ObservableObject
     public ICommand? OpenModDatabasePageCommand => _openModDatabasePageCommand;
 
     public string SourcePath { get; }
+
+    public DateTime DateModified { get; private set; }
+
+    public string DateModifiedDisplay => DateModified == DateTime.MinValue
+        ? string.Empty
+        : DateModified.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
     public string Location { get; }
 
@@ -660,6 +670,16 @@ public sealed class ModListItemViewModel : ObservableObject
         set => SetProperty(ref _isSelected, value);
     }
 
+    public void RefreshDateModified()
+    {
+        var updatedTimestamp = GetDateModifiedTimestamp(SourcePath);
+        if (DateModified == updatedTimestamp) return;
+
+        DateModified = updatedTimestamp;
+        OnPropertyChanged(nameof(DateModified));
+        OnPropertyChanged(nameof(DateModifiedDisplay));
+    }
+
     public void RefreshInternetAccessDependentState()
     {
         OnPropertyChanged(nameof(LatestDatabaseVersionDisplay));
@@ -794,6 +814,7 @@ public sealed class ModListItemViewModel : ObservableObject
             OnPropertyChanged(nameof(UserReportSummary));
             OnPropertyChanged(nameof(UserReportCounts));
             OnPropertyChanged(nameof(UserVoteOption));
+            OnPropertyChanged(nameof(HasUserVoted));
         }
     }
 
@@ -804,6 +825,7 @@ public sealed class ModListItemViewModel : ObservableObject
             OnPropertyChanged(nameof(UserReportSummary));
             OnPropertyChanged(nameof(UserReportCounts));
             OnPropertyChanged(nameof(UserVoteOption));
+            OnPropertyChanged(nameof(HasUserVoted));
             return;
         }
 
@@ -811,6 +833,7 @@ public sealed class ModListItemViewModel : ObservableObject
         OnPropertyChanged(nameof(UserReportSummary));
         OnPropertyChanged(nameof(UserReportCounts));
         OnPropertyChanged(nameof(UserVoteOption));
+        OnPropertyChanged(nameof(HasUserVoted));
     }
 
     public void EnsureUserReportStateInitialized()
@@ -1170,10 +1193,11 @@ public sealed class ModListItemViewModel : ObservableObject
 
             SetProperty(ref _openModDatabasePageCommand, pageCommand, nameof(OpenModDatabasePageCommand));
 
-            var latestDatabaseVersion = latestRelease?.Version
-                                        ?? info.LatestVersion
-                                        ?? latestCompatibleRelease?.Version
-                                        ?? info.LatestCompatibleVersion;
+            var latestDatabaseVersion = latestCompatibleRelease?.Version
+                                        ?? info.LatestCompatibleVersion
+                                        ?? Version
+                                        ?? latestRelease?.Version
+                                        ?? info.LatestVersion;
 
             if (!string.Equals(LatestDatabaseVersion, latestDatabaseVersion, StringComparison.Ordinal))
             {
@@ -1557,21 +1581,22 @@ public sealed class ModListItemViewModel : ObservableObject
     {
         using (_timingService?.MeasureUpdateCheck())
         {
-            if (LatestRelease is null)
+            var updateCandidate = SelectUpdateCandidateRelease();
+            if (updateCandidate is null)
             {
                 CanUpdate = false;
                 _updateMessage = null;
                 return;
             }
 
-            if (!VersionStringUtility.IsCandidateVersionNewer(LatestRelease.Version, Version))
+            if (!VersionStringUtility.IsCandidateVersionNewer(updateCandidate.Version, Version))
             {
                 CanUpdate = false;
                 _updateMessage = null;
                 return;
             }
 
-            if (_shouldSkipVersion?.Invoke(ModId, LatestRelease.Version) == true)
+            if (_shouldSkipVersion?.Invoke(ModId, updateCandidate.Version) == true)
             {
                 CanUpdate = false;
                 _updateMessage = null;
@@ -1579,8 +1604,18 @@ public sealed class ModListItemViewModel : ObservableObject
             }
 
             CanUpdate = true;
-            _updateMessage = BuildUpdateMessage(LatestRelease);
+            _updateMessage = BuildUpdateMessage(updateCandidate);
         }
+    }
+
+    private ModReleaseInfo? SelectUpdateCandidateRelease()
+    {
+        if (LatestCompatibleRelease != null) return LatestCompatibleRelease;
+
+        // Keep releases with no game-version tags visible as compatible-by-default.
+        if (LatestRelease?.GameVersionTags.Count == 0) return LatestRelease;
+
+        return null;
     }
 
     private string BuildUpdateMessage(ModReleaseInfo release)
@@ -1872,6 +1907,20 @@ public sealed class ModListItemViewModel : ObservableObject
         if (info?.LastReleasedUtc is DateTime lastReleased) return lastReleased;
 
         return DetermineLastUpdatedFromReleases(releases);
+    }
+
+    private static DateTime GetDateModifiedTimestamp(string? sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath)) return DateTime.MinValue;
+
+        try
+        {
+            return File.GetLastWriteTime(sourcePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return DateTime.MinValue;
+        }
     }
 
     private static DateTime? DetermineLastUpdatedFromReleases(IReadOnlyList<ModReleaseInfo> releases)

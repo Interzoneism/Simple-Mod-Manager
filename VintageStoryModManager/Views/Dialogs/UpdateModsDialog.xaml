@@ -56,9 +56,12 @@
                                     <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}">
                                         <CheckBox.Content>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding DisplayName}"
-                                                           FontSize="14"
-                                                           FontWeight="SemiBold" />
+                                                <TextBlock FontSize="14"
+                                                           FontWeight="SemiBold">
+                                                    <Hyperlink Command="{Binding Mod.OpenModDatabasePageCommand}">
+                                                        <Run Text="{Binding DisplayName}" />
+                                                    </Hyperlink>
+                                                </TextBlock>
                                                 <TextBlock Text="{Binding VersionSummary}"
                                                            Margin="8,2,0,0"
                                                            Foreground="{DynamicResource Brush.Text.Secondary}" />

@@ -20,7 +20,7 @@ public sealed class ModCompatibilityCommentsService
         AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
     })
     {
-        Timeout = TimeSpan.FromSeconds(30)
+        Timeout = TimeSpan.FromSeconds(15)
     };
 
     private static readonly Regex VersionRegex = new(

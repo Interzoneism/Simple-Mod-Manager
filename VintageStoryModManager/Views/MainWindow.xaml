@@ -138,6 +138,13 @@
                                 Opacity="0.75" />
                         </MenuItem>
                         <MenuItem
+                            x:Name="TargetGameVersionMenuItem"
+                            Height="35"
+                            Header="Target version: Auto"
+                            SubmenuOpened="TargetGameVersionMenuItem_OnSubmenuOpened">
+                            <MenuItem Header="Loading..." IsEnabled="False" />
+                        </MenuItem>
+                        <MenuItem
                             Height="35"
                             Header="Restore mods backup"
                             SubmenuOpened="RestoreBackupMenuItem_OnSubmenuOpened">
@@ -381,6 +388,14 @@
                                 x:Name="LatestVersionColumnMenuItem"
                                 Checked="InstalledModsColumnMenuItem_OnChecked"
                                 Header="Latest _Version"
+                                IsCheckable="True"
+                                IsChecked="True"
+                                Style="{StaticResource ToggleMenuItemStyle}"
+                                Unchecked="InstalledModsColumnMenuItem_OnChecked" />
+                            <MenuItem
+                                x:Name="DateModifiedColumnMenuItem"
+                                Checked="InstalledModsColumnMenuItem_OnChecked"
+                                Header="Date _Modified"
                                 IsCheckable="True"
                                 IsChecked="True"
                                 Style="{StaticResource ToggleMenuItemStyle}"
@@ -966,6 +981,16 @@
                                             </DataGridTextColumn.CellStyle>
                                         </DataGridTextColumn>
 
+                                        <DataGridTextColumn
+                                            x:Name="DateModifiedColumn"
+                                            Width="140"
+                                            Binding="{Binding DateModifiedDisplay, Mode=OneWay}"
+                                            CellStyle="{StaticResource IMM.DataGridCenteredCellStyle}"
+                                            ElementStyle="{StaticResource IMM.DataGridCenteredTextStyle}"
+                                            Header="Date Modified"
+                                            IsReadOnly="True"
+                                            SortMemberPath="DateModified" />
+
 
                                         <DataGridTextColumn
                                             x:Name="AuthorsColumn"
@@ -1152,7 +1177,7 @@
                                         </DataGridTemplateColumn>
                                         <DataGridTemplateColumn
                                             x:Name="UserReportsColumn"
-                                            Width="150"
+                                            Width="190"
                                             Header="User Reports"
                                             IsReadOnly="True">
                                             <DataGridTemplateColumn.CellStyle>
@@ -1180,6 +1205,9 @@
                                                                     </DataTrigger>
                                                                     <DataTrigger Binding="{Binding UserReportHasError}" Value="True">
                                                                         <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Emphasis}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding HasUserVoted}" Value="True">
+                                                                        <Setter Property="FontWeight" Value="SemiBold" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
@@ -1834,6 +1862,22 @@
                                     </Grid>
                                 </TabItem>
                             </TabControl>
+
+                            <TextBox
+                                x:Name="ModlistSearch"
+                                Width="220"
+                                Height="32"
+                                Margin="0,1,8,0"
+                                Padding="3,3,6,3"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                VerticalContentAlignment="Center"
+                                Panel.ZIndex="1"
+                                ui:ControlHelper.PlaceholderText="Search modlists..."
+                                FontSize="14"
+                                Style="{StaticResource IMM.SearchTextBoxStyle}"
+                                Text="{Binding ModlistSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                UseLayoutRounding="True" />
                         </Grid>
                     </Border>
                 </TabItem>
@@ -2124,7 +2168,7 @@
                 <Border.Style>
                     <Style TargetType="{x:Type Border}">
                         <Setter Property="Visibility" Value="Collapsed" />
-                        <Setter Property="IsHitTestVisible" Value="False" />
+                        <Setter Property="IsHitTestVisible" Value="False"  />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding HasSelectedMods}" Value="True">
                                 <Setter Property="Visibility" Value="Visible" />
@@ -2172,12 +2216,11 @@
                     </Grid.Effect>
                     <!--  Close Button  -->
                     <Button
-                        Grid.Column="0"
+                        Grid.Column="1"
                         Width="16"
                         Height="16"
-                        Margin="4,4,0,0"
                         Padding="0,0,0,0"
-                        HorizontalAlignment="Left"
+                        HorizontalAlignment="Right"
                         VerticalAlignment="Top"
                         HorizontalContentAlignment="Stretch"
                         VerticalContentAlignment="Stretch"
@@ -2192,7 +2235,7 @@
                         FontWeight="Bold"
                         Foreground="{DynamicResource Brush.Text.Primary}"
                         Style="{DynamicResource CloseButton}"
-                        ToolTip="Close and deselect mod">
+                        ToolTip="Close and deselect mod" Margin="0,-2,0,0">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <ContentPresenter
@@ -2204,7 +2247,7 @@
                     </Button>
                     <WrapPanel
                         Grid.Column="1"
-                        Margin="0,10,0,0"
+                        Margin="0,10,14,0"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Top"
                         Orientation="Vertical"
@@ -2415,7 +2458,7 @@
                         MinWidth="32"
                         MinHeight="32"
                         MaxHeight="33"
-                        Margin="0,170,0,0"
+                        Margin="0,170,14,0"
                         Padding="4,4,4,4"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"

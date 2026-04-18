@@ -18,7 +18,7 @@ namespace SimpleVsManager.Cloud;
 /// </summary>
 public sealed class FirebaseModlistStore : IDisposable
 {
-    private static readonly HttpClient HttpClient = new();
+    private static readonly HttpClient HttpClient = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     private static readonly string DefaultDbUrl = DevConfig.FirebaseModlistDefaultDbUrl;
 

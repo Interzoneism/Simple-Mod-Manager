@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -28,7 +29,7 @@ public sealed class ModVersionVoteService : IDisposable
     /// </summary>
     public static string GetVoteCachePath() => VoteCachePath;
 
-    private static readonly HttpClient HttpClient = new();
+    private static readonly HttpClient HttpClient = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -280,16 +281,14 @@ public sealed class ModVersionVoteService : IDisposable
         var modKey = SanitizeKey(cacheKey.ModId);
         var versionKey = SanitizeKey(cacheKey.ModVersion);
 
-        var (indexAvailable, hasVotes) = await TryHasVotesAsync(session, modKey, versionKey, cancellationToken)
-            .ConfigureAwait(false);
-        if (indexAvailable && !hasVotes)
+        if (!bypassCache)
         {
-            var emptySummary = CreateEmptySummary(cacheKey);
-
-            await StoreCachedSummaryAsync(cacheKey, emptySummary, knownEtag, cancellationToken, false)
+            var (indexAvailable, hasVotes) = await TryHasVotesAsync(session, modKey, versionKey, cancellationToken)
                 .ConfigureAwait(false);
-
-            return new VoteSummaryResult(emptySummary, knownEtag, false);
+            if (indexAvailable && !hasVotes)
+            {
+                return new VoteSummaryResult(CreateEmptySummary(cacheKey), knownEtag, false);
+            }
         }
 
         var url = BuildVotesUrl(session, null, VotesRootPath, modKey, versionKey, "users");
@@ -502,42 +501,51 @@ public sealed class ModVersionVoteService : IDisposable
         if (modList is null || modList.Count == 0)
             return new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
-        var map = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var map = new ConcurrentDictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var modKey in modList.Keys)
+        using var semaphore = new SemaphoreSlim(8, 8);
+        var tasks = modList.Keys.Select(async modKey =>
         {
-            var modUrl = BuildVotesUrl(session, "shallow=true", VotesRootPath, modKey);
-
-            using var modResponse = await HttpClient.GetAsync(modUrl, cancellationToken).ConfigureAwait(false);
-
-            if (modResponse.StatusCode == HttpStatusCode.NotFound)
-                continue;
-
-            await EnsureOkAsync(modResponse, $"Fetch vote index for {modKey}").ConfigureAwait(false);
-
-            var versions = await modResponse.Content
-                .ReadFromJsonAsync<Dictionary<string, JsonElement>>(SerializerOptions, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (versions is null || versions.Count == 0) continue;
-
-            foreach (var versionEntry in versions)
+            await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
-                if (versionEntry.Value.ValueKind != JsonValueKind.Object
-                    && versionEntry.Value.ValueKind != JsonValueKind.True)
-                    continue;
+                var modUrl = BuildVotesUrl(session, "shallow=true", VotesRootPath, modKey);
 
-                if (!map.TryGetValue(modKey, out var versionSet))
+                using var modResponse = await HttpClient.GetAsync(modUrl, cancellationToken).ConfigureAwait(false);
+
+                if (modResponse.StatusCode == HttpStatusCode.NotFound)
+                    return;
+
+                await EnsureOkAsync(modResponse, $"Fetch vote index for {modKey}").ConfigureAwait(false);
+
+                var versions = await modResponse.Content
+                    .ReadFromJsonAsync<Dictionary<string, JsonElement>>(SerializerOptions, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (versions is null || versions.Count == 0) return;
+
+                var versionSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var versionEntry in versions)
                 {
-                    versionSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    map[modKey] = versionSet;
+                    if (versionEntry.Value.ValueKind != JsonValueKind.Object
+                        && versionEntry.Value.ValueKind != JsonValueKind.True)
+                        continue;
+
+                    versionSet.Add(versionEntry.Key);
                 }
 
-                versionSet.Add(versionEntry.Key);
+                if (versionSet.Count > 0)
+                    map[modKey] = versionSet;
             }
-        }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
 
-        return map;
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        return new Dictionary<string, HashSet<string>>(map, StringComparer.OrdinalIgnoreCase);
     }
 
     private static VoteRecord? TryDeserializeRecord(JsonElement element)
@@ -840,6 +848,7 @@ public sealed class ModVersionVoteService : IDisposable
 
                 var value = pair.Value;
                 if (value?.Summary is null) continue;
+                if (value.Summary.Counts.Total == 0) continue;
 
                 _voteCache[key.Value] = new VoteCacheEntry(value.Summary, value.ETag);
             }
@@ -859,10 +868,12 @@ public sealed class ModVersionVoteService : IDisposable
             var directory = Path.GetDirectoryName(VoteCachePath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
 
-            var payload = _voteCache.ToDictionary(
-                pair => BuildCacheKey(pair.Key),
-                pair => new VoteCacheFileEntry(pair.Value.Summary, pair.Value.ETag),
-                StringComparer.Ordinal);
+            var payload = _voteCache
+                .Where(pair => pair.Value.Summary.Counts.Total > 0)
+                .ToDictionary(
+                    pair => BuildCacheKey(pair.Key),
+                    pair => new VoteCacheFileEntry(pair.Value.Summary, pair.Value.ETag),
+                    StringComparer.Ordinal);
 
             var json = JsonSerializer.Serialize(payload, SerializerOptions);
             await File.WriteAllTextAsync(VoteCachePath, json, cancellationToken).ConfigureAwait(false);

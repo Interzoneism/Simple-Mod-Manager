@@ -19,7 +19,7 @@ public sealed class FirebaseAnonymousAuthenticator : IDisposable
     private static readonly string RefreshEndpoint = DevConfig.FirebaseRefreshEndpoint;
     private static readonly string DeleteEndpoint = DevConfig.FirebaseDeleteEndpoint;
     private static readonly string StateFileName = DevConfig.FirebaseAuthStateFileName;
-    private static readonly HttpClient HttpClient = new();
+    private static readonly HttpClient HttpClient = new() { Timeout = TimeSpan.FromSeconds(15) };
     private static readonly TimeSpan ExpirationSkew = TimeSpan.FromMinutes(2);
 
     private static readonly string DefaultApiKey = DevConfig.FirebaseDefaultApiKey;

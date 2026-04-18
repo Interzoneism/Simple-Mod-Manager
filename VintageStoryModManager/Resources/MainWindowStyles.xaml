@@ -388,6 +388,7 @@
                             IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
                             Placement="Right"
                             PlacementTarget="{Binding ElementName=templateRoot}"
+                            StaysOpen="True"
                             VerticalOffset="-4">
 
                             <Border

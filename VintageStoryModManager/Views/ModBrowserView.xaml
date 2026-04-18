@@ -176,6 +176,16 @@
                         SelectionChanged="TagsDropdown_SelectionChanged"
                         ToolTip="Select tags to filter"
                         UseLayoutRounding="True" />
+                    <Button
+                        Width="24"
+                        Height="32"
+                        Margin="0,4,4,4"
+                        Command="{Binding ClearTagsCommand}"
+                        Style="{StaticResource IconButtonStyle}"
+                        ToolTip="Clear selected tags"
+                        UseLayoutRounding="True">
+                        <Path Data="{StaticResource IconClose}" Style="{StaticResource IconMedium}" />
+                    </Button>
 
                     <!--  Side Filter  -->
                     <ComboBox
@@ -312,6 +322,16 @@
                                 </Style>
                             </Path.Style>
                         </Path>
+                    </Button>
+                    <Button
+                        Width="32"
+                        Height="32"
+                        Margin="0,0,4,0"
+                        Command="{Binding DownloadAllFavoritesCommand}"
+                        Style="{StaticResource IconButtonStyle}"
+                        ToolTip="Download all favorited mods"
+                        UseLayoutRounding="True">
+                        <Path Data="{StaticResource IconDownload}" Style="{StaticResource IconLarge}" />
                     </Button>
 
                     <Button
@@ -839,7 +859,7 @@
                                                             Tag="{Binding AssetId}"
                                                             Text="{Binding Name}"
                                                             TextTrimming="CharacterEllipsis"
-                                                            ToolTip="Open in browser">
+                                                            ToolTip="{Binding Name}">
                                                             <TextBlock.Style>
                                                                 <Style TargetType="{x:Type TextBlock}">
                                                                     <Style.Triggers>

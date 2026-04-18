@@ -1051,8 +1051,8 @@ public sealed class ModDatabaseService
                         var releases = BuildReleaseInfos(modElement, normalizedGameVersion, requireExactVersionMatch);
                         var latestRelease = releases.Count > 0 ? releases[0] : null;
                         var latestCompatibleRelease = releases.FirstOrDefault(release => release.IsCompatibleWithInstalledGame);
-                        var latestVersion = latestRelease?.Version;
-                        var latestCompatibleVersion = latestCompatibleRelease?.Version;
+                        var latestVersion = latestCompatibleRelease?.Version ?? modVersion ?? latestRelease?.Version;
+                        var latestCompatibleVersion = latestCompatibleRelease?.Version ?? modVersion;
                         var requiredVersions = FindRequiredGameVersions(modElement, modVersion);
                         var recentDownloads = CalculateDownloadsLastThirtyDays(releases);
                         var tenDayDownloads = CalculateDownloadsLastTenDays(releases);
@@ -1244,9 +1244,9 @@ public sealed class ModDatabaseService
 
         var normalizedVersion = VersionStringUtility.Normalize(version);
         var releaseTags = GetStringList(releaseElement, "tags");
-        var isCompatible = false;
+        var isCompatible = normalizedGameVersion is null || releaseTags.Count == 0;
 
-        if (normalizedGameVersion != null && releaseTags.Count > 0)
+        if (!isCompatible)
             foreach (var tag in releaseTags)
                 if (VersionStringUtility.SupportsVersion(tag, normalizedGameVersion, requireExactVersionMatch))
                 {

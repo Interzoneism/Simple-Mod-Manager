@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -69,6 +70,9 @@ public sealed class DataBackupService
 
         foreach (var directory in Directory.EnumerateDirectories(_backupRootDirectory))
         {
+            if (string.Equals(Path.GetFileName(directory), DevConfig.DataFolderBackupSaveStoreName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
             var manifest = TryLoadManifest(directory);
             if (manifest is null || manifest.CreatedOnUtc == default) continue;
 
@@ -79,6 +83,19 @@ public sealed class DataBackupService
                 manifest.SourceDataDirectory,
                 manifest.VintageStoryVersion));
         }
+
+            foreach (var zipFile in Directory.EnumerateFiles(_backupRootDirectory, "*.zip"))
+            {
+                var manifest = TryLoadManifestFromZip(zipFile);
+                if (manifest is null || manifest.CreatedOnUtc == default) continue;
+
+                summaries.Add(new DataBackupSummary(
+                manifest.Id ?? Path.GetFileNameWithoutExtension(zipFile),
+                manifest.CreatedOnUtc,
+                zipFile,
+                manifest.SourceDataDirectory,
+                manifest.VintageStoryVersion));
+            }
 
         return summaries
             .OrderByDescending(summary => summary.CreatedOnUtc)
@@ -113,6 +130,17 @@ public sealed class DataBackupService
             deleted++;
         }
 
+        foreach (var zipFile in Directory.EnumerateFiles(_backupRootDirectory, "*.zip"))
+        {
+            var manifest = TryLoadManifestFromZip(zipFile);
+            if (manifest is null) continue;
+            if (!DirectoriesMatch(manifest.SourceDataDirectory, normalizedSource)) continue;
+            if (!VersionsMatch(manifest.VintageStoryVersion, normalizedVersion)) continue;
+
+            TryDeleteFile(zipFile);
+            deleted++;
+        }
+
         if (deleted > 0) CleanupSaveStore();
         return deleted;
     }
@@ -141,6 +169,7 @@ public sealed class DataBackupService
         var identifier = GenerateBackupIdentifier(timestampUtc);
         var backupDirectory = EnsureUniqueDirectory(Path.Combine(_backupRootDirectory, identifier));
         var dataTargetDirectory = Path.Combine(backupDirectory, DataDirectoryName);
+        var zipPath = backupDirectory + ".zip";
 
         progress?.Report(new DataBackupProgress(0, "Scanning VintagestoryData..."));
         var plan = BuildBackupPlan(dataDirectory, dataTargetDirectory, cancellationToken);
@@ -161,12 +190,27 @@ public sealed class DataBackupService
             ExecuteBackupPlan(plan, manifest, progress, cancellationToken);
             WriteManifest(Path.Combine(backupDirectory, DevConfig.DataFolderBackupManifestFileName), manifest);
             CleanupSaveStore();
+
+            try
+            {
+                progress?.Report(new DataBackupProgress(95, "Compressing backup..."));
+                ZipFile.CreateFromDirectory(backupDirectory, zipPath, CompressionLevel.Fastest, false);
+                TryDeleteDirectory(backupDirectory);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Trace.TraceWarning("Failed to compress backup, keeping uncompressed: {0}", ex.Message);
+                TryDeleteFile(zipPath);
+            }
+
             progress?.Report(new DataBackupProgress(100, "Backup completed."));
-            return new DataBackupResult(identifier, timestampUtc, backupDirectory);
+            var finalPath = File.Exists(zipPath) ? zipPath : backupDirectory;
+            return new DataBackupResult(identifier, timestampUtc, finalPath);
         }
         catch
         {
             TryDeleteDirectory(backupDirectory);
+            TryDeleteFile(zipPath);
             throw;
         }
     }
@@ -180,72 +224,108 @@ public sealed class DataBackupService
         if (string.IsNullOrWhiteSpace(dataDirectory))
             throw new ArgumentException("A destination data directory must be provided.", nameof(dataDirectory));
 
-        if (!Directory.Exists(summary.DirectoryPath))
-            throw new DirectoryNotFoundException($"The backup directory {summary.DirectoryPath} could not be found.");
+        var isZipBackup = summary.DirectoryPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+        string workingDirectory;
 
-        var manifest = TryLoadManifest(summary.DirectoryPath)
-                       ?? throw new InvalidOperationException("The selected backup is missing required metadata.");
-
-        var backupDataDirectory = Path.Combine(summary.DirectoryPath, DataDirectoryName);
-        if (!Directory.Exists(backupDataDirectory))
-            throw new InvalidOperationException("The selected backup does not include any data to restore.");
-
-        Directory.CreateDirectory(dataDirectory);
-
-        progress?.Report(new DataBackupProgress(0, "Preparing to restore backup..."));
-
-        RemoveExistingData(dataDirectory);
-
-        var savesBytes = manifest.Saves.Sum(save => Math.Max(1L, save.Size));
-        var totalBytes = CalculateDirectorySize(backupDataDirectory) + savesBytes;
-        if (totalBytes <= 0) totalBytes = 1;
-        long restoredBytes = 0;
-
-        CopyDirectory(
-            backupDataDirectory,
-            dataDirectory,
-            cancellationToken,
-            (relativePath, length) =>
-            {
-                restoredBytes += Math.Max(1L, length);
-                var percent = restoredBytes * 100d / totalBytes;
-                progress?.Report(new DataBackupProgress(percent, $"Restoring {relativePath}"));
-            });
-
-        if (manifest.Saves.Count > 0)
+        if (isZipBackup)
         {
-            var savesTargetDirectory = Path.Combine(dataDirectory, SavesFolderName);
-            foreach (var save in manifest.Saves)
+            if (!File.Exists(summary.DirectoryPath))
+                throw new FileNotFoundException($"The backup archive {summary.DirectoryPath} could not be found.");
+
+            progress?.Report(new DataBackupProgress(0, "Extracting backup archive..."));
+            workingDirectory = Path.Combine(Path.GetTempPath(), "svsm-restore-" + Guid.NewGuid().ToString("N"));
+
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var storePath = GetSaveStorePath(save.Hash, save.IsDirectory);
-                if (save.IsDirectory)
-                {
-                    if (!Directory.Exists(storePath))
-                        throw new InvalidOperationException($"The save archive for {save.RelativePath} is missing.");
-
-                    CopyDirectory(
-                        storePath,
-                        Path.Combine(savesTargetDirectory, save.RelativePath),
-                        cancellationToken,
-                        (_, length) => { restoredBytes += Math.Max(1L, length); });
-                }
-                else
-                {
-                    if (!File.Exists(storePath))
-                        throw new InvalidOperationException($"The save archive for {save.RelativePath} is missing.");
-
-                    CopyFile(storePath, Path.Combine(savesTargetDirectory, save.RelativePath), cancellationToken);
-                    restoredBytes += Math.Max(1L, save.Size);
-                }
-
-                var percent = restoredBytes * 100d / totalBytes;
-                progress?.Report(new DataBackupProgress(percent, $"Restoring save {save.RelativePath}"));
+                ZipFile.ExtractToDirectory(summary.DirectoryPath, workingDirectory);
+            }
+            catch
+            {
+                TryDeleteDirectory(workingDirectory);
+                throw;
             }
         }
+        else
+        {
+            if (!Directory.Exists(summary.DirectoryPath))
+                throw new DirectoryNotFoundException($"The backup directory {summary.DirectoryPath} could not be found.");
 
-        RemoveCacheDirectory(dataDirectory);
-        progress?.Report(new DataBackupProgress(100, "Restore completed."));
+            workingDirectory = summary.DirectoryPath;
+        }
+
+        try
+        {
+            var manifest = TryLoadManifest(workingDirectory)
+                           ?? throw new InvalidOperationException("The selected backup is missing required metadata.");
+
+            var backupDataDirectory = Path.Combine(workingDirectory, DataDirectoryName);
+            if (!Directory.Exists(backupDataDirectory))
+                throw new InvalidOperationException("The selected backup does not include any data to restore.");
+
+            Directory.CreateDirectory(dataDirectory);
+
+            progress?.Report(new DataBackupProgress(0, "Preparing to restore backup..."));
+
+            RemoveExistingData(dataDirectory);
+
+            var savesBytes = manifest.Saves.Sum(save => Math.Max(1L, save.Size));
+            var totalBytes = CalculateDirectorySize(backupDataDirectory) + savesBytes;
+            if (totalBytes <= 0) totalBytes = 1;
+            long restoredBytes = 0;
+
+            CopyDirectory(
+                backupDataDirectory,
+                dataDirectory,
+                cancellationToken,
+                (relativePath, length) =>
+                {
+                    restoredBytes += Math.Max(1L, length);
+                    var percent = restoredBytes * 100d / totalBytes;
+                    progress?.Report(new DataBackupProgress(percent, $"Restoring {relativePath}"));
+                });
+
+            if (manifest.Saves.Count > 0)
+            {
+                var savesTargetDirectory = Path.Combine(dataDirectory, SavesFolderName);
+                foreach (var save in manifest.Saves)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var storePath = GetSaveStorePath(save.Hash, save.IsDirectory);
+                    if (save.IsDirectory)
+                    {
+                        if (!Directory.Exists(storePath))
+                            throw new InvalidOperationException($"The save archive for {save.RelativePath} is missing.");
+
+                        CopyDirectory(
+                            storePath,
+                            Path.Combine(savesTargetDirectory, save.RelativePath),
+                            cancellationToken,
+                            (_, length) => { restoredBytes += Math.Max(1L, length); });
+                    }
+                    else
+                    {
+                        if (!File.Exists(storePath))
+                            throw new InvalidOperationException($"The save archive for {save.RelativePath} is missing.");
+
+                        CopyFile(storePath, Path.Combine(savesTargetDirectory, save.RelativePath), cancellationToken);
+                        restoredBytes += Math.Max(1L, save.Size);
+                    }
+
+                    var percent = restoredBytes * 100d / totalBytes;
+                    progress?.Report(new DataBackupProgress(percent, $"Restoring save {save.RelativePath}"));
+                }
+            }
+
+            RemoveCacheDirectory(dataDirectory);
+            progress?.Report(new DataBackupProgress(100, "Restore completed."));
+        }
+        finally
+        {
+            if (isZipBackup)
+            {
+                TryDeleteDirectory(workingDirectory);
+            }
+        }
     }
 
     private static void RemoveExistingData(string dataDirectory)
@@ -554,6 +634,20 @@ public sealed class DataBackupService
 
                     if (value > highestSuffix) highestSuffix = value;
                 }
+
+                foreach (var zipFile in Directory.EnumerateFiles(_backupRootDirectory, $"{prefix}*.zip", SearchOption.TopDirectoryOnly))
+                {
+                    var name = Path.GetFileNameWithoutExtension(zipFile);
+                    if (string.IsNullOrWhiteSpace(name) || name.Length <= prefix.Length) continue;
+
+                    var suffix = name[prefix.Length..];
+                    var underscoreIndex = suffix.IndexOf('_');
+                    if (underscoreIndex >= 0) suffix = suffix[..underscoreIndex];
+
+                    if (!int.TryParse(suffix, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)) continue;
+
+                    if (value > highestSuffix) highestSuffix = value;
+                }
             }
             catch
             {
@@ -567,14 +661,14 @@ public sealed class DataBackupService
 
     private static string EnsureUniqueDirectory(string candidate)
     {
-        if (!Directory.Exists(candidate)) return candidate;
+        if (!Directory.Exists(candidate) && !File.Exists(candidate + ".zip")) return candidate;
 
         var counter = 1;
         string path;
         do
         {
             path = $"{candidate}_{counter++}";
-        } while (Directory.Exists(path));
+        } while (Directory.Exists(path) || File.Exists(path + ".zip"));
 
         return path;
     }
@@ -613,6 +707,22 @@ public sealed class DataBackupService
         }
     }
 
+    private BackupManifest? TryLoadManifestFromZip(string zipPath)
+    {
+        try
+        {
+            using var archive = ZipFile.OpenRead(zipPath);
+            var manifestEntry = archive.GetEntry(DevConfig.DataFolderBackupManifestFileName);
+            if (manifestEntry is null) return null;
+            using var stream = manifestEntry.Open();
+            return JsonSerializer.Deserialize<BackupManifest>(stream);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
+        {
+            return null;
+        }
+    }
+
     private void CleanupSaveStore()
     {
         if (!Directory.Exists(_savesStoreDirectory)) return;
@@ -623,6 +733,16 @@ public sealed class DataBackupService
             foreach (var directory in Directory.EnumerateDirectories(_backupRootDirectory))
             {
                 var manifest = TryLoadManifest(directory);
+                if (manifest is null) continue;
+                foreach (var save in manifest.Saves)
+                {
+                    if (!string.IsNullOrWhiteSpace(save.Hash)) usedHashes.Add(save.Hash);
+                }
+            }
+
+            foreach (var zipFile in Directory.EnumerateFiles(_backupRootDirectory, "*.zip"))
+            {
+                var manifest = TryLoadManifestFromZip(zipFile);
                 if (manifest is null) continue;
                 foreach (var save in manifest.Saves)
                 {
@@ -664,6 +784,18 @@ public sealed class DataBackupService
         catch (UnauthorizedAccessException ex)
         {
             Trace.TraceWarning("Failed to delete directory {0}: {1}", path, ex.Message);
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Trace.TraceWarning("Failed to delete file {0}: {1}", path, ex.Message);
         }
     }
 

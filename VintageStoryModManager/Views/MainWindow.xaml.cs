@@ -83,6 +83,8 @@ public partial class MainWindow : Window
     // Summary key prefixes to avoid collisions between different summary types
     private const string SummaryKeyPatchModPrefix = "__PATCH_MOD__";
     private const string SummaryKeyLinePrefix = "__PREFIX__";
+    private const string TargetGameVersionMenuAutoTag = "__target_auto__";
+    private const string TargetGameVersionMenuCustomTag = "__target_custom__";
     private const int MaxDataBackupsMenuItems = 15;
     private const int WindowPositionScreenMargin = 50;
 
@@ -356,6 +358,7 @@ public partial class MainWindow : Window
     private bool _isApplyingMultiToggle;
     private bool _isApplyingPreset;
     private bool _isAutomaticRefreshRunning;
+    private bool _isInstallingMod;
     private bool _isCloudModlistRefreshInProgress;
     private bool _isDependencyResolutionRefreshPending;
     private bool _isDraggingModInfoPanel;
@@ -494,6 +497,7 @@ public partial class MainWindow : Window
         RegisterColumnMenuItem(NameColumnMenuItem, InstalledModsColumn.Name);
         RegisterColumnMenuItem(VersionColumnMenuItem, InstalledModsColumn.Version);
         RegisterColumnMenuItem(LatestVersionColumnMenuItem, InstalledModsColumn.LatestVersion);
+        RegisterColumnMenuItem(DateModifiedColumnMenuItem, InstalledModsColumn.DateModified);
         RegisterColumnMenuItem(AuthorsColumnMenuItem, InstalledModsColumn.Authors);
         RegisterColumnMenuItem(TagsColumnMenuItem, InstalledModsColumn.Tags);
         RegisterColumnMenuItem(UserReportsColumnMenuItem, InstalledModsColumn.UserReports);
@@ -534,6 +538,7 @@ public partial class MainWindow : Window
             InstalledModsColumn.Name => NameColumn,
             InstalledModsColumn.Version => VersionColumn,
             InstalledModsColumn.LatestVersion => LatestVersionColumn,
+            InstalledModsColumn.DateModified => DateModifiedColumn,
             InstalledModsColumn.Authors => AuthorsColumn,
             InstalledModsColumn.Tags => TagsColumn,
             InstalledModsColumn.UserReports => UserReportsColumn,
@@ -1580,16 +1585,230 @@ public partial class MainWindow : Window
 
     private void UpdateGameVersionMenuItem(string? gameVersion)
     {
-        if (GameVersionMenuItem is null) return;
+        var overrideVersion = _userConfiguration.TargetGameVersionOverride;
 
-        if (string.IsNullOrWhiteSpace(gameVersion))
+        if (GameVersionMenuItem is null)
         {
-            GameVersionMenuItem.Visibility = Visibility.Collapsed;
+            UpdateTargetGameVersionMenuHeader(gameVersion, overrideVersion);
             return;
         }
 
-        GameVersionMenuItem.Header = $"Vintage Story: {gameVersion}";
+        var hasDetectedVersion = !string.IsNullOrWhiteSpace(gameVersion);
+        var hasOverrideVersion = !string.IsNullOrWhiteSpace(overrideVersion);
+
+        if (!hasDetectedVersion && !hasOverrideVersion)
+        {
+            GameVersionMenuItem.Visibility = Visibility.Collapsed;
+            UpdateTargetGameVersionMenuHeader(gameVersion, overrideVersion);
+            return;
+        }
+
+        var detectedDisplay = hasDetectedVersion ? gameVersion!.Trim() : "Unknown";
+        if (hasOverrideVersion)
+            GameVersionMenuItem.Header = $"Vintage Story: {detectedDisplay} (targeting {overrideVersion})";
+        else
+            GameVersionMenuItem.Header = $"Vintage Story: {detectedDisplay}";
+
         GameVersionMenuItem.Visibility = Visibility.Visible;
+        UpdateTargetGameVersionMenuHeader(gameVersion, overrideVersion);
+    }
+
+    private void UpdateTargetGameVersionMenuHeader(string? detectedVersion, string? overrideVersion)
+    {
+        if (TargetGameVersionMenuItem is null) return;
+
+        var detectedDisplay = string.IsNullOrWhiteSpace(detectedVersion)
+            ? "unknown"
+            : detectedVersion.Trim();
+
+        if (string.IsNullOrWhiteSpace(overrideVersion))
+            TargetGameVersionMenuItem.Header = $"Target version: Auto ({detectedDisplay})";
+        else
+            TargetGameVersionMenuItem.Header = $"Target version: {overrideVersion} (detected: {detectedDisplay})";
+    }
+
+    private void TargetGameVersionMenuItem_OnSubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem) return;
+
+        var detectedVersion = VintageStoryVersionLocator.GetInstalledVersion(_gameDirectory);
+        var currentOverride = _userConfiguration.TargetGameVersionOverride;
+        var normalizedCurrentOverride = VersionStringUtility.Normalize(currentOverride);
+        var candidates = BuildTargetVersionMenuCandidates(detectedVersion, currentOverride);
+
+        menuItem.Items.Clear();
+
+        var autoLabel = string.IsNullOrWhiteSpace(detectedVersion)
+            ? "Auto (detected: unknown)"
+            : $"Auto (detected: {detectedVersion})";
+        var autoItem = new MenuItem
+        {
+            Header = autoLabel,
+            Tag = TargetGameVersionMenuAutoTag,
+            IsCheckable = true,
+            IsChecked = string.IsNullOrWhiteSpace(currentOverride)
+        };
+        autoItem.Click += TargetGameVersionChoiceMenuItem_OnClick;
+        menuItem.Items.Add(autoItem);
+
+        menuItem.Items.Add(new Separator());
+
+        foreach (var candidate in candidates)
+        {
+            var normalizedCandidate = VersionStringUtility.Normalize(candidate);
+            var item = new MenuItem
+            {
+                Header = candidate,
+                Tag = candidate,
+                IsCheckable = true,
+                IsChecked = !string.IsNullOrWhiteSpace(normalizedCurrentOverride)
+                            && string.Equals(normalizedCandidate, normalizedCurrentOverride,
+                                StringComparison.OrdinalIgnoreCase)
+            };
+            item.Click += TargetGameVersionChoiceMenuItem_OnClick;
+            menuItem.Items.Add(item);
+        }
+
+        var customItem = new MenuItem
+        {
+            Header = "Custom...",
+            Tag = TargetGameVersionMenuCustomTag,
+            IsCheckable = false
+        };
+        customItem.Click += TargetGameVersionChoiceMenuItem_OnClick;
+        menuItem.Items.Add(customItem);
+
+        UpdateTargetGameVersionMenuHeader(detectedVersion, currentOverride);
+    }
+
+    private async void TargetGameVersionChoiceMenuItem_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem || menuItem.Tag is not string tag) return;
+
+        string? overrideValue;
+        if (string.Equals(tag, TargetGameVersionMenuAutoTag, StringComparison.Ordinal))
+            overrideValue = null;
+        else if (string.Equals(tag, TargetGameVersionMenuCustomTag, StringComparison.Ordinal))
+        {
+            overrideValue = PromptForTargetGameVersionOverride();
+            if (overrideValue is null) return;
+        }
+        else
+        {
+            overrideValue = tag;
+        }
+
+        if (string.Equals(_userConfiguration.TargetGameVersionOverride, overrideValue, StringComparison.Ordinal)) return;
+
+        _userConfiguration.SetTargetGameVersionOverride(overrideValue);
+        await ReloadViewModelAsync().ConfigureAwait(true);
+
+        if (_modBrowserViewModel != null)
+        {
+            _modBrowserViewModel.RefreshInstalledGameVersion();
+            _modBrowserViewModel.InvalidateAllVisibleUserReports();
+        }
+
+        var detectedVersion = _viewModel?.InstalledGameVersion ?? VintageStoryVersionLocator.GetInstalledVersion(_gameDirectory);
+        UpdateGameVersionMenuItem(detectedVersion);
+    }
+
+    private string? PromptForTargetGameVersionOverride()
+    {
+        var initialValue = _userConfiguration.TargetGameVersionOverride
+                           ?? ExtractMajorMinorVersion(VintageStoryVersionLocator.GetInstalledVersion(_gameDirectory))
+                           ?? string.Empty;
+
+        var input = Microsoft.VisualBasic.Interaction.InputBox(
+            "Enter the target Vintage Story version (for example: 1.22 or 1.22.0).",
+            "Set Target Game Version",
+            initialValue);
+
+        if (string.IsNullOrWhiteSpace(input)) return null;
+
+        var candidate = input.Trim();
+        var normalized = VersionStringUtility.Normalize(candidate);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            WpfMessageBox.Show(
+                "The entered target version is not valid.",
+                "Simple VS Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return null;
+        }
+
+        return ExtractMajorMinorVersion(candidate) ?? normalized;
+    }
+
+    private IReadOnlyList<string> BuildTargetVersionMenuCandidates(string? detectedVersion, string? currentOverride)
+    {
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        AddTargetVersionCandidate(candidates, detectedVersion);
+        AddTargetVersionCandidate(candidates, currentOverride);
+
+        if (_modBrowserViewModel?.AvailableVersions is { Count: > 0 } availableVersions)
+            foreach (var version in availableVersions)
+                AddTargetVersionCandidate(candidates, version?.Name);
+
+        if (candidates.Count == 0 && _viewModel is not null)
+            foreach (var mod in _viewModel.GetInstalledModsSnapshot())
+                foreach (var option in mod.VersionOptions)
+                {
+                    if (option.Release?.GameVersionTags is not { Count: > 0 } tags) continue;
+
+                    foreach (var tag in tags)
+                        AddTargetVersionCandidate(candidates, tag);
+                }
+
+        return candidates
+            .OrderByDescending(static value => ParseTargetVersionSortKey(value).Major)
+            .ThenByDescending(static value => ParseTargetVersionSortKey(value).Minor)
+            .ThenByDescending(static value => ParseTargetVersionSortKey(value).Patch)
+            .ThenByDescending(static value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static void AddTargetVersionCandidate(ISet<string> candidates, string? value)
+    {
+        var candidate = ExtractMajorMinorVersion(value);
+        if (string.IsNullOrWhiteSpace(candidate)) return;
+
+        candidates.Add(candidate);
+    }
+
+    private static string? ExtractMajorMinorVersion(string? value)
+    {
+        var normalized = VersionStringUtility.Normalize(value);
+        if (string.IsNullOrWhiteSpace(normalized)) return null;
+
+        var parts = normalized.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2) return null;
+
+        return string.Concat(parts[0], ".", parts[1]);
+    }
+
+    private static (int Major, int Minor, int Patch) ParseTargetVersionSortKey(string value)
+    {
+        var normalized = VersionStringUtility.Normalize(value);
+        if (string.IsNullOrWhiteSpace(normalized)) return (-1, -1, -1);
+
+        var parts = normalized.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        var major = parts.Length > 0 && int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture,
+            out var parsedMajor)
+            ? parsedMajor
+            : -1;
+        var minor = parts.Length > 1 && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture,
+            out var parsedMinor)
+            ? parsedMinor
+            : -1;
+        var patch = parts.Length > 2 && int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture,
+            out var parsedPatch)
+            ? parsedPatch
+            : -1;
+
+        return (major, minor, patch);
     }
 
     private void ApplyStoredWindowDimensions()
@@ -2653,7 +2872,7 @@ public partial class MainWindow : Window
 
     private void ModsWatcherOnChangesDetected(object? sender, EventArgs e)
     {
-        if (_modBrowserViewModel == null) return;
+        if (_modBrowserViewModel == null || _isInstallingMod) return;
 
         Dispatcher.InvokeAsync(async () =>
         {
@@ -2750,73 +2969,81 @@ public partial class MainWindow : Window
             return;
         }
 
-        await CreateAutomaticBackupAsync("ModsUpdated").ConfigureAwait(true);
-
-        _isModUpdateInProgress = true;
-        UpdateSelectedModButtons();
-
+        _isInstallingMod = true;
         try
         {
-            var descriptor = new ModUpdateDescriptor(
-                modViewModel.ModId,
-                modViewModel.DisplayName,
-                release.DownloadUri,
-                targetPath,
-                false,
-                release.FileName,
-                release.Version,
-                modViewModel.Version);
+            await CreateAutomaticBackupAsync("ModsUpdated").ConfigureAwait(true);
 
-            var progress = new Progress<ModUpdateProgress>(p =>
-                _viewModel?.ReportStatus($"{modViewModel.DisplayName}: {p.Message}"));
+            _isModUpdateInProgress = true;
+            UpdateSelectedModButtons();
 
-            var result = await _modUpdateService
-                .UpdateAsync(descriptor, _userConfiguration.CacheAllVersionsLocally, progress)
-                .ConfigureAwait(true);
-
-            if (!result.Success)
+            try
             {
-                var message = string.IsNullOrWhiteSpace(result.ErrorMessage)
-                    ? "The installation failed."
-                    : result.ErrorMessage!;
-                _viewModel?.ReportStatus($"Failed to install {modViewModel.DisplayName}: {message}", true);
-                WpfMessageBox.Show($"Failed to install {modViewModel.DisplayName}:{Environment.NewLine}{message}",
+                var descriptor = new ModUpdateDescriptor(
+                    modViewModel.ModId,
+                    modViewModel.DisplayName,
+                    release.DownloadUri,
+                    targetPath,
+                    false,
+                    release.FileName,
+                    release.Version,
+                    modViewModel.Version);
+
+                var progress = new Progress<ModUpdateProgress>(p =>
+                    _viewModel?.ReportStatus($"{modViewModel.DisplayName}: {p.Message}"));
+
+                var result = await _modUpdateService
+                    .UpdateAsync(descriptor, _userConfiguration.CacheAllVersionsLocally, progress)
+                    .ConfigureAwait(true);
+
+                if (!result.Success)
+                {
+                    var message = string.IsNullOrWhiteSpace(result.ErrorMessage)
+                        ? "The installation failed."
+                        : result.ErrorMessage!;
+                    _viewModel?.ReportStatus($"Failed to install {modViewModel.DisplayName}: {message}", true);
+                    WpfMessageBox.Show($"Failed to install {modViewModel.DisplayName}:{Environment.NewLine}{message}",
+                        "Simple VS Manager",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    return;
+                }
+
+                // Step 11: Use the SAME success reporting
+                var versionText = string.IsNullOrWhiteSpace(release.Version) ? string.Empty : $" {release.Version}";
+                _viewModel?.ReportStatus($"Installed {modViewModel.DisplayName}{versionText}.");
+                _modActivityLoggingService.LogModInstall(modViewModel.DisplayName ?? modViewModel.ModId ?? "Unknown", release.Version);
+
+                // Step 12: Use the SAME refresh function
+                await RefreshModsAsync().ConfigureAwait(true);
+
+                // Step 13: ModBrowser-specific cleanup
+                // Update the ModBrowserViewModel to mark as installed and remove from search
+                AddModToInstalledAndRemoveFromSearch(mod.ModId);
+            }
+            catch (OperationCanceledException)
+            {
+                _viewModel?.ReportStatus("Installation cancelled.");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                _modActivityLoggingService.LogError($"Failed to install {modViewModel.DisplayName}", ex);
+                _viewModel?.ReportStatus($"Failed to install {modViewModel.DisplayName}: {ex.Message}", true);
+                WpfMessageBox.Show($"Failed to install {modViewModel.DisplayName}:{Environment.NewLine}{ex.Message}",
                     "Simple VS Manager",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
-                return;
             }
-
-            // Step 11: Use the SAME success reporting
-            var versionText = string.IsNullOrWhiteSpace(release.Version) ? string.Empty : $" {release.Version}";
-            _viewModel?.ReportStatus($"Installed {modViewModel.DisplayName}{versionText}.");
-            _modActivityLoggingService.LogModInstall(modViewModel.DisplayName ?? modViewModel.ModId ?? "Unknown", release.Version);
-
-            // Step 12: Use the SAME refresh function
-            await RefreshModsAsync().ConfigureAwait(true);
-
-            // Step 13: ModBrowser-specific cleanup
-            // Update the ModBrowserViewModel to mark as installed and remove from search
-            AddModToInstalledAndRemoveFromSearch(mod.ModId);
-        }
-        catch (OperationCanceledException)
-        {
-            _viewModel?.ReportStatus("Installation cancelled.");
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        {
-            _modActivityLoggingService.LogError($"Failed to install {modViewModel.DisplayName}", ex);
-            _viewModel?.ReportStatus($"Failed to install {modViewModel.DisplayName}: {ex.Message}", true);
-            WpfMessageBox.Show($"Failed to install {modViewModel.DisplayName}:{Environment.NewLine}{ex.Message}",
-                "Simple VS Manager",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            finally
+            {
+                // Step 14: Use the SAME cleanup
+                _isModUpdateInProgress = false;
+                UpdateSelectedModButtons();
+            }
         }
         finally
         {
-            // Step 14: Use the SAME cleanup
-            _isModUpdateInProgress = false;
-            UpdateSelectedModButtons();
+            _isInstallingMod = false;
         }
     }
 
@@ -4126,7 +4353,7 @@ public partial class MainWindow : Window
 
     private async void ModsWatcherTimerOnTick(object? sender, EventArgs e)
     {
-        if (_viewModel is null || _viewModel.IsBusy || _isInitializing || _isAutomaticRefreshRunning) return;
+        if (_viewModel is null || _viewModel.IsBusy || _isInitializing || _isAutomaticRefreshRunning || _isInstallingMod) return;
 
         var hasChanges = await _viewModel.CheckForModStateChangesAsync();
         if (!hasChanges) return;
@@ -7554,6 +7781,13 @@ public partial class MainWindow : Window
         RefreshDeveloperProfilesMenuEntries();
         UpdateGameVersionMenuItem(VintageStoryVersionLocator.GetInstalledVersion(_gameDirectory));
         await ReloadViewModelAsync();
+
+        if (_modBrowserViewModel != null)
+        {
+            _modBrowserViewModel.RefreshInstalledGameVersion();
+            _modBrowserViewModel.InvalidateAllVisibleUserReports();
+        }
+
         UpdateActiveGameProfileDisplay();
     }
 
@@ -7678,6 +7912,12 @@ public partial class MainWindow : Window
         _gameDirectory = selected;
         _userConfiguration.SetGameDirectory(selected);
         UpdateGameVersionMenuItem(VintageStoryVersionLocator.GetInstalledVersion(_gameDirectory));
+
+        if (_modBrowserViewModel != null)
+        {
+            _modBrowserViewModel.RefreshInstalledGameVersion();
+            _modBrowserViewModel.InvalidateAllVisibleUserReports();
+        }
     }
 
     private void RefreshDeveloperProfilesMenuEntries()
@@ -14146,6 +14386,7 @@ public partial class MainWindow : Window
         Installed,
         Version,
         LatestVersion,
+        DateModified,
         Downloads,
         Authors,
         Tags,
