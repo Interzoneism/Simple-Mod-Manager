@@ -15,11 +15,13 @@ namespace VintageStoryModManager.ViewModels;
 /// <summary>
 /// ViewModel for the main mod browser view.
 /// </summary>
-public partial class ModBrowserViewModel : ObservableObject
+public partial class ModBrowserViewModel : ObservableObject, IDisposable
 {
     private readonly IModApiService _modApiService;
     private readonly UserConfigurationService? _userConfigService;
     private readonly ModVersionVoteService _voteService;
+    private readonly object _ctsSyncRoot = new();
+    private readonly object _modDetailsCacheLock = new();
     private string? _installedGameVersion;
     private CancellationTokenSource? _searchCts;
     private const int DefaultLoadedMods = 45;
@@ -34,11 +36,13 @@ public partial class ModBrowserViewModel : ObservableObject
     private readonly HashSet<int> _userReportsLoaded = new();
     private readonly HashSet<int> _modsWithLoadedLogos = new();
     private readonly HashSet<string> _normalizedInstalledModIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<int, string> _latestReleaseVersionsByModId = new();
     private long _lastLoadMoreTicks;
     private const int LoadMoreThrottleMs = 300;
     private int _activeSearchCount;
     private CancellationTokenSource? _pendingLoadMoreCts;
     private bool _isLoadingMore;
+    private bool _disposed;
 
     #region Observable Properties
 
@@ -193,11 +197,13 @@ public partial class ModBrowserViewModel : ObservableObject
     /// </summary>
     public void SetInstallModCallback(Func<DownloadableMod, Task> callback)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         _installModCallback = callback;
     }
 
     public void RefreshInstalledGameVersion()
     {
+        if (_disposed) return;
         _installedGameVersion = VintageStoryVersionLocator.GetInstalledVersion(_userConfigService?.GameDirectory);
     }
 
@@ -206,18 +212,38 @@ public partial class ModBrowserViewModel : ObservableObject
     /// </summary>
     public void SetTabVisibility(bool isVisible)
     {
+        if (_disposed) return;
+
         _isTabVisible = isVisible;
 
         if (!isVisible)
         {
-            _searchCts?.Cancel();
-            _pendingLoadMoreCts?.Cancel();
-            _pendingLoadMoreCts = null;
+            CancelAndDisposeSearchCts();
+            CancelAndDisposePendingLoadMoreCts();
         }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+
+        _disposed = true;
+        _isTabVisible = false;
+        _installModCallback = null;
+
+        SelectedVersions.CollectionChanged -= OnFilterCollectionChanged;
+        SelectedTags.CollectionChanged -= OnFilterCollectionChanged;
+        FavoriteMods.CollectionChanged -= OnFavoriteModsCollectionChanged;
+
+        CancelAndDisposeSearchCts();
+        CancelAndDisposePendingLoadMoreCts();
+        _voteService.Dispose();
     }
 
     private async void OnFilterCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        if (_disposed) return;
+
         try
         {
             // Save selections to config
@@ -253,6 +279,8 @@ public partial class ModBrowserViewModel : ObservableObject
 
     private void OnFavoriteModsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        if (_disposed) return;
+
         DownloadAllFavoritesCommand.NotifyCanExecuteChanged();
 
         if (_isInitializing)
@@ -422,15 +450,12 @@ public partial class ModBrowserViewModel : ObservableObject
     [RelayCommand]
     private async Task SearchModsAsync()
     {
-        if (!_isTabVisible)
+        if (_disposed || !_isTabVisible)
             return;
 
         // Cancel any pending search and pending load more operations
-        _searchCts?.Cancel();
-        _searchCts = new CancellationTokenSource();
-        _pendingLoadMoreCts?.Cancel();
-        _pendingLoadMoreCts = null;
-        var token = _searchCts.Token;
+        var token = ReplaceSearchCts().Token;
+        CancelAndDisposePendingLoadMoreCts();
 
         // Increment active search counter
         Interlocked.Increment(ref _activeSearchCount);
@@ -441,10 +466,9 @@ public partial class ModBrowserViewModel : ObservableObject
             LoadingMessage = "Searching mods...";
 
             // Clear the list immediately so the progress indicator is visible
-            ModsList.Clear();
-            VisibleMods.Clear();
+            ModsList = [];
+            VisibleMods = [];
             VisibleModsCount = 0;
-            // OnPropertyChanged(nameof(VisibleMods)); // Handled by ObservableCollection
 
             // Add a small delay to debounce rapid typing
             var debounceDelay = string.IsNullOrWhiteSpace(TextFilter) ? 50 : 400;
@@ -489,19 +513,10 @@ public partial class ModBrowserViewModel : ObservableObject
             if (token.IsCancellationRequested)
                 return;
 
-            foreach (var mod in filteredMods)
-            {
-                ModsList.Add(mod);
-            }
-
-            var initialBatch = ModsList.Take(DefaultLoadedMods);
-            foreach (var mod in initialBatch)
-            {
-                VisibleMods.Add(mod);
-            }
-
-            VisibleModsCount = VisibleMods.Count;
-            // OnPropertyChanged(nameof(VisibleMods));
+            var initialBatch = filteredMods.Take(DefaultLoadedMods).ToList();
+            ModsList = new ObservableCollection<DownloadableModOnList>(filteredMods);
+            VisibleMods = new ObservableCollection<DownloadableModOnList>(initialBatch);
+            VisibleModsCount = initialBatch.Count;
 
             var modsToPrefetch = GetPrefetchMods();
             // Only populate user reports for visible mods + prefetch buffer
@@ -530,6 +545,8 @@ public partial class ModBrowserViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadMore()
     {
+        if (_disposed) return;
+
         // Check if we have more mods to load early
         if (VisibleModsCount >= ModsList.Count)
         {
@@ -547,9 +564,7 @@ public partial class ModBrowserViewModel : ObservableObject
                 return;
             }
             
-            _pendingLoadMoreCts?.Cancel();
-            _pendingLoadMoreCts = new CancellationTokenSource();
-            var delayCts = _pendingLoadMoreCts;
+            var delayCts = ReplacePendingLoadMoreCts();
             
             _ = Task.Run(async () =>
             {
@@ -584,9 +599,7 @@ public partial class ModBrowserViewModel : ObservableObject
                 return;
             }
             
-            _pendingLoadMoreCts?.Cancel();
-            _pendingLoadMoreCts = new CancellationTokenSource();
-            var delayCts = _pendingLoadMoreCts;
+            var delayCts = ReplacePendingLoadMoreCts();
             
             var remainingDelay = (int)(LoadMoreThrottleMs - timeSinceLastLoad);
             _ = Task.Run(async () =>
@@ -899,31 +912,19 @@ public partial class ModBrowserViewModel : ObservableObject
     private async Task LoadAuthorsAsync()
     {
         var authors = await _modApiService.GetAuthorsAsync();
-        AvailableAuthors.Clear();
-        foreach (var author in authors)
-        {
-            AvailableAuthors.Add(author);
-        }
+        AvailableAuthors = new ObservableCollection<ModAuthor>(authors);
     }
 
     private async Task LoadGameVersionsAsync()
     {
         var versions = await _modApiService.GetGameVersionsAsync();
-        AvailableVersions.Clear();
-        foreach (var version in versions)
-        {
-            AvailableVersions.Add(version);
-        }
+        AvailableVersions = new ObservableCollection<GameVersion>(versions);
     }
 
     private async Task LoadTagsAsync()
     {
         var tags = await _modApiService.GetTagsAsync();
-        AvailableTags.Clear();
-        foreach (var tag in tags)
-        {
-            AvailableTags.Add(tag);
-        }
+        AvailableTags = new ObservableCollection<ModTag>(tags);
     }
 
     private bool IsModInstalled(DownloadableModOnList mod)
@@ -1175,6 +1176,7 @@ public partial class ModBrowserViewModel : ObservableObject
                 var modIdentifier = mod.ModId;
 
                 var modDetails = await _modApiService.GetModAsync(modIdentifier, cancellationToken);
+                CacheLatestReleaseVersion(mod.ModId, GetLatestReleaseVersion(modDetails));
 
                 var logoUrl = modDetails?.LogoFileDatabase;
                 if (!string.IsNullOrWhiteSpace(logoUrl))
@@ -1290,20 +1292,21 @@ public partial class ModBrowserViewModel : ObservableObject
             return;
         }
 
-        var modDetails = await _modApiService.GetModAsync(mod.ModId, cancellationToken);
-        if (modDetails?.Releases is null || modDetails.Releases.Count == 0)
+        var latestReleaseVersion = GetCachedLatestReleaseVersion(mod.ModId);
+        if (string.IsNullOrWhiteSpace(latestReleaseVersion))
         {
-            mod.ShowUserReportBadge = false;
-            mod.UserReportDisplay = string.Empty;
-            mod.UserReportTooltip = "No releases available to load user reports.";
-            return;
+            var modDetails = await _modApiService.GetModAsync(mod.ModId, cancellationToken);
+            latestReleaseVersion = GetLatestReleaseVersion(modDetails);
+            CacheLatestReleaseVersion(mod.ModId, latestReleaseVersion);
+
+            if (!string.IsNullOrWhiteSpace(modDetails?.LogoFileDatabase)
+                && string.IsNullOrWhiteSpace(mod.LogoFileDatabase))
+            {
+                mod.LogoFileDatabase = modDetails.LogoFileDatabase;
+            }
         }
 
-        var latestRelease = modDetails.Releases
-            .OrderByDescending(r => DateTime.TryParse(r.Created, out var date) ? date : DateTime.MinValue)
-            .FirstOrDefault();
-
-        if (latestRelease is null || string.IsNullOrWhiteSpace(latestRelease.ModVersion))
+        if (string.IsNullOrWhiteSpace(latestReleaseVersion))
         {
             mod.ShowUserReportBadge = false;
             mod.UserReportDisplay = string.Empty;
@@ -1322,7 +1325,7 @@ public partial class ModBrowserViewModel : ObservableObject
 
         var summary = await _voteService.GetVoteSummaryAsync(
             modId,
-            latestRelease.ModVersion,
+            latestReleaseVersion,
             effectiveGameVersion,
             cancellationToken);
 
@@ -1391,6 +1394,37 @@ public partial class ModBrowserViewModel : ObservableObject
         });
     }
 
+    private string? GetCachedLatestReleaseVersion(int modId)
+    {
+        lock (_modDetailsCacheLock)
+        {
+            return _latestReleaseVersionsByModId.GetValueOrDefault(modId);
+        }
+    }
+
+    private void CacheLatestReleaseVersion(int modId, string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version)) return;
+
+        lock (_modDetailsCacheLock)
+        {
+            _latestReleaseVersionsByModId[modId] = version;
+        }
+    }
+
+    private static string? GetLatestReleaseVersion(DownloadableMod? modDetails)
+    {
+        if (modDetails?.Releases is null || modDetails.Releases.Count == 0) return null;
+
+        var latestRelease = modDetails.Releases
+            .OrderByDescending(r => DateTime.TryParse(r.Created, out var date) ? date : DateTime.MinValue)
+            .FirstOrDefault();
+
+        return string.IsNullOrWhiteSpace(latestRelease?.ModVersion)
+            ? null
+            : latestRelease.ModVersion;
+    }
+
     #endregion
 
     #region Property Changed Handlers
@@ -1398,7 +1432,7 @@ public partial class ModBrowserViewModel : ObservableObject
     partial void OnTextFilterChanged(string value)
     {
         OnPropertyChanged(nameof(HasSearchText));
-        if (!_isInitializing)
+        if (!_disposed && !_isInitializing)
         {
             IsSearching = true;
             _ = SearchModsAsync();
@@ -1407,7 +1441,7 @@ public partial class ModBrowserViewModel : ObservableObject
 
     partial void OnSelectedAuthorChanged(ModAuthor? value)
     {
-        if (!_isInitializing)
+        if (!_disposed && !_isInitializing)
         {
             IsSearching = true;
             _ = SearchModsAsync();
@@ -1416,7 +1450,7 @@ public partial class ModBrowserViewModel : ObservableObject
 
     partial void OnSelectedSideChanged(string value)
     {
-        if (!_isInitializing)
+        if (!_disposed && !_isInitializing)
         {
             IsSearching = true;
             _userConfigService?.SetModBrowserSelectedSide(value);
@@ -1426,7 +1460,7 @@ public partial class ModBrowserViewModel : ObservableObject
 
     partial void OnSelectedInstalledFilterChanged(string value)
     {
-        if (!_isInitializing)
+        if (!_disposed && !_isInitializing)
         {
             IsSearching = true;
             _userConfigService?.SetModBrowserSelectedInstalledFilter(value);
@@ -1436,7 +1470,7 @@ public partial class ModBrowserViewModel : ObservableObject
 
     partial void OnOnlyFavoritesChanged(bool value)
     {
-        if (!_isInitializing)
+        if (!_disposed && !_isInitializing)
         {
             IsSearching = true;
             _userConfigService?.SetModBrowserOnlyFavorites(value);
@@ -1446,7 +1480,7 @@ public partial class ModBrowserViewModel : ObservableObject
 
     partial void OnOrderByChanged(string value)
     {
-        if (!_isInitializing)
+        if (!_disposed && !_isInitializing)
         {
             IsSearching = true;
             _userConfigService?.SetModBrowserOrderBy(value);
@@ -1456,7 +1490,7 @@ public partial class ModBrowserViewModel : ObservableObject
 
     partial void OnOrderByDirectionChanged(string value)
     {
-        if (!_isInitializing)
+        if (!_disposed && !_isInitializing)
         {
             IsSearching = true;
             _userConfigService?.SetModBrowserOrderByDirection(value);
@@ -1466,12 +1500,67 @@ public partial class ModBrowserViewModel : ObservableObject
 
     partial void OnUseRelevantSearchResultsChanged(bool value)
     {
-        if (!_isInitializing)
+        if (!_disposed && !_isInitializing)
         {
             IsSearching = true;
             _userConfigService?.SetModBrowserRelevantSearch(value);
             _ = SearchModsAsync();
         }
+    }
+
+    private CancellationTokenSource ReplaceSearchCts()
+    {
+        lock (_ctsSyncRoot)
+        {
+            CancelAndDisposeCts(ref _searchCts);
+            _searchCts = new CancellationTokenSource();
+            return _searchCts;
+        }
+    }
+
+    private CancellationTokenSource ReplacePendingLoadMoreCts()
+    {
+        lock (_ctsSyncRoot)
+        {
+            CancelAndDisposeCts(ref _pendingLoadMoreCts);
+            _pendingLoadMoreCts = new CancellationTokenSource();
+            return _pendingLoadMoreCts;
+        }
+    }
+
+    private void CancelAndDisposeSearchCts()
+    {
+        lock (_ctsSyncRoot)
+        {
+            CancelAndDisposeCts(ref _searchCts);
+        }
+    }
+
+    private void CancelAndDisposePendingLoadMoreCts()
+    {
+        lock (_ctsSyncRoot)
+        {
+            CancelAndDisposeCts(ref _pendingLoadMoreCts);
+        }
+    }
+
+    private static void CancelAndDisposeCts(ref CancellationTokenSource? cancellationTokenSource)
+    {
+        var current = cancellationTokenSource;
+        cancellationTokenSource = null;
+
+        if (current is null) return;
+
+        try
+        {
+            current.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        current.Dispose();
     }
 
     #endregion

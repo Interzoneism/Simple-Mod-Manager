@@ -386,6 +386,9 @@ public partial class MainWindow : Window
     // ViewModel
     private MainViewModel? _viewModel;
     private ModBrowserViewModel? _modBrowserViewModel;
+    private HttpClient? _modBrowserHttpClient;
+    private readonly object _managerUpdateLinkRefreshLock = new();
+    private CancellationTokenSource? _managerUpdateLinkRefreshCts;
     private readonly List<MenuItem> _customThemeMenuItems = new();
 
     #endregion
@@ -2794,7 +2797,7 @@ public partial class MainWindow : Window
     {
         if (ModBrowserView != null)
         {
-            var httpClient = new HttpClient(new HttpClientHandler
+            _modBrowserHttpClient = new HttpClient(new HttpClientHandler
             {
                 AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
             })
@@ -2802,7 +2805,7 @@ public partial class MainWindow : Window
                 Timeout = TimeSpan.FromSeconds(30)
             };
 
-            var modApiService = new ModApiService(httpClient);
+            var modApiService = new ModApiService(_modBrowserHttpClient);
             _modBrowserViewModel = new ModBrowserViewModel(modApiService, _userConfiguration);
 
             // Set up the installation callback
@@ -12340,16 +12343,19 @@ public partial class MainWindow : Window
     {
         if (ManagerUpdateLinkTextBlock is null) return;
 
+        var refreshCts = BeginManagerUpdateLinkRefresh();
+        var cancellationToken = refreshCts.Token;
+
         if (InternetAccessManager.IsInternetAccessDisabled)
         {
-            ManagerUpdateLinkTextBlock.Visibility = Visibility.Collapsed;
+            ApplyManagerUpdateLinkVisibility(refreshCts, Visibility.Collapsed);
             return;
         }
 
         var currentVersion = GetManagerInformationalVersion();
         if (string.IsNullOrWhiteSpace(currentVersion))
         {
-            ManagerUpdateLinkTextBlock.Visibility = Visibility.Collapsed;
+            ApplyManagerUpdateLinkVisibility(refreshCts, Visibility.Collapsed);
             return;
         }
 
@@ -12357,8 +12363,11 @@ public partial class MainWindow : Window
         {
             // Use relaxed mode for manager updates to allow more flexible compatibility
             var info = await _modDatabaseService
-                .TryLoadDatabaseInfoAsync(ManagerModDatabaseModId, currentVersion, null)
+                .TryLoadDatabaseInfoAsync(ManagerModDatabaseModId, currentVersion, null, cancellationToken: cancellationToken)
                 .ConfigureAwait(true);
+
+            if (!IsCurrentManagerUpdateLinkRefresh(refreshCts) || cancellationToken.IsCancellationRequested)
+                return;
 
             var hasUpdate = info?.LatestVersion is string latestVersion
                             && VersionStringUtility.IsCandidateVersionNewer(latestVersion, currentVersion);
@@ -12367,11 +12376,15 @@ public partial class MainWindow : Window
         }
         catch (OperationCanceledException)
         {
-            throw;
+            ApplyManagerUpdateLinkVisibility(refreshCts, Visibility.Collapsed);
         }
         catch (Exception)
         {
-            ManagerUpdateLinkTextBlock.Visibility = Visibility.Collapsed;
+            ApplyManagerUpdateLinkVisibility(refreshCts, Visibility.Collapsed);
+        }
+        finally
+        {
+            CompleteManagerUpdateLinkRefresh(refreshCts);
         }
     }
 
@@ -14352,13 +14365,74 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        CancelManagerUpdateLinkRefresh();
         UnsubscribeModBrowserFromDirectoryWatcher();
         StopModsWatcher();
         _votesCacheWatcher?.Dispose();
+        DisposeModBrowserView();
         _backupSemaphore.Dispose();
         _cloudStoreLock.Dispose();
         _cloudModlistStore?.Dispose();
         base.OnClosed(e);
+    }
+
+    private void DisposeModBrowserView()
+    {
+        if (ModBrowserView is not null) ModBrowserView.DataContext = null;
+
+        _modBrowserViewModel?.Dispose();
+        _modBrowserViewModel = null;
+
+        _modBrowserHttpClient?.Dispose();
+        _modBrowserHttpClient = null;
+    }
+
+    private CancellationTokenSource BeginManagerUpdateLinkRefresh()
+    {
+        lock (_managerUpdateLinkRefreshLock)
+        {
+            _managerUpdateLinkRefreshCts?.Cancel();
+            _managerUpdateLinkRefreshCts?.Dispose();
+            _managerUpdateLinkRefreshCts = new CancellationTokenSource();
+            return _managerUpdateLinkRefreshCts;
+        }
+    }
+
+    private void CompleteManagerUpdateLinkRefresh(CancellationTokenSource completedRefresh)
+    {
+        lock (_managerUpdateLinkRefreshLock)
+        {
+            if (!ReferenceEquals(_managerUpdateLinkRefreshCts, completedRefresh)) return;
+
+            _managerUpdateLinkRefreshCts.Dispose();
+            _managerUpdateLinkRefreshCts = null;
+        }
+    }
+
+    private void CancelManagerUpdateLinkRefresh()
+    {
+        lock (_managerUpdateLinkRefreshLock)
+        {
+            _managerUpdateLinkRefreshCts?.Cancel();
+            _managerUpdateLinkRefreshCts?.Dispose();
+            _managerUpdateLinkRefreshCts = null;
+        }
+    }
+
+    private bool IsCurrentManagerUpdateLinkRefresh(CancellationTokenSource refreshCts)
+    {
+        lock (_managerUpdateLinkRefreshLock)
+        {
+            return ReferenceEquals(_managerUpdateLinkRefreshCts, refreshCts);
+        }
+    }
+
+    private void ApplyManagerUpdateLinkVisibility(CancellationTokenSource refreshCts, Visibility visibility)
+    {
+        if (!IsCurrentManagerUpdateLinkRefresh(refreshCts)) return;
+        if (ManagerUpdateLinkTextBlock is null) return;
+
+        ManagerUpdateLinkTextBlock.Visibility = visibility;
     }
 
     #endregion
