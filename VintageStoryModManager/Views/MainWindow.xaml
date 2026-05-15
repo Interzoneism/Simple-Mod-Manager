@@ -1055,24 +1055,35 @@
                                                                 BorderBrush="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
                                                                 BorderThickness="1"
                                                                 CornerRadius="6">
-                                                                <ScrollViewer
-                                                                    MaxHeight="360"
-                                                                    Margin="0,4,0,0"
-                                                                    HorizontalScrollBarVisibility="Hidden"
-                                                                    OverridesDefaultStyle="True"
-                                                                    Style="{StaticResource IMM.TagsScrollViewerStyle}"
-                                                                    VerticalScrollBarVisibility="Hidden">
-                                                                    <ItemsControl ItemsPanel="{StaticResource IMM.TagFilterItemsPanelTemplate}" ItemsSource="{Binding DataContext.InstalledTagFilters, RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
-                                                                        <ItemsControl.ItemTemplate>
-                                                                            <DataTemplate DataType="{x:Type viewModels:TagFilterOptionViewModel}">
-                                                                                <ToggleButton
-                                                                                    Content="{Binding Name}"
-                                                                                    IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                                                                    Style="{StaticResource IMM.TagFilterToggleButtonStyle}" />
-                                                                            </DataTemplate>
-                                                                        </ItemsControl.ItemTemplate>
-                                                                    </ItemsControl>
-                                                                </ScrollViewer>
+                                                                <StackPanel>
+                                                                    <Button
+                                                                        Margin="0,0,0,6"
+                                                                        Padding="0"
+                                                                        HorizontalAlignment="Left"
+                                                                        Command="{Binding Data.ClearInstalledTagFiltersCommand, Source={StaticResource DataContextProxy}}"
+                                                                        Content="Clear"
+                                                                        ContentTemplate="{StaticResource IMM.TagBadgeTemplate}"
+                                                                        Style="{StaticResource ButtonStyle1}"
+                                                                        Visibility="{Binding Data.HasSelectedTags, Source={StaticResource DataContextProxy}, Converter={StaticResource IMM.VisibleWhenTrueConverter}}" />
+                                                                    <ScrollViewer
+                                                                        MaxHeight="360"
+                                                                        Margin="0,4,0,0"
+                                                                        HorizontalScrollBarVisibility="Hidden"
+                                                                        OverridesDefaultStyle="True"
+                                                                        Style="{StaticResource IMM.TagsScrollViewerStyle}"
+                                                                        VerticalScrollBarVisibility="Hidden">
+                                                                        <ItemsControl ItemsPanel="{StaticResource IMM.TagFilterItemsPanelTemplate}" ItemsSource="{Binding DataContext.InstalledTagFilters, RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
+                                                                            <ItemsControl.ItemTemplate>
+                                                                                <DataTemplate DataType="{x:Type viewModels:TagFilterOptionViewModel}">
+                                                                                    <ToggleButton
+                                                                                        Content="{Binding Name}"
+                                                                                        IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                                        Style="{StaticResource IMM.TagFilterToggleButtonStyle}" />
+                                                                                </DataTemplate>
+                                                                            </ItemsControl.ItemTemplate>
+                                                                        </ItemsControl>
+                                                                    </ScrollViewer>
+                                                                </StackPanel>
                                                             </Border>
                                                         </Popup>
                                                     </Grid>
@@ -1208,9 +1219,6 @@
                                                                     </DataTrigger>
                                                                     <DataTrigger Binding="{Binding HasUserVoted}" Value="True">
                                                                         <Setter Property="FontWeight" Value="SemiBold" />
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding HasUserVoted}" Value="False">
-                                                                        <Setter Property="Opacity" Value="0.75" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
