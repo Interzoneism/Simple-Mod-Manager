@@ -1,0 +1,478 @@
+version=1
+
+# This file caches language service data to improve the performance of C# Dev Kit.
+# It is not intended for manual editing. It can safely be deleted and will be
+# regenerated automatically. For more information, see https://aka.ms/lscache
+#
+# To control where cache files are stored, use the following VS Code setting:
+#   "dotnet.projectsystem.cacheInProjectFolder": true
+
+[project]
+language=C#
+primary
+lastDtbSucceeded
+
+[properties]
+AssemblyName=Simple VS Manager
+CommandLineArgsForDesignTimeEvaluation=-langversion:12.0 -define:TRACE
+CompilerGeneratedFilesOutputPath=
+MaxSupportedLangVersion=12.0
+ProjectAssetsFile=<PATH>obj/project.assets.json
+RootNamespace=VintageStoryModManager
+RunAnalyzers=
+RunAnalyzersDuringLiveAnalysis=
+SolutionPath=<PATH>../ImprovedModMenu.sln
+TargetFrameworkIdentifier=.NETCoreApp
+TargetPath=<PATH>bin/Debug/net8.0-windows/win-x64/Simple VS Manager.dll
+TargetRefPath=<PATH>obj/Debug/net8.0-windows/win-x64/ref/Simple VS Manager.dll
+TemporaryDependencyNodeTargetIdentifier=net8.0-windows
+
+[commandLineArguments]
+/noconfig
+/unsafe-
+/checked-
+/nowarn:1701,1702,1701,1702,8002
+/fullpaths
+/nostdlib+
+/platform:x64
+/errorreport:prompt
+/warn:8
+/define:TRACE;DEBUG;NET;NET8_0;NETCOREAPP;WINDOWS;WINDOWS7_0;NET5_0_OR_GREATER;NET6_0_OR_GREATER;NET7_0_OR_GREATER;NET8_0_OR_GREATER;NETCOREAPP3_0_OR_GREATER;NETCOREAPP3_1_OR_GREATER;WINDOWS7_0_OR_GREATER
+/highentropyva+
+/nullable:enable
+/debug+
+/debug:portable
+/filealign:512
+/optimize-
+/out:"obj\Debug\net8.0-windows\win-x64\Simple VS Manager.dll"
+/refout:"obj\Debug\net8.0-windows\win-x64\refint\Simple VS Manager.dll"
+/target:winexe
+/warnaserror-
+/utf8output
+/win32icon:SVSM.ico
+/win32manifest:app.manifest
+/deterministic+
+/langversion:12.0
+/warnaserror+:NU1605,SYSLIB0011
+
+[sourceFiles]
+App.xaml.cs
+Converters/
+ BooleanToVisibilityConverter.cs
+ CompactViewWidthConverter.cs
+ Converters.cs
+ DownloadMetricDisplayConverter.cs
+ ModNameAbbreviationConverter.cs
+ ScaledConverters.cs
+ ThumbnailLayoutConverter.cs
+Design/
+ DesignDataFactory.cs
+ MainWindowDesignData.cs
+ ModBrowserViewDesignData.cs
+DevConfig.cs
+Helpers/
+ BindingProxy.cs
+ HoverEffectHelper.cs
+Models/
+ ApiResponses.cs
+ BatchedObservableCollection.cs
+ DownloadableMod.cs
+ DownloadableModOnList.cs
+ FlexibleJsonConverters.cs
+ GameVersion.cs
+ ModAuthor.cs
+ ModDatabaseTypes.cs
+ ModEntry.cs
+ ModlistTypes.cs
+ ModPresetTypes.cs
+ ModTag.cs
+ ModVersionVoteSummary.cs
+ SerializableTypes.cs
+obj/Debug/net8.0-windows/win-x64/
+ .NETCoreApp,Version=v8.0.AssemblyAttributes.cs
+ App.g.cs
+ GeneratedInternalTypeHelper.g.cs
+ Views/
+  BulkCompatibilityPromptWindow.g.cs
+  BulkUpdateChangelogWindow.g.cs
+  Controls/
+   InstalledModsView.g.cs
+   NavigationHeader.g.cs
+  Dialogs/
+   ChangeManagerFolderDialog.g.cs
+   CloudModlistDetailsDialog.g.cs
+   CloudModlistManagementDialog.g.cs
+   CloudModlistRenameDialog.g.cs
+   CloudSlotSelectionDialog.g.cs
+   CompatibilityResultsDialog.g.cs
+   DeleteGameProfilesDialog.g.cs
+   ExperimentalModDebugDialog.g.cs
+   GameProfileDialog.g.cs
+   GuideDialogWindow.g.cs
+   HelpDialogWindow.g.cs
+   LocalModlistEditDialog.g.cs
+   MessageDialogWindow.g.cs
+   ModUsageNoIssuesDialog.g.cs
+   ModVoteDialog.g.cs
+   ModVoteReasonDialog.g.cs
+   RestoreBackupDialog.g.cs
+   SaveInstalledModsDialog.g.cs
+   ThemeNameDialog.g.cs
+   ThemePaletteEditorDialog.g.cs
+   UpdateModsDialog.g.cs
+   VintageStoryVersionSelectionDialog.g.cs
+  MainWindow.g.cs
+  ModBrowserView.g.cs
+  ModConfigEditorWindow.g.cs
+  MultiSelectDropdown.g.cs
+ VintageStoryModManager.AssemblyInfo.cs
+ VintageStoryModManager.GlobalUsings.g.cs
+Properties/Settings.Designer.cs
+Services/
+ ClientSettingsStore.cs
+ ClientSettingsWatcher.cs
+ ConfigurationMigrationService.cs
+ CustomConfigFolderManager.cs
+ DataBackupService.cs
+ DataDirectoryLocator.cs
+ DeveloperProfileManager.cs
+ FirebaseAnonymousAuthenticator.cs
+ FirebaseModlistMigrationService.cs
+ FirebaseModlistStore.cs
+ GameDirectoryLocator.cs
+ GameSessionMonitor.cs
+ InternetAccessManager.cs
+ ModActivityLoggingService.cs
+ ModApiService.cs
+ ModCacheLocator.cs
+ ModCacheService.cs
+ ModCompatibilityCommentsService.cs
+ ModConfigurationEncoding.cs
+ ModDatabaseCacheService.cs
+ ModDatabaseService.cs
+ ModDirectoryWatcher.cs
+ ModDiscoveryService.cs
+ ModImageCacheService.cs
+ ModLoadingTimingService.cs
+ ModManagerMessageBox.cs
+ ModManagerTraceListener.cs
+ ModManifestCacheService.cs
+ ModUpdateService.cs
+ ModUsageTracking.cs
+ ModVersionVoteService.cs
+ PdfModlistSerializer.cs
+ ServerCommandBuilder.cs
+ ServerMacroGenerator.cs
+ ServiceEnums.cs
+ SettingsService.cs
+ StatusLogService.cs
+ TagCacheService.cs
+ TagFilterService.cs
+ TargetGameVersionPreference.cs
+ TargetGameVersionReleaseSelector.cs
+ UserConfigurationService.cs
+ VersionStringUtility.cs
+ VintageStoryGameVersionService.cs
+ VintageStoryVersionLocator.cs
+ VotesCacheWatcher.cs
+ViewModels/
+ MainViewModel.cs
+ ModBrowserViewModel.cs
+ ModConfigEditorViewModel.cs
+ ModConfigNodeViewModels.cs
+ ModConfigurationViewModel.cs
+ ModListItemViewModel.cs
+ ModUsageVoteCandidateViewModel.cs
+ ModVersionOptionViewModel.cs
+ SortOption.cs
+ TagFilterOptionViewModel.cs
+ UpdateModsDialogViewModel.cs
+ UpdateModSelectionViewModel.cs
+ ViewModelTypes.cs
+Views/
+ BulkCompatibilityPromptWindow.xaml.cs
+ BulkUpdateChangelogWindow.xaml.cs
+ CompatibilityDecisionKind.cs
+ Controls/
+  InstalledModsView.xaml.cs
+  NavigationHeader.xaml.cs
+ Dialogs/
+  ChangeManagerFolderDialog.xaml.cs
+  CloudModlistDetailsDialog.xaml.cs
+  CloudModlistManagementDialog.xaml.cs
+  CloudModlistRenameDialog.xaml.cs
+  CloudSlotSelectionDialog.xaml.cs
+  CompatibilityResultsDialog.xaml.cs
+  DeleteGameProfilesDialog.xaml.cs
+  ExperimentalModDebugDialog.xaml.cs
+  ExperimentalModDebugLogLine.cs
+  GameProfileDialog.xaml.cs
+  GuideDialogWindow.xaml.cs
+  HelpDialogWindow.xaml.cs
+  LocalModlistEditDialog.xaml.cs
+  MessageDialogTypes.cs
+  MessageDialogWindow.xaml.cs
+  ModConfigOption.cs
+  ModUsageNoIssuesDialog.xaml.cs
+  ModVoteDialog.xaml.cs
+  ModVoteReasonDialog.xaml.cs
+  RestoreBackupDialog.xaml.cs
+  SaveInstalledModsDialog.xaml.cs
+  ThemeNameDialog.xaml.cs
+  ThemePaletteEditorDialog.xaml.cs
+  UpdateModsDialog.xaml.cs
+  VintageStoryVersionSelectionDialog.xaml.cs
+ MainWindow.xaml.cs
+ ModBrowserView.xaml.cs
+ ModConfigEditorWindow.xaml.cs
+ MultiSelectDropdown.xaml.cs
+ OverlappingTagPanel.cs
+
+[metadataReferences]
+<DOTNET>/packs/Microsoft.NETCore.App.Ref/8.0.27/ref/net8.0/
+ Microsoft.CSharp.dll
+ Microsoft.VisualBasic.Core.dll
+ Microsoft.Win32.Primitives.dll
+ Microsoft.Win32.Registry.dll
+ mscorlib.dll
+ netstandard.dll
+ System.AppContext.dll
+ System.Buffers.dll
+ System.Collections.Concurrent.dll
+ System.Collections.dll
+ System.Collections.Immutable.dll
+ System.Collections.NonGeneric.dll
+ System.Collections.Specialized.dll
+ System.ComponentModel.Annotations.dll
+ System.ComponentModel.DataAnnotations.dll
+ System.ComponentModel.dll
+ System.ComponentModel.EventBasedAsync.dll
+ System.ComponentModel.Primitives.dll
+ System.ComponentModel.TypeConverter.dll
+ System.Configuration.dll
+ System.Console.dll
+ System.Core.dll
+ System.Data.Common.dll
+ System.Data.DataSetExtensions.dll
+ System.Data.dll
+ System.Diagnostics.Contracts.dll
+ System.Diagnostics.Debug.dll
+ System.Diagnostics.DiagnosticSource.dll
+ System.Diagnostics.FileVersionInfo.dll
+ System.Diagnostics.Process.dll
+ System.Diagnostics.StackTrace.dll
+ System.Diagnostics.TextWriterTraceListener.dll
+ System.Diagnostics.Tools.dll
+ System.Diagnostics.TraceSource.dll
+ System.Diagnostics.Tracing.dll
+ System.dll
+ System.Drawing.Primitives.dll
+ System.Dynamic.Runtime.dll
+ System.Formats.Asn1.dll
+ System.Formats.Tar.dll
+ System.Globalization.Calendars.dll
+ System.Globalization.dll
+ System.Globalization.Extensions.dll
+ System.IO.Compression.Brotli.dll
+ System.IO.Compression.dll
+ System.IO.Compression.FileSystem.dll
+ System.IO.Compression.ZipFile.dll
+ System.IO.dll
+ System.IO.FileSystem.AccessControl.dll
+ System.IO.FileSystem.dll
+ System.IO.FileSystem.DriveInfo.dll
+ System.IO.FileSystem.Primitives.dll
+ System.IO.FileSystem.Watcher.dll
+ System.IO.IsolatedStorage.dll
+ System.IO.MemoryMappedFiles.dll
+ System.IO.Pipes.AccessControl.dll
+ System.IO.Pipes.dll
+ System.IO.UnmanagedMemoryStream.dll
+ System.Linq.dll
+ System.Linq.Expressions.dll
+ System.Linq.Parallel.dll
+ System.Linq.Queryable.dll
+ System.Memory.dll
+ System.Net.dll
+ System.Net.Http.dll
+ System.Net.Http.Json.dll
+ System.Net.HttpListener.dll
+ System.Net.Mail.dll
+ System.Net.NameResolution.dll
+ System.Net.NetworkInformation.dll
+ System.Net.Ping.dll
+ System.Net.Primitives.dll
+ System.Net.Quic.dll
+ System.Net.Requests.dll
+ System.Net.Security.dll
+ System.Net.ServicePoint.dll
+ System.Net.Sockets.dll
+ System.Net.WebClient.dll
+ System.Net.WebHeaderCollection.dll
+ System.Net.WebProxy.dll
+ System.Net.WebSockets.Client.dll
+ System.Net.WebSockets.dll
+ System.Numerics.dll
+ System.Numerics.Vectors.dll
+ System.ObjectModel.dll
+ System.Reflection.DispatchProxy.dll
+ System.Reflection.dll
+ System.Reflection.Emit.dll
+ System.Reflection.Emit.ILGeneration.dll
+ System.Reflection.Emit.Lightweight.dll
+ System.Reflection.Extensions.dll
+ System.Reflection.Metadata.dll
+ System.Reflection.Primitives.dll
+ System.Reflection.TypeExtensions.dll
+ System.Resources.Reader.dll
+ System.Resources.ResourceManager.dll
+ System.Resources.Writer.dll
+ System.Runtime.CompilerServices.Unsafe.dll
+ System.Runtime.CompilerServices.VisualC.dll
+ System.Runtime.dll
+ System.Runtime.Extensions.dll
+ System.Runtime.Handles.dll
+ System.Runtime.InteropServices.dll
+ System.Runtime.InteropServices.JavaScript.dll
+ System.Runtime.InteropServices.RuntimeInformation.dll
+ System.Runtime.Intrinsics.dll
+ System.Runtime.Loader.dll
+ System.Runtime.Numerics.dll
+ System.Runtime.Serialization.dll
+ System.Runtime.Serialization.Formatters.dll
+ System.Runtime.Serialization.Json.dll
+ System.Runtime.Serialization.Primitives.dll
+ System.Runtime.Serialization.Xml.dll
+ System.Security.AccessControl.dll
+ System.Security.Claims.dll
+ System.Security.Cryptography.Algorithms.dll
+ System.Security.Cryptography.Cng.dll
+ System.Security.Cryptography.Csp.dll
+ System.Security.Cryptography.dll
+ System.Security.Cryptography.Encoding.dll
+ System.Security.Cryptography.OpenSsl.dll
+ System.Security.Cryptography.Primitives.dll
+ System.Security.Cryptography.X509Certificates.dll
+ System.Security.dll
+ System.Security.Principal.dll
+ System.Security.Principal.Windows.dll
+ System.Security.SecureString.dll
+ System.ServiceModel.Web.dll
+ System.ServiceProcess.dll
+ System.Text.Encoding.CodePages.dll
+ System.Text.Encoding.dll
+ System.Text.Encoding.Extensions.dll
+ System.Text.Encodings.Web.dll
+ System.Text.Json.dll
+ System.Text.RegularExpressions.dll
+ System.Threading.Channels.dll
+ System.Threading.dll
+ System.Threading.Overlapped.dll
+ System.Threading.Tasks.Dataflow.dll
+ System.Threading.Tasks.dll
+ System.Threading.Tasks.Extensions.dll
+ System.Threading.Tasks.Parallel.dll
+ System.Threading.Thread.dll
+ System.Threading.ThreadPool.dll
+ System.Threading.Timer.dll
+ System.Transactions.dll
+ System.Transactions.Local.dll
+ System.ValueTuple.dll
+ System.Web.dll
+ System.Web.HttpUtility.dll
+ System.Windows.dll
+ System.Xml.dll
+ System.Xml.Linq.dll
+ System.Xml.ReaderWriter.dll
+ System.Xml.Serialization.dll
+ System.Xml.XDocument.dll
+ System.Xml.XmlDocument.dll
+ System.Xml.XmlSerializer.dll
+ System.Xml.XPath.dll
+ System.Xml.XPath.XDocument.dll
+<DOTNET>/packs/Microsoft.WindowsDesktop.App.Ref/8.0.27/ref/net8.0/
+ Accessibility.dll
+ Microsoft.VisualBasic.dll
+ Microsoft.VisualBasic.Forms.dll
+ Microsoft.Win32.Registry.AccessControl.dll
+ Microsoft.Win32.SystemEvents.dll
+ PresentationCore.dll
+ PresentationFramework.Aero.dll
+ PresentationFramework.Aero2.dll
+ PresentationFramework.AeroLite.dll
+ PresentationFramework.Classic.dll
+ PresentationFramework.dll
+ PresentationFramework.Luna.dll
+ PresentationFramework.Royale.dll
+ PresentationUI.dll
+ ReachFramework.dll
+ System.CodeDom.dll
+ System.Configuration.ConfigurationManager.dll
+ System.Design.dll
+ System.Diagnostics.EventLog.dll
+ System.Diagnostics.PerformanceCounter.dll
+ System.DirectoryServices.dll
+ System.Drawing.Common.dll
+ System.Drawing.Design.dll
+ System.Drawing.dll
+ System.IO.Packaging.dll
+ System.Printing.dll
+ System.Resources.Extensions.dll
+ System.Security.Cryptography.Pkcs.dll
+ System.Security.Cryptography.ProtectedData.dll
+ System.Security.Cryptography.Xml.dll
+ System.Security.Permissions.dll
+ System.Threading.AccessControl.dll
+ System.Windows.Controls.Ribbon.dll
+ System.Windows.Extensions.dll
+ System.Windows.Forms.Design.dll
+ System.Windows.Forms.Design.Editors.dll
+ System.Windows.Forms.dll
+ System.Windows.Forms.Primitives.dll
+ System.Windows.Input.Manipulations.dll
+ System.Windows.Presentation.dll
+ System.Xaml.dll
+ UIAutomationClient.dll
+ UIAutomationClientSideProviders.dll
+ UIAutomationProvider.dll
+ UIAutomationTypes.dll
+ WindowsBase.dll
+ WindowsFormsIntegration.dll
+<NUGET>/
+ communitytoolkit.mvvm/8.4.0/lib/net8.0/CommunityToolkit.Mvvm.dll
+ htmlagilitypack/1.12.4/lib/net7.0/HtmlAgilityPack.dll
+ modernwpfui/0.9.6/lib/net5.0-windows7.0/
+  ModernWpf.Controls.dll
+  ModernWpf.dll
+ questpdf/2025.12.0/lib/net8.0/QuestPDF.dll
+ uglytoad.pdfpig.core/1.7.0-custom-5/lib/net6.0/UglyToad.PdfPig.Core.dll
+ uglytoad.pdfpig.fonts/1.7.0-custom-5/lib/net6.0/UglyToad.PdfPig.Fonts.dll
+ uglytoad.pdfpig.tokenization/1.7.0-custom-5/lib/net6.0/UglyToad.PdfPig.Tokenization.dll
+ uglytoad.pdfpig.tokens/1.7.0-custom-5/lib/net6.0/UglyToad.PdfPig.Tokens.dll
+ uglytoad.pdfpig/1.7.0-custom-5/lib/net6.0/UglyToad.PdfPig.dll
+ yamldotnet/16.3.0/lib/net8.0/YamlDotNet.dll
+
+[analyzerReferences]
+<DOTNET>/packs/Microsoft.NETCore.App.Ref/8.0.27/analyzers/dotnet/cs/
+ Microsoft.Interop.ComInterfaceGenerator.dll
+ Microsoft.Interop.JavaScript.JSImportGenerator.dll
+ Microsoft.Interop.LibraryImportGenerator.dll
+ Microsoft.Interop.SourceGeneration.dll
+ System.Text.Json.SourceGeneration.dll
+ System.Text.RegularExpressions.Generator.dll
+<DOTNET>/packs/Microsoft.WindowsDesktop.App.Ref/8.0.27/analyzers/dotnet/
+ cs/System.Windows.Forms.Analyzers.CSharp.dll
+ System.Windows.Forms.Analyzers.dll
+<DOTNET>/sdk/10.0.300/Sdks/Microsoft.NET.Sdk/analyzers/
+ Microsoft.CodeAnalysis.CSharp.NetAnalyzers.dll
+ Microsoft.CodeAnalysis.NetAnalyzers.dll
+<NUGET>/communitytoolkit.mvvm/8.4.0/analyzers/dotnet/roslyn4.12/cs/
+ CommunityToolkit.Mvvm.CodeFixers.dll
+ CommunityToolkit.Mvvm.SourceGenerators.dll
+
+[analyzerConfigFiles]
+<DOTNET>/sdk/10.0.300/Sdks/Microsoft.NET.Sdk/analyzers/build/config/analysislevel_8_default.globalconfig
+obj/Debug/net8.0-windows/win-x64/VintageStoryModManager.GeneratedMSBuildEditorConfig.editorconfig
+
+[additionalFiles]
+app.manifest

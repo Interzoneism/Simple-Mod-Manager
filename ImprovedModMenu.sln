@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.11222.15
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VintageStoryModManager", "VintageStoryModManager\VintageStoryModManager.csproj", "{F4BA62CC-3E40-49E0-BC85-A0D287B49F2E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VintageStoryModManager.Tests", "VintageStoryModManager.Tests\VintageStoryModManager.Tests.csproj", "{6640B37D-DCF5-4BFF-B21C-C8D5DAD9A03F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,10 +13,14 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{F4BA62CC-3E40-49E0-BC85-A0D287B49F2E}.Debug|Any CPU.ActiveCfg = Release|Any CPU
-		{F4BA62CC-3E40-49E0-BC85-A0D287B49F2E}.Debug|Any CPU.Build.0 = Release|Any CPU
+		{F4BA62CC-3E40-49E0-BC85-A0D287B49F2E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4BA62CC-3E40-49E0-BC85-A0D287B49F2E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F4BA62CC-3E40-49E0-BC85-A0D287B49F2E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F4BA62CC-3E40-49E0-BC85-A0D287B49F2E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6640B37D-DCF5-4BFF-B21C-C8D5DAD9A03F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6640B37D-DCF5-4BFF-B21C-C8D5DAD9A03F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6640B37D-DCF5-4BFF-B21C-C8D5DAD9A03F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6640B37D-DCF5-4BFF-B21C-C8D5DAD9A03F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,0 +1,528 @@
+<Window
+    x:Class="VintageStoryModManager.Views.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:services="clr-namespace:VintageStoryModManager.Services"
+    xmlns:ui="http://schemas.modernwpf.com/2019"
+    Title="Settings"
+    Width="660"
+    Height="760"
+    MinWidth="520"
+    MinHeight="480"
+    Background="{DynamicResource Brush.Window.Shell.Background.Solid}"
+    ShowInTaskbar="False"
+    TextElement.Foreground="{DynamicResource Brush.Text.Primary}"
+    WindowStartupLocation="CenterOwner"
+    WindowStyle="SingleBorderWindow">
+
+    <Window.Resources>
+
+        <!--  Section card container  -->
+        <Style x:Key="SettingsCardStyle" TargetType="{x:Type Border}">
+            <Setter Property="Background" Value="{DynamicResource Brush.Panel.Primary.Background.Solid}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="18,14" />
+            <Setter Property="Margin" Value="0,0,0,16" />
+        </Style>
+
+        <!--  Section header icon  -->
+        <Style x:Key="SettingsSectionIconStyle" TargetType="{x:Type Path}">
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Stretch" Value="Uniform" />
+            <Setter Property="Fill" Value="{DynamicResource Brush.Accent.Primary}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+        </Style>
+
+        <!--  Section header title  -->
+        <Style x:Key="SettingsSectionTitleStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        </Style>
+
+        <!--  Row title  -->
+        <Style x:Key="SettingsRowTitleStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        </Style>
+
+        <!--  Row description  -->
+        <Style x:Key="SettingsRowDescStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+            <Setter Property="Opacity" Value="0.6" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        </Style>
+
+        <!--  A single toggle row  -->
+        <Style x:Key="SettingsRowStyle" TargetType="{x:Type Grid}">
+            <Setter Property="Margin" Value="0,7" />
+        </Style>
+
+        <Style
+            x:Key="SettingsToggleStyle"
+            BasedOn="{StaticResource IMM.ToggleSwitchBaseStyle}"
+            TargetType="{x:Type ui:ToggleSwitch}">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="16,0,0,0" />
+            <Setter Property="OnContent" Value="{x:Null}" />
+            <Setter Property="OffContent" Value="{x:Null}" />
+            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="SettingToggle_OnPreviewMouseLeftButtonDown" />
+        </Style>
+
+        <Style x:Key="SettingsSeparatorStyle" TargetType="{x:Type Border}">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Border.Default}" />
+            <Setter Property="Opacity" Value="0.6" />
+            <Setter Property="Margin" Value="0,6" />
+        </Style>
+
+        <Style x:Key="SettingsActionButtonStyle" BasedOn="{StaticResource {x:Type Button}}" TargetType="{x:Type Button}">
+            <Setter Property="MinWidth" Value="150" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Margin" Value="0,5,10,0" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        </Style>
+
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!--  Header  -->
+        <Border
+            Grid.Row="0"
+            Padding="24,18"
+            Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}">
+            <StackPanel Orientation="Horizontal">
+                <Path
+                    Width="30"
+                    Height="30"
+                    VerticalAlignment="Center"
+                    Data="{StaticResource IconSettings}"
+                    Fill="{DynamicResource Brush.Accent.Primary}"
+                    Stretch="Uniform" />
+                <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                    <TextBlock
+                        FontSize="21"
+                        FontWeight="Bold"
+                        Text="Settings" />
+                    <TextBlock
+                        Margin="0,2,0,0"
+                        FontSize="12"
+                        Opacity="0.6"
+                        Text="Configure how Simple VS Manager looks and behaves" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!--  Content  -->
+        <ScrollViewer
+            Grid.Row="1"
+            Padding="24,20,24,4"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+
+                <!--  ==========  APPEARANCE  ==========  -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <StackPanel Margin="0,0,0,6" Orientation="Horizontal">
+                            <Path Data="{StaticResource IconPalette}" Style="{StaticResource SettingsSectionIconStyle}" />
+                            <TextBlock Style="{StaticResource SettingsSectionTitleStyle}" Text="Appearance" />
+                        </StackPanel>
+
+                        <TextBlock
+                            Margin="0,6,0,4"
+                            Style="{StaticResource SettingsRowTitleStyle}"
+                            Text="Theme" />
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton
+                                x:Name="RbThemeVintage"
+                                Margin="0,0,18,0"
+                                Checked="ThemeRadio_OnChecked"
+                                Content="Vintage Story"
+                                GroupName="ThemeGroup" />
+                            <RadioButton
+                                x:Name="RbThemeDark"
+                                Margin="0,0,18,0"
+                                Checked="ThemeRadio_OnChecked"
+                                Content="Dark"
+                                GroupName="ThemeGroup" />
+                            <RadioButton
+                                x:Name="RbThemeLight"
+                                Checked="ThemeRadio_OnChecked"
+                                Content="Light"
+                                GroupName="ThemeGroup" />
+                        </StackPanel>
+                        <Button
+                            x:Name="BtnEditTheme"
+                            Margin="0,12,0,4"
+                            Padding="14,0"
+                            HorizontalAlignment="Left"
+                            Click="BtnEditTheme_OnClick"
+                            Content="Edit theme..." />
+
+                        <Border Style="{StaticResource SettingsSeparatorStyle}" />
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Compact view" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Reduce row spacing to fit more mods on screen." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwCompactView"
+                                IsOn="{Binding IsCompactView, Mode=TwoWay}"
+                                Style="{StaticResource SettingsToggleStyle}" />
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Disable hover and transition effects" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Turn off animations and hover highlights for a snappier feel." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwDisableHover"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!--  ==========  PERFORMANCE  ==========  -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <StackPanel Margin="0,0,0,6" Orientation="Horizontal">
+                            <Path Data="{StaticResource IconTrendingUp}" Style="{StaticResource SettingsSectionIconStyle}" />
+                            <TextBlock Style="{StaticResource SettingsSectionTitleStyle}" Text="Performance" />
+                        </StackPanel>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Disable auto-refresh" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Faster startup. Use the manual Refresh button to fetch details on demand." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwDisableAutoRefresh"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Faster thumbnails" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Load lower-resolution images so the mod database loads faster." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwFasterThumbnails"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Cache Mod Database results (experimental)" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Reuse the current results when the search and filters have not changed." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwCacheModDb"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Cache all versions locally" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Keep every downloaded mod version on disk for quick reuse." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwCacheAllVersions"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!--  ==========  MODS & COMPATIBILITY  ==========  -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <StackPanel Margin="0,0,0,6" Orientation="Horizontal">
+                            <Path Data="{StaticResource IconStar}" Style="{StaticResource SettingsSectionIconStyle}" />
+                            <TextBlock Style="{StaticResource SettingsSectionTitleStyle}" Text="Mods &amp; Backups" />
+                        </StackPanel>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Require exact VS version for compatibility checks" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Only mark mods compatible when they match the exact game version." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwRequireExactVs"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Automatically back up VintagestoryData before launch" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Creates a backup each time you launch with the Launch button." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwAutoDataBackup"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Close manager after launching Vintage Story" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Closes Simple VS Manager after the game launches successfully." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwCloseManagerAfterGameLaunch"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!--  ==========  MODLISTS  ==========  -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <StackPanel Margin="0,0,0,6" Orientation="Horizontal">
+                            <Path Data="{StaticResource IconDownload}" Style="{StaticResource SettingsSectionIconStyle}" />
+                            <TextBlock Style="{StaticResource SettingsSectionTitleStyle}" Text="Modlists" />
+                        </StackPanel>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Always clear mods before loading a Modlist" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Replace your current mods with the Modlist without asking." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwAlwaysClear"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Always add to current mods when loading a Modlist" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Merge the Modlist into your current mods without asking." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwAlwaysAdd"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!--  ==========  FOLDERS & PATHS  ==========  -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <StackPanel Margin="0,0,0,6" Orientation="Horizontal">
+                            <Path Data="{StaticResource IconFolder}" Style="{StaticResource SettingsSectionIconStyle}" />
+                            <TextBlock Style="{StaticResource SettingsSectionTitleStyle}" Text="Folders &amp; Paths" />
+                        </StackPanel>
+                        <TextBlock
+                            Margin="0,2,0,6"
+                            Style="{StaticResource SettingsRowDescStyle}"
+                            Text="Choose where the manager reads game data and stores its files." />
+                        <WrapPanel>
+                            <Button
+                                x:Name="BtnSetDataFolder"
+                                Click="BtnSetDataFolder_OnClick"
+                                Content="Set Data folder..."
+                                Style="{StaticResource SettingsActionButtonStyle}" />
+                            <Button
+                                x:Name="BtnSetGameFolder"
+                                Click="BtnSetGameFolder_OnClick"
+                                Content="Set Game folder..."
+                                Style="{StaticResource SettingsActionButtonStyle}" />
+                            <Button
+                                x:Name="BtnChangeManagerFolder"
+                                Click="BtnChangeManagerFolder_OnClick"
+                                Content="Manager config &amp; cache folder..."
+                                Style="{StaticResource SettingsActionButtonStyle}" />
+                            <Button
+                                x:Name="BtnSetShortcut"
+                                Click="BtnSetShortcut_OnClick"
+                                Content="Set custom VS shortcut..."
+                                Style="{StaticResource SettingsActionButtonStyle}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <!--  ==========  ADVANCED  ==========  -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <StackPanel Margin="0,0,0,6" Orientation="Horizontal">
+                            <Path Data="{StaticResource IconShield}" Style="{StaticResource SettingsSectionIconStyle}" />
+                            <TextBlock Style="{StaticResource SettingsSectionTitleStyle}" Text="Advanced" />
+                        </StackPanel>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Disable internet access" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Work fully offline. Online features will be unavailable." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwDisableInternet"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource SettingsRowTitleStyle}" Text="Enable server options" />
+                                <TextBlock Style="{StaticResource SettingsRowDescStyle}" Text="Show tools for generating server files and commands." />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SwEnableServerOptions"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+
+                        <Border Style="{StaticResource SettingsSeparatorStyle}" />
+
+                        <TextBlock
+                            Margin="0,4,0,2"
+                            Style="{StaticResource SettingsRowTitleStyle}"
+                            Text="Enable logging for" />
+                        <TextBlock
+                            Margin="0,0,0,4"
+                            Style="{StaticResource SettingsRowDescStyle}"
+                            Text="Record the selected events to the manager log files." />
+
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <TextBlock
+                                Margin="0,0,16,0"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SettingsRowTitleStyle}"
+                                Text="Mod updates" />
+                            <ui:ToggleSwitch
+                                x:Name="SwLogUpdate"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <TextBlock
+                                Margin="0,0,16,0"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SettingsRowTitleStyle}"
+                                Text="Mod installations" />
+                            <ui:ToggleSwitch
+                                x:Name="SwLogInstall"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <TextBlock
+                                Margin="0,0,16,0"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SettingsRowTitleStyle}"
+                                Text="Mod deletions" />
+                            <ui:ToggleSwitch
+                                x:Name="SwLogDeletion"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <TextBlock
+                                Margin="0,0,16,0"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SettingsRowTitleStyle}"
+                                Text="App launch and exit" />
+                            <ui:ToggleSwitch
+                                x:Name="SwLogAppLifecycle"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+                        <Grid Style="{StaticResource SettingsRowStyle}">
+                            <TextBlock
+                                Margin="0,0,16,0"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SettingsRowTitleStyle}"
+                                Text="Errors and exceptions" />
+                            <ui:ToggleSwitch
+                                x:Name="SwLogErrors"
+                                Style="{StaticResource SettingsToggleStyle}"
+                                Toggled="Toggle_OnToggled" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!--  ==========  ABOUT & HELP  ==========  -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <StackPanel Margin="0,0,0,6" Orientation="Horizontal">
+                            <Path Data="{StaticResource IconInfoCircle}" Style="{StaticResource SettingsSectionIconStyle}" />
+                            <TextBlock Style="{StaticResource SettingsSectionTitleStyle}" Text="About &amp; Help" />
+                        </StackPanel>
+
+                        <TextBlock
+                            x:Name="VersionTextBlock"
+                            Margin="0,2,0,8"
+                            Style="{StaticResource SettingsRowDescStyle}"
+                            Text="Version: --" />
+
+                        <WrapPanel>
+                            <Button
+                                x:Name="BtnMenuGuide"
+                                Click="BtnMenuGuide_OnClick"
+                                Content="Menu Guide"
+                                Style="{StaticResource SettingsActionButtonStyle}" />
+                            <Button
+                                x:Name="BtnHelp"
+                                Click="BtnHelp_OnClick"
+                                Content="Help!"
+                                Style="{StaticResource SettingsActionButtonStyle}" />
+                            <Button
+                                x:Name="BtnModDbPage"
+                                Click="BtnModDbPage_OnClick"
+                                Content="Mod DB page"
+                                Style="{StaticResource SettingsActionButtonStyle}" />
+                            <Button
+                                x:Name="BtnClearCache"
+                                Click="BtnClearCache_OnClick"
+                                Content="Clear temporary cache"
+                                Style="{StaticResource SettingsActionButtonStyle}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!--  Footer  -->
+        <Border
+            Grid.Row="2"
+            Padding="24,14"
+            Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}">
+            <Button
+                x:Name="BtnClose"
+                MinWidth="110"
+                Height="34"
+                HorizontalAlignment="Right"
+                Click="BtnClose_OnClick"
+                Content="Close"
+                IsCancel="True"
+                IsDefault="True" />
+        </Border>
+    </Grid>
+</Window>

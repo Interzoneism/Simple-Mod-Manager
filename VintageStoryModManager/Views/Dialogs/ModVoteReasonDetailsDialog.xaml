@@ -1,0 +1,93 @@
+<Window
+    x:Class="VintageStoryModManager.Views.Dialogs.ModVoteReasonDetailsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Width="620"
+    Height="480"
+    MinWidth="520"
+    MinHeight="360"
+    Title="User report reasons"
+    Background="{DynamicResource Brush.Window.Shell.Background.Solid}"
+    ResizeMode="CanResize"
+    ShowInTaskbar="False"
+    WindowStartupLocation="CenterOwner">
+    <Grid Margin="24" TextElement.Foreground="{DynamicResource Brush.Text.Primary}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="0,0,0,18">
+            <TextBlock
+                FontSize="20"
+                FontWeight="SemiBold"
+                Text="Negative user report reasons" />
+            <TextBlock
+                Margin="0,6,0,0"
+                Foreground="{DynamicResource Brush.Text.Subtle}"
+                Text="{Binding VersionDescription}"
+                TextWrapping="Wrap" />
+        </StackPanel>
+
+        <ScrollViewer
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding ReasonGroups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border
+                            Margin="0,0,0,14"
+                            Padding="16"
+                            Background="{DynamicResource Brush.Panel.Primary.Background.Solid}"
+                            BorderBrush="{DynamicResource Brush.Button.Primary.Border.Normal}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                            <StackPanel>
+                                <TextBlock
+                                    FontSize="15"
+                                    FontWeight="SemiBold"
+                                    Text="{Binding Heading}" />
+                                <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding Reasons}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,4,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                                                <Border
+                                                    Grid.Column="1"
+                                                    MinWidth="32"
+                                                    Margin="12,0,0,0"
+                                                    Padding="7,2"
+                                                    Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                                                    CornerRadius="9">
+                                                    <TextBlock
+                                                        HorizontalAlignment="Center"
+                                                        FontWeight="SemiBold"
+                                                        Text="{Binding CountDisplay}" />
+                                                </Border>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <Button
+            Grid.Row="2"
+            MinWidth="90"
+            Margin="0,14,0,0"
+            Padding="14,6"
+            HorizontalAlignment="Right"
+            Content="Close"
+            IsCancel="True" />
+    </Grid>
+</Window>

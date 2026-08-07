@@ -1,0 +1,89 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<Nullable>enable</Nullable>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
+		<EnableWindowsTargeting>true</EnableWindowsTargeting>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<AssetTargetFallback>$(AssetTargetFallback);net5.0-windows7.0;netcoreapp3.0</AssetTargetFallback>
+		<ApplicationIcon>SVSM.ico</ApplicationIcon>
+		
+		<!-- Optimize single-file publish size -->
+		<!-- IncludeAllContentForSelfExtract removed to reduce executable size by excluding unnecessary content -->
+		<SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+		<!-- What Windows/Task Manager shows -->
+		<FileDescription>Simple VS Manager</FileDescription>   <!-- Task Manager "Name" (File description) -->
+		<Product>Simple VS Manager</Product>                   <!-- Product name -->
+		<Company>Interzone</Company>
+		<Description>Portable, user-friendly Vintage Story mod manager.</Description>
+		<AssemblyTitle>Simple VS Manager</AssemblyTitle>       <!-- Also good to set -->
+
+		<!-- File name on disk (the .exe base name) -->
+		<AssemblyName>Simple VS Manager</AssemblyName>
+
+		<!-- Versions -->
+		<Version>$(AppVersion)</Version>                               <!-- Product version -->
+		<FileVersion>$(AppFileVersion)</FileVersion>                   <!-- File version (Details tab) -->
+		<InformationalVersion>$(AppVersion)</InformationalVersion>     <!-- About box/semver -->
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<!-- Ensure you're actually publishing with a RID (VS publish profile may also set this) -->
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+
+		<!-- Single file -->
+		<PublishSingleFile>true</PublishSingleFile>
+		<SelfContained>false</SelfContained>
+
+		<!-- IMPORTANT: pulls native deps like QuestPdfSkia.dll into the bundle (extracted at runtime) -->
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+
+		<!-- Optional: avoid extra .pdb files -->
+		<DebugType>none</DebugType>
+	</PropertyGroup>
+
+	<!-- QuestPDF: official way to remove the default LatoFont folder from output -->
+	<Target Name="QuestPDF_DoNotIncludeLatoFont_AfterBuild" AfterTargets="Build">
+		<RemoveDir Directories="$(OutDir)/LatoFont" />
+	</Target>
+
+	<Target Name="QuestPDF_DoNotIncludeLatoFont_AfterPublish" AfterTargets="Publish">
+		<RemoveDir Directories="$(PublishDir)/LatoFont" />
+	</Target>
+
+
+	<ItemGroup>
+                <Resource Include="warning.png" />
+                <Resource Include="error.png" />
+                <Resource Include="Resources\Discord.png" />
+				<Resource Include="Resources\mod-default.png" />
+				<Resource Include="Resources\manager-icon.png" />
+        </ItemGroup>
+
+	<ItemGroup>
+		<None Remove="swearWords.xml" />
+		<EmbeddedResource Include="swearWords.xml" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+		<PackageReference Include="ModernWpfUI" Version="0.9.6" />
+		<PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
+		<PackageReference Include="QuestPDF" Version="2025.12.0" />
+		<PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+		<PackageReference Include="YamlDotNet" Version="16.3.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="Properties\Settings.settings">
+			<Generator>SettingsSingleFileGenerator</Generator>
+			<LastGenOutput>Settings.Designer.cs</LastGenOutput>
+		</None>
+	</ItemGroup>
+
+
+</Project>

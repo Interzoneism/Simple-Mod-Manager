@@ -1,0 +1,85 @@
+<Window x:Class="VintageStoryModManager.Views.Dialogs.DeleteGameProfilesDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Delete Game Profiles"
+        Width="440"
+        Height="420"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{DynamicResource Brush.Panel.Primary.Background.Solid}">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </Window.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Select the game profiles you want to delete."
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Brush.Text.Primary}" />
+
+        <TextBlock Grid.Row="1"
+                   Margin="0,8,0,0"
+                   Text="The Default profile cannot be deleted."
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Brush.Text.Secondary}" />
+
+        <Border Grid.Row="2"
+                Margin="0,16,0,0"
+                Padding="8"
+                Background="{DynamicResource Brush.Panel.Secondary.Background.Solid}"
+                BorderBrush="{DynamicResource Brush.Border.Default}"
+                BorderThickness="1">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Background="Transparent">
+                <ItemsControl x:Name="ProfilesItemsControl"
+                              ItemsSource="{Binding Profiles, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,0,0,12">
+                                <CheckBox
+                                    IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    IsEnabled="{Binding IsSelectable}"
+                                    Foreground="{DynamicResource Brush.Text.Primary}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}" />
+                                        <TextBlock Text=" (Active)"
+                                                   Margin="6,0,0,0"
+                                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                   Visibility="{Binding IsActive, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                        <TextBlock Text=" (Default)"
+                                                   Margin="6,0,0,0"
+                                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                   Visibility="{Binding IsDefault, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,20,0,0">
+            <Button x:Name="DeleteButton"
+                    Width="100"
+                    Margin="0,0,8,0"
+                    Content="Delete"
+                    IsDefault="True"
+                    Click="DeleteButton_OnClick" />
+            <Button Width="100"
+                    Content="Cancel"
+                    IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>
